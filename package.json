@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"yarn --cwd server dev\" \"yarn --cwd client dev\"",
+    "install:all": "yarn --cwd server install && yarn --cwd client install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
