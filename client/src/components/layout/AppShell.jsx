@@ -48,7 +48,7 @@ export default function AppShell() {
             </Button>
           </Space>
         </Header>
-        <Content style={{ margin: 0 }}>
+        <Content style={{ margin: 24 }}>
           <Outlet />
         </Content>
       </Layout>
