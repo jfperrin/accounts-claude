@@ -13,7 +13,7 @@ function BankCard({ bank, operations, initialBalance, onSaveBalance }) {
   const [draft, setDraft] = useState(initialBalance ?? null);
 
   const unpointedSum = getUnpointedSum(operations, bank._id);
-  const projected = initialBalance != null ? initialBalance - unpointedSum : null;
+  const projected = initialBalance != null ? initialBalance + unpointedSum : null;
 
   const handleSave = () => {
     setEditing(false);
@@ -74,7 +74,7 @@ function BankCard({ bank, operations, initialBalance, onSaveBalance }) {
 export default function BankBalances({ banks, operations, periodBalances = {}, onSaveBalance }) {
   const totalInitial = banks.reduce((s, b) => s + (periodBalances[b._id] ?? 0), 0);
   const totalUnpointed = operations.filter((o) => !o.pointed).reduce((s, o) => s + o.amount, 0);
-  const totalProjected = totalInitial - totalUnpointed;
+  const totalProjected = totalInitial + totalUnpointed;
   const hasBalances = banks.some((b) => periodBalances[b._id] != null);
 
   return (
