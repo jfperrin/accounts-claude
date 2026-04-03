@@ -14,7 +14,7 @@ router.post('/', wrap(async (req, res) => {
 }));
 
 router.put('/:id', wrap(async (req, res) => {
-  const bank = await Bank.findOneAndUpdate({ _id: req.params.id, ...scope(req) }, req.body, { new: true });
+  const bank = await Bank.findOneAndUpdate({ _id: req.params.id, ...scope(req) }, req.body, { returnDocument: 'after' });
   if (!bank) return res.status(404).json({ message: 'Introuvable' });
   res.json(bank);
 }));

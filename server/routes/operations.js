@@ -21,7 +21,7 @@ router.put('/:id', wrap(async (req, res) => {
   const op = await Operation.findOneAndUpdate(
     { _id: req.params.id, ...scope(req) },
     req.body,
-    { new: true }
+    { returnDocument: 'after' }
   ).populate('bankId', 'label');
   if (!op) return res.status(404).json({ message: 'Introuvable' });
   res.json(op);
