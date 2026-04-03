@@ -19,6 +19,16 @@ router.post('/', wrap(async (req, res) => {
   }
 }));
 
+router.patch('/:id/balances', wrap(async (req, res) => {
+  const period = await Period.findOneAndUpdate(
+    { _id: req.params.id, ...scope(req) },
+    { $set: { balances: req.body } },
+    { returnDocument: 'after' }
+  );
+  if (!period) return res.status(404).json({ message: 'Introuvable' });
+  res.json(period);
+}));
+
 router.delete('/:id', wrap(async (req, res) => {
   const period = await Period.findOneAndDelete({ _id: req.params.id, ...scope(req) });
   if (period) await Operation.deleteMany({ periodId: period._id, ...scope(req) });

@@ -37,6 +37,19 @@ export default function DashboardPage() {
 
   const loadOperations = (periodId) => operationsApi.list(periodId).then(setOperations);
 
+  const periodBalances = selectedPeriod?.balances
+    ? Object.fromEntries(Object.entries(selectedPeriod.balances))
+    : {};
+
+  const handleSaveBalance = async (bankId, value) => {
+    const period = await ensurePeriod();
+    const current = period.balances ? { ...period.balances } : {};
+    current[bankId] = value;
+    const updated = await periodsApi.updateBalances(period._id, current);
+    setPeriods((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+    setSelectedPeriod(updated);
+  };
+
   const ensurePeriod = async () => {
     let period = selectedPeriod;
     if (!period) {
@@ -107,7 +120,7 @@ export default function DashboardPage() {
 
       {banks.length > 0 && (
         <>
-          <BankBalances banks={banks} operations={operations} />
+          <BankBalances banks={banks} operations={operations} periodBalances={periodBalances} onSaveBalance={handleSaveBalance} />
           <Divider />
         </>
       )}
