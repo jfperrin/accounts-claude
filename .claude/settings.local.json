@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm view:*)",
+      "Bash(node -e \"const v=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); const stable=v.filter\\(x=>!x.includes\\('-'\\)\\); console.log\\('latest:',stable[stable.length-1],'prev:',stable[stable.length-2]\\)\")",
+      "Bash(node -e \"const e=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); console.log\\(Object.keys\\(e\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(npm pack:*)",
+      "Bash(yarn install:all:*)",
+      "Bash(node:*)",
+      "Bash(echo \"SERVER_PID=$!\")",
+      "Bash(yarn dev:*)",
+      "Bash(echo \"CLIENT_PID=$!\")",
+      "Read(//tmp/**)",
+      "Bash(curl -s http://localhost:3001/api/auth/me)",
+      "Bash(yarn build:*)",
+      "Bash(yarn add:*)",
+      "Bash(yarn --cwd /data/git/github.com/accounts-claude/client build)",
+      "Bash(chmod +x /data/git/github.com/accounts-claude/build.sh)",
+      "Bash(docker compose:*)",
+      "Bash(yarn config:*)",
+      "Bash(yarn install:*)",
+      "Bash(wait)",
+      "Bash(yarn test:*)",
+      "Bash(pip3 install:*)",
+      "Bash(pip install:*)",
+      "Bash(sudo apt-get:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git stash:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(npx vitest:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(git push:*)",
+      "Bash(git:*)"
+    ]
+  }
+}
