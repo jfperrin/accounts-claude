@@ -1,4 +1,6 @@
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -28,6 +30,13 @@ app.use('/api/banks', requireAuth, require('./routes/banks'));
 app.use('/api/recurring-operations', requireAuth, require('./routes/recurringOperations'));
 app.use('/api/periods', requireAuth, require('./routes/periods'));
 app.use('/api/operations', requireAuth, require('./routes/operations'));
+
+// Static client (production build embedded in image)
+const publicDir = path.join(__dirname, 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+}
 
 app.use((err, req, res, _next) => {
   console.error(err);

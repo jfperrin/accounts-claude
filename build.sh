@@ -5,6 +5,8 @@ REMOTE_USER="ubuntu"
 REMOTE_HOST="perrin.at"
 REMOTE="${REMOTE_USER}@${REMOTE_HOST}"
 REMOTE_DIR="/opt/accounts-claude"
+NO_CACHE=""
+[[ "${1:-}" == "--no-cache" ]] && NO_CACHE="--no-cache"
 
 echo "→ Vérification de la connexion SSH..."
 ssh -o ConnectTimeout=10 "${REMOTE}" "echo OK" > /dev/null
@@ -25,11 +27,11 @@ if ! ssh "${REMOTE}" "test -f ${REMOTE_DIR}/server/.env"; then
   echo "  .env copié — pense à mettre CORS_ORIGIN=http://${REMOTE_HOST} sur le serveur"
 fi
 
-echo "→ Build & deploy"
+echo "→ Build & deploy${NO_CACHE:+ (--no-cache)}"
 ssh "${REMOTE}" "
   set -e
   cd ${REMOTE_DIR}
-  docker compose build
+  docker compose build ${NO_CACHE}
   docker compose up -d --remove-orphans
   docker compose ps
 "
