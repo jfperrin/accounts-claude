@@ -3,26 +3,33 @@ const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
-const { MongoStore } = require('connect-mongo');
 const cors = require('cors');
-require('./config/passport');
 const requireAuth = require('./middleware/requireAuth');
 
-module.exports = function createApp(mongoUri) {
+module.exports = function createApp(db, mongoUri) {
   const app = express();
+
+  require('./config/passport')(db);
 
   app.set('trust proxy', 1);
   app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
   app.use(express.json());
+
+  const store = mongoUri
+    ? require('connect-mongo').MongoStore.create({ mongoUrl: mongoUri })
+    : undefined; // MemoryStore in dev (fine for local use)
+
   app.use(session({
     secret: process.env.SESSION_SECRET || 'dev_secret',
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: mongoUri }),
+    store,
     cookie: { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
   }));
   app.use(passport.initialize());
   app.use(passport.session());
+
+  app.locals.db = db;
 
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/banks', requireAuth, require('./routes/banks'));

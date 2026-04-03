@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Table, Switch, Button, Space, Popconfirm, Tag, Tooltip } from 'antd';
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -5,7 +6,7 @@ import dayjs from 'dayjs';
 const fmt = (v) => v?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 
 export default function OperationsTable({ operations, onPoint, onEdit, onDelete }) {
-  const columns = [
+  const columns = useMemo(() => [
     {
       title: 'Date', dataIndex: 'date', width: 110,
       render: (v) => dayjs(v).format('DD/MM/YYYY'),
@@ -17,7 +18,7 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
     {
       title: 'Montant', dataIndex: 'amount', width: 130, align: 'right',
       render: (v) => (
-        <span style={{ color: v < 0 ? '#f5222d' : '#52c41a', fontWeight: 600 }}>
+        <span style={{ color: v < 0 ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
           {v > 0 ? '+' : ''}{fmt(v)}
         </span>
       ),
@@ -41,7 +42,7 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
         </Space>
       ),
     },
-  ];
+  ], [onPoint, onEdit, onDelete]);
 
   return (
     <Table

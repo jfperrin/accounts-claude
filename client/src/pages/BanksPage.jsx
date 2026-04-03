@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Table, Button, Space, Popconfirm, Modal, Form, Input, Typography, App } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import * as api from '../api/banks';
@@ -31,7 +31,7 @@ export default function BanksPage() {
     load();
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     { title: 'Libellé', dataIndex: 'label', key: 'label' },
     {
       title: '', key: 'actions', width: 100, align: 'right',
@@ -44,12 +44,12 @@ export default function BanksPage() {
         </Space>
       ),
     },
-  ];
+  ], [openEdit, onDelete]);
 
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>Banques</Typography.Title>
+        <Typography.Title level={4} style={{ margin: 0, fontWeight: 800, color: '#0d0d1c' }}>Banques</Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Ajouter</Button>
       </div>
       <Table dataSource={banks} columns={columns} rowKey="_id" pagination={false} />

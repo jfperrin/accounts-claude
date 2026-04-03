@@ -14,13 +14,19 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ConfigProvider locale={frFR} theme={{
       token: {
         colorPrimary: '#6366f1',
-        borderRadius: 8,
-        fontFamily: "'Inter', -apple-system, sans-serif",
-        colorBgLayout: '#f0f2f5',
+        borderRadius: 10,
+        fontFamily: "'Plus Jakarta Sans', -apple-system, sans-serif",
+        colorBgLayout: '#f4f5f9',
+        colorBgContainer: '#ffffff',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+        fontSize: 14,
       },
       components: {
-        Layout: { siderBg: '#1e1e2e', triggerBg: '#2a2a3e' },
-        Menu: { darkItemBg: '#1e1e2e', darkItemSelectedBg: '#6366f1', darkSubMenuItemBg: '#16162a' },
+        Layout: { siderBg: '#111122', triggerBg: '#1e1e38' },
+        Menu: { darkItemBg: '#111122', darkItemSelectedBg: '#6366f1', darkSubMenuItemBg: '#0d0d1c' },
+        Card: { boxShadow: '0 2px 12px rgba(0,0,0,0.06)' },
+        Button: { fontWeight: 600 },
+        Table: { headerBg: '#f8f8fc' },
       },
     }}>
       <AntApp>

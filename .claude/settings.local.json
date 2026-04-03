@@ -18,6 +18,7 @@
       "Bash(chmod +x /data/git/github.com/accounts-claude/build.sh)",
       "Bash(docker compose:*)",
       "Bash(yarn config:*)",
+      "Read(//home/jfperrin/**)",
       "Bash(yarn install:*)",
       "Bash(wait)",
       "Bash(yarn test:*)",
@@ -33,7 +34,10 @@
       "Bash(npx vitest:*)",
       "Bash(grep -v \"^$\")",
       "Bash(git push:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(sqlite3 /data/git/github.com/accounts-claude/server/dev.db \".tables\")",
+      "Bash(sqlite3 /data/git/github.com/accounts-claude/server/dev.db \".schema\")",
+      "Bash(timeout 5 yarn --cwd server dev)"
     ]
   }
 }

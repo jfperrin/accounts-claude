@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Table, Button, Space, Popconfirm, Modal, Form, Input, InputNumber, Select, Typography, App, Tag } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import * as api from '../api/recurringOperations';
@@ -30,13 +30,20 @@ export default function RecurringPage() {
     }
   };
 
-  const columns = [
+  const columns = useMemo(() => [
     { title: 'Libellé', dataIndex: 'label' },
     { title: 'Banque', dataIndex: ['bankId', 'label'], render: (v) => <Tag>{v}</Tag> },
     { title: 'Jour', dataIndex: 'dayOfMonth', width: 70, align: 'center' },
-    { title: 'Montant', dataIndex: 'amount', width: 120, align: 'right',
-      render: (v) => <span style={{ color: v < 0 ? '#f5222d' : '#52c41a', fontWeight: 600 }}>{v > 0 ? '+' : ''}{v.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span> },
-    { title: '', key: 'actions', width: 100, align: 'right',
+    {
+      title: 'Montant', dataIndex: 'amount', width: 120, align: 'right',
+      render: (v) => (
+        <span style={{ color: v < 0 ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+          {v > 0 ? '+' : ''}{v.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+        </span>
+      ),
+    },
+    {
+      title: '', key: 'actions', width: 100, align: 'right',
       render: (_, r) => (
         <Space>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
@@ -46,12 +53,12 @@ export default function RecurringPage() {
         </Space>
       ),
     },
-  ];
+  ], [openEdit, load]);
 
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>Opérations récurrentes</Typography.Title>
+        <Typography.Title level={4} style={{ margin: 0, fontWeight: 800, color: '#0d0d1c' }}>Opérations récurrentes</Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>Ajouter</Button>
       </div>
       <Table dataSource={items} columns={columns} rowKey="_id" pagination={false} />

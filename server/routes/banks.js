@@ -1,26 +1,23 @@
 const router = require('express').Router();
-const Bank = require('../models/Bank');
 const wrap = require('../utils/asyncHandler');
 
-const scope = (req) => ({ userId: req.user._id });
-
 router.get('/', wrap(async (req, res) => {
-  res.json(await Bank.find(scope(req)).sort('label'));
+  res.json(await req.app.locals.db.banks.findByUser(req.user._id));
 }));
 
 router.post('/', wrap(async (req, res) => {
-  const bank = await Bank.create({ ...req.body, ...scope(req) });
+  const bank = await req.app.locals.db.banks.create({ label: req.body.label, userId: req.user._id });
   res.status(201).json(bank);
 }));
 
 router.put('/:id', wrap(async (req, res) => {
-  const bank = await Bank.findOneAndUpdate({ _id: req.params.id, ...scope(req) }, req.body, { returnDocument: 'after' });
+  const bank = await req.app.locals.db.banks.update(req.params.id, req.user._id, req.body);
   if (!bank) return res.status(404).json({ message: 'Introuvable' });
   res.json(bank);
 }));
 
 router.delete('/:id', wrap(async (req, res) => {
-  await Bank.findOneAndDelete({ _id: req.params.id, ...scope(req) });
+  await req.app.locals.db.banks.delete(req.params.id, req.user._id);
   res.status(204).end();
 }));
 

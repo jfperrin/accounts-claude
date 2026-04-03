@@ -37,9 +37,7 @@ export default function DashboardPage() {
 
   const loadOperations = (periodId) => operationsApi.list(periodId).then(setOperations);
 
-  const periodBalances = selectedPeriod?.balances
-    ? Object.fromEntries(Object.entries(selectedPeriod.balances))
-    : {};
+  const periodBalances = selectedPeriod?.balances ?? {};
 
   const handleSaveBalance = async (bankId, value) => {
     const period = await ensurePeriod();

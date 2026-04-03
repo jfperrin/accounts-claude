@@ -2,7 +2,7 @@
   "name": "accounts-server",
   "version": "1.0.0",
   "scripts": {
-    "dev": "nodemon index.js",
+    "dev": "NODE_ENV=development nodemon index.js",
     "start": "node index.js",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.8.0",
     "connect-mongo": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",

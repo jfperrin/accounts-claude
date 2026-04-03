@@ -1,7 +1,6 @@
 const router = require('express').Router();
 const passport = require('passport');
 const bcrypt = require('bcryptjs');
-const User = require('../models/User');
 const wrap = require('../utils/asyncHandler');
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -9,10 +8,10 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 router.post('/register', wrap(async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ message: 'Champs requis' });
-  const exists = await User.findOne({ username });
-  if (exists) return res.status(409).json({ message: "Nom d'utilisateur déjà pris" });
+  const db = req.app.locals.db;
+  if (await db.users.usernameExists(username)) return res.status(409).json({ message: "Nom d'utilisateur déjà pris" });
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({ username, passwordHash });
+  const user = await db.users.create({ username, passwordHash });
   req.login(user, (err) => {
     if (err) return res.status(500).json({ message: 'Erreur session' });
     res.json({ _id: user._id, username: user.username });
@@ -41,7 +40,7 @@ router.get('/google', (req, res, next) => {
 
 router.get('/google/callback',
   passport.authenticate('google', { failureRedirect: `${CLIENT_URL}/login?error=google` }),
-  (_req, res) => res.redirect(CLIENT_URL)
+  (_req, res) => res.redirect(CLIENT_URL),
 );
 
 router.post('/logout', (req, res) => {
