@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const Period = require('../models/Period');
+const Operation = require('../models/Operation');
 const wrap = require('../utils/asyncHandler');
 
 const scope = (req) => ({ userId: req.user._id });
@@ -19,7 +20,8 @@ router.post('/', wrap(async (req, res) => {
 }));
 
 router.delete('/:id', wrap(async (req, res) => {
-  await Period.findOneAndDelete({ _id: req.params.id, ...scope(req) });
+  const period = await Period.findOneAndDelete({ _id: req.params.id, ...scope(req) });
+  if (period) await Operation.deleteMany({ periodId: period._id, ...scope(req) });
   res.status(204).end();
 }));
 

@@ -1,0 +1,17 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    env_file: ./server/.env
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped

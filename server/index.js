@@ -10,7 +10,8 @@ require('./config/passport');
 const requireAuth = require('./middleware/requireAuth');
 const app = express();
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+app.set('trust proxy', 1); // behind Nginx in production
+app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev_secret',
