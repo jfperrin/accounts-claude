@@ -1,3 +1,7 @@
+// Fabrique de l'application Express.
+// Séparée de index.js pour pouvoir être importée dans les tests sans démarrer
+// le serveur HTTP (pattern "app factory").
+
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
@@ -6,43 +10,66 @@ const passport = require('passport');
 const cors = require('cors');
 const requireAuth = require('./middleware/requireAuth');
 
+// mongoUri est null en développement (SQLite) → on utilise MemoryStore pour les sessions.
+// En production, mongoUri est fourni → sessions persistées dans MongoDB via connect-mongo.
 module.exports = function createApp(db, mongoUri) {
   const app = express();
 
+  // Configure les stratégies Passport avec l'implémentation de base de données active.
+  // Doit être appelé avant app.use(passport.session()) pour que serializeUser/
+  // deserializeUser soient enregistrés au moment où les routes les utilisent.
   require('./config/passport')(db);
 
+  // Nécessaire pour que req.ip soit fiable derrière un reverse proxy (nginx, Render, etc.)
   app.set('trust proxy', 1);
+
+  // CORS : autorise les requêtes cross-origin depuis le client Vite en dev.
+  // credentials:true est obligatoire pour que le cookie de session soit transmis.
   app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
   app.use(express.json());
 
+  // Session store :
+  //   - MongoStore  → sessions survivent aux redémarrages (prod)
+  //   - MemoryStore → sessions perdues au redémarrage, acceptable en dev local
   const store = mongoUri
     ? require('connect-mongo').MongoStore.create({ mongoUrl: mongoUri })
-    : undefined; // MemoryStore in dev (fine for local use)
+    : undefined;
 
   app.use(session({
     secret: process.env.SESSION_SECRET || 'dev_secret',
-    resave: false,
-    saveUninitialized: false,
+    resave: false,           // ne re-sauvegarde pas si la session n'a pas changé
+    saveUninitialized: false, // ne crée pas de session pour les visiteurs non connectés
     store,
-    cookie: { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
+    cookie: { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 }, // 7 jours
   }));
-  app.use(passport.initialize());
-  app.use(passport.session());
 
+  app.use(passport.initialize());
+  app.use(passport.session()); // restaure req.user depuis la session à chaque requête
+
+  // Les repos (users, banks, operations, periods, recurringOps) sont attachés à
+  // app.locals.db pour être accessibles dans toutes les routes via req.app.locals.db.
   app.locals.db = db;
 
+  // Routes publiques (pas de requireAuth)
   app.use('/api/auth', require('./routes/auth'));
+
+  // Routes protégées : requireAuth renvoie 401 si la session est absente
   app.use('/api/banks', requireAuth, require('./routes/banks'));
   app.use('/api/recurring-operations', requireAuth, require('./routes/recurringOperations'));
   app.use('/api/periods', requireAuth, require('./routes/periods'));
   app.use('/api/operations', requireAuth, require('./routes/operations'));
 
+  // Sert le build Vite en production (client/dist copié dans server/public).
+  // En dev, Vite tourne sur son propre port et ce bloc est ignoré.
   const publicDir = path.join(__dirname, 'public');
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
+    // Toutes les routes non-API renvoient index.html pour que le routeur React prenne le relais
     app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
   }
 
+  // Gestionnaire d'erreurs global : capte tout ce qui est passé à next(err)
+  // (notamment via asyncHandler) et renvoie une réponse JSON propre.
   app.use((err, _req, res, _next) => {
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur' });

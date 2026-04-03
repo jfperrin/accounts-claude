@@ -1,9 +1,18 @@
+// Configuration des stratégies d'authentification Passport.
+// Exportée sous forme de fonction (configurePassport(db)) pour recevoir
+// les repos de la base de données active (SQLite ou MongoDB) sans couplage direct.
+
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const bcrypt = require('bcryptjs');
 
 module.exports = function configurePassport(db) {
+
+  // --- Stratégie locale (username / password) ---
+  // Passport appelle cette fonction à chaque POST /api/auth/login.
+  // On cherche l'utilisateur par nom, vérifie l'existence d'un hash
+  // (les comptes Google n'ont pas de mot de passe), puis compare avec bcrypt.
   passport.use(new LocalStrategy(async (username, password, done) => {
     try {
       const user = await db.users.findByUsername(username);
@@ -17,6 +26,10 @@ module.exports = function configurePassport(db) {
     }
   }));
 
+  // --- Stratégie Google OAuth 2.0 (optionnelle) ---
+  // Activée uniquement si GOOGLE_CLIENT_ID et GOOGLE_CLIENT_SECRET sont définis.
+  // Flux : Google redirige vers /api/auth/google/callback avec un code
+  // → Passport échange le code contre un profil → on cherche ou crée l'utilisateur.
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.use(new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID,
@@ -24,9 +37,12 @@ module.exports = function configurePassport(db) {
       callbackURL: '/api/auth/google/callback',
     }, async (_accessToken, _refreshToken, profile, done) => {
       try {
+        // Première tentative : utilisateur déjà connu via Google
         let user = await db.users.findByGoogleId(profile.id);
         if (user) return done(null, user);
 
+        // Nouvel utilisateur Google : on génère un username depuis l'email ou le nom affiché.
+        // En cas de conflit (username déjà pris), on suffixe avec les 6 derniers chiffres du Google ID.
         const email = profile.emails?.[0]?.value;
         let username = email || profile.displayName;
         if (await db.users.usernameExists(username)) username = `${username}_${profile.id.slice(-6)}`;
@@ -39,10 +55,15 @@ module.exports = function configurePassport(db) {
     }));
   }
 
+  // --- Sérialisation de session ---
+  // serializeUser : stocke uniquement l'ID en session (payload minimal dans le cookie).
+  // deserializeUser : à chaque requête, recharge l'objet user complet depuis la DB
+  //   → req.user est disponible dans toutes les routes protégées.
+  // String(user._id) unifie ObjectId (MongoDB) et UUID string (SQLite).
   passport.serializeUser((user, done) => done(null, String(user._id)));
   passport.deserializeUser(async (id, done) => {
     try {
-      const user = await db.users.findById(id);
+      const user = await db.users.findById(id); // retourne sans passwordHash
       done(null, user);
     } catch (err) {
       done(err);
