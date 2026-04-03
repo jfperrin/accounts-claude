@@ -15,13 +15,13 @@ export default function BankBalances({ banks, operations }) {
         const balance = getBalance(operations, bank._id);
         return (
           <Col key={bank._id} xs={24} sm={12} md={8} lg={6}>
-            <Card size="small" bordered={false} style={{ borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,.06)' }}>
+            <Card size="small" variant="borderless" style={{ borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,.06)' }}>
               <Statistic
                 title={<span><BankOutlined style={{ marginRight: 6 }} />{bank.label}</span>}
                 value={balance}
                 precision={2}
                 suffix="€"
-                valueStyle={{ color: balance >= 0 ? '#52c41a' : '#f5222d', fontWeight: 700 }}
+                styles={{ content: { color: balance >= 0 ? '#52c41a' : '#f5222d', fontWeight: 700 } }}
               />
             </Card>
           </Col>
@@ -29,11 +29,11 @@ export default function BankBalances({ banks, operations }) {
       })}
       {banks.length > 1 && (
         <Col xs={24} sm={12} md={8} lg={6}>
-          <Card size="small" bordered={false} style={{ borderRadius: 10, background: '#6366f1', boxShadow: '0 2px 8px rgba(99,102,241,.3)' }}>
+          <Card size="small" variant="borderless" style={{ borderRadius: 10, background: '#6366f1', boxShadow: '0 2px 8px rgba(99,102,241,.3)' }}>
             <Statistic
               title={<Typography.Text style={{ color: 'rgba(255,255,255,.8)' }}>Total</Typography.Text>}
               value={total} precision={2} suffix="€"
-              valueStyle={{ color: '#fff', fontWeight: 700 }}
+              styles={{ content: { color: '#fff', fontWeight: 700 } }}
             />
           </Card>
         </Col>
