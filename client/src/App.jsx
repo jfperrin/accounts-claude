@@ -6,7 +6,6 @@ import AppShell from './components/layout/AppShell';
 import DashboardPage from './pages/DashboardPage';
 import BanksPage from './pages/BanksPage';
 import RecurringPage from './pages/RecurringPage';
-import PeriodsPage from './pages/PeriodsPage';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -25,7 +24,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="banks" element={<BanksPage />} />
           <Route path="recurring" element={<RecurringPage />} />
-          <Route path="periods" element={<PeriodsPage />} />
+
         </Route>
       </Routes>
     </BrowserRouter>

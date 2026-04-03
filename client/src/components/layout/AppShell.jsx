@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Layout, Menu, Typography, Button, Space } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  DashboardOutlined, BankOutlined, RetweetOutlined, LogoutOutlined, UserOutlined, CalendarOutlined,
+  DashboardOutlined, BankOutlined, RetweetOutlined, LogoutOutlined, UserOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../store/AuthContext';
 
@@ -12,7 +12,7 @@ const MENU_ITEMS = [
   { key: '/', icon: <DashboardOutlined />, label: 'Tableau de bord' },
   { key: '/banks', icon: <BankOutlined />, label: 'Banques' },
   { key: '/recurring', icon: <RetweetOutlined />, label: 'Opérations récurrentes' },
-  { key: '/periods', icon: <CalendarOutlined />, label: 'Périodes' },
+
 ];
 
 export default function AppShell() {
