@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Comptes",
+    "slug": "accounts-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.accounts.mobile"
+    },
+    "android": {
+      "package": "com.accounts.mobile"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-sqlite",
+        {
+          "enableFTS": false,
+          "useSQLCipher": false
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3001/api",
+      "useLocalDb": null
+    }
+  }
+}
