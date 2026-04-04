@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import * as banksService from '../services/banks';
-import type { Bank } from '../types';
+import * as banksService from '@/services/banks';
+import type { Bank } from '@/types';
 
 export function useBanks(userId: string) {
   const [banks,   setBanks]   = useState<Bank[]>([]);

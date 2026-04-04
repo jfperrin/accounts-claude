@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet } from 'react-native';
 import { Appbar, FAB, Snackbar } from 'react-native-paper';
-import { useAuth }         from '../hooks/useAuth';
-import { useRecurring }    from '../hooks/useRecurring';
-import { useBanks }        from '../hooks/useBanks';
-import { RecurringItem }   from '../components/recurring/RecurringItem';
-import { RecurringForm }   from '../components/recurring/RecurringForm';
-import { ConfirmDialog }   from '../components/common/ConfirmDialog';
-import { EmptyState }      from '../components/common/EmptyState';
-import { Screen }          from '../components/common/Screen';
-import { palette }         from '../theme';
-import type { RecurringOperation, Bank } from '../types';
+import { useAuth }         from '@/hooks/useAuth';
+import { useRecurring }    from '@/hooks/useRecurring';
+import { useBanks }        from '@/hooks/useBanks';
+import { RecurringItem }   from '@/components/recurring/RecurringItem';
+import { RecurringForm }   from '@/components/recurring/RecurringForm';
+import { ConfirmDialog }   from '@/components/common/ConfirmDialog';
+import { EmptyState }      from '@/components/common/EmptyState';
+import { Screen }          from '@/components/common/Screen';
+import { palette }         from '@/theme';
+import type { RecurringOperation, Bank } from '@/types';
 
 export function RecurringScreen() {
   const { user } = useAuth();

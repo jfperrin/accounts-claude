@@ -1,5 +1,5 @@
-import { getDb, generateId } from '../client';
-import type { Period } from '../../types';
+import { getDb, generateId } from '@/db/client';
+import type { Period } from '@/types';
 
 interface DbPeriod { id: string; month: number; year: number; balances: string; user_id: string }
 

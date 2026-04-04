@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import * as periodsService from '../services/periods';
-import type { Period } from '../types';
+import * as periodsService from '@/services/periods';
+import type { Period } from '@/types';
 
 export function usePeriods(userId: string) {
   const [periods, setPeriods] = useState<Period[]>([]);

@@ -3,8 +3,8 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, TextInput, Button, HelperText, SegmentedButtons } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
-import { useAuth } from '../hooks/useAuth';
-import { palette } from '../theme';
+import { useAuth } from '@/hooks/useAuth';
+import { palette } from '@/theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type Tab = 'login' | 'register';

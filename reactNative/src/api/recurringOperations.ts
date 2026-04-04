@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { RecurringOperation } from '../types';
+import type { RecurringOperation } from '@/types';
 
 type Payload = Pick<RecurringOperation, 'label' | 'amount' | 'dayOfMonth' | 'bankId'>;
 

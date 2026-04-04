@@ -1,5 +1,5 @@
-import { getDb, generateId } from '../client';
-import type { Operation } from '../../types';
+import { getDb, generateId } from '@/db/client';
+import type { Operation } from '@/types';
 
 interface DbOperation {
   id: string; label: string; amount: number; date: string;

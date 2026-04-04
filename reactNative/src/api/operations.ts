@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Operation } from '../types';
+import type { Operation } from '@/types';
 
 export const getByPeriod    = (periodId: string): Promise<Operation[]> =>
   apiClient.get('/operations', { params: { periodId } });

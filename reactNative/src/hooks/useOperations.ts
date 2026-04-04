@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import * as opsService from '../services/operations';
-import type { Operation, Bank, RecurringOperation } from '../types';
+import * as opsService from '@/services/operations';
+import type { Operation, Bank, RecurringOperation } from '@/types';
 
 export function useOperations(userId: string) {
   const [operations, setOperations] = useState<Operation[]>([]);

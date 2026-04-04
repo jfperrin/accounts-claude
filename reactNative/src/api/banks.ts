@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Bank } from '../types';
+import type { Bank } from '@/types';
 
 export const getAll    = (): Promise<Bank[]>                       => apiClient.get('/banks');
 export const create    = (label: string): Promise<Bank>            => apiClient.post('/banks', { label });

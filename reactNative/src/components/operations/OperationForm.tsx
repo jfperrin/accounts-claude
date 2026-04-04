@@ -1,16 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
-import { Button, Dialog, Portal, TextInput, HelperText, Text, Menu } from 'react-native-paper';
+import React, { useEffect } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import dayjs from 'dayjs';
-import type { Operation, Bank } from '../../types';
-import { palette } from '../../theme';
+import { BottomSheet } from '@/components/common/BottomSheet';
+import { BankPicker }  from '@/components/common/BankPicker';
+import type { Operation, Bank } from '@/types';
+import { palette } from '@/theme';
 
 interface FormValues {
-  label:   string;
-  bankId:  string;
-  date:    string;
-  amount:  string;
+  label:  string;
+  bankId: string;
+  date:   string;
+  amount: string;
 }
 
 interface Props {
@@ -22,29 +24,18 @@ interface Props {
 }
 
 export function OperationForm({ visible, operation, banks, onSubmit, onDismiss }: Props) {
-  const [bankMenuOpen, setBankMenuOpen] = useState(false);
-
-  const { control, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormValues>({
-    defaultValues: { label: '', bankId: '', date: dayjs().format('YYYY-MM-DD'), amount: '' },
-  });
+  const { control, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } =
+    useForm<FormValues>({ defaultValues: { label: '', bankId: '', date: dayjs().format('YYYY-MM-DD'), amount: '' } });
 
   useEffect(() => {
     if (!visible) return;
     if (operation) {
       const bankId = typeof operation.bankId === 'string' ? operation.bankId : (operation.bankId as Bank)._id;
-      reset({
-        label:  operation.label,
-        bankId,
-        date:   dayjs(operation.date).format('YYYY-MM-DD'),
-        amount: String(operation.amount),
-      });
+      reset({ label: operation.label, bankId, date: dayjs(operation.date).format('YYYY-MM-DD'), amount: String(operation.amount) });
     } else {
       reset({ label: '', bankId: banks[0]?._id ?? '', date: dayjs().format('YYYY-MM-DD'), amount: '' });
     }
   }, [visible, operation]);
-
-  const selectedBankId    = watch('bankId');
-  const selectedBankLabel = banks.find((b) => b._id === selectedBankId)?.label ?? 'Choisir une banque';
 
   const submit = async (values: FormValues) => {
     await onSubmit(values);
@@ -52,98 +43,81 @@ export function OperationForm({ visible, operation, banks, onSubmit, onDismiss }
   };
 
   return (
-    <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
-        <Dialog.Title>{operation ? 'Modifier l\'opération' : 'Nouvelle opération'}</Dialog.Title>
-        <Dialog.ScrollArea style={styles.scrollArea}>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <View style={styles.form}>
+    <BottomSheet visible={visible} onDismiss={onDismiss}>
+      <Text variant="titleLarge" style={styles.title}>
+        {operation ? 'Modifier l\'opération' : 'Nouvelle opération'}
+      </Text>
 
-              <Controller
-                control={control} name="label"
-                rules={{ required: 'Le libellé est requis' }}
-                render={({ field: { onChange, value } }) => (
-                  <>
-                    <TextInput label="Libellé" value={value} onChangeText={onChange}
-                      mode="outlined" error={!!errors.label} />
-                    {errors.label && <HelperText type="error">{errors.label.message}</HelperText>}
-                  </>
-                )}
-              />
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.form}>
 
-              <View style={styles.field}>
-                <Text variant="bodySmall" style={styles.fieldLabel}>Banque</Text>
-                <Menu
-                  visible={bankMenuOpen}
-                  onDismiss={() => setBankMenuOpen(false)}
-                  anchor={
-                    <TouchableOpacity style={styles.bankSelector} onPress={() => setBankMenuOpen(true)}>
-                      <Text>{selectedBankLabel}</Text>
-                    </TouchableOpacity>
-                  }
-                >
-                  {banks.map((b) => (
-                    <Menu.Item
-                      key={b._id}
-                      title={b.label}
-                      onPress={() => { setValue('bankId', b._id); setBankMenuOpen(false); }}
-                    />
-                  ))}
-                </Menu>
+          <Controller
+            control={control} name="label"
+            rules={{ required: 'Requis' }}
+            render={({ field: { onChange, value } }) => (
+              <View>
+                <TextInput label="Libellé" value={value} onChangeText={onChange}
+                  mode="outlined" autoFocus style={styles.input} error={!!errors.label} />
+                {errors.label && <HelperText type="error">{errors.label.message}</HelperText>}
               </View>
+            )}
+          />
 
-              <Controller
-                control={control} name="date"
-                rules={{ required: 'La date est requise' }}
-                render={({ field: { onChange, value } }) => (
-                  <>
-                    <TextInput label="Date (YYYY-MM-DD)" value={value} onChangeText={onChange}
-                      mode="outlined" placeholder="2025-01-15" error={!!errors.date} />
-                    {errors.date && <HelperText type="error">{errors.date.message}</HelperText>}
-                  </>
-                )}
-              />
+          <Controller
+            control={control} name="amount"
+            rules={{ required: 'Requis', validate: (v) => !isNaN(parseFloat(v.replace(',', '.'))) || 'Montant invalide' }}
+            render={({ field: { onChange, value } }) => (
+              <View>
+                <TextInput label="Montant (€)" value={value} onChangeText={onChange}
+                  mode="outlined" keyboardType="decimal-pad" style={styles.input} error={!!errors.amount}
+                  right={<TextInput.Affix text="€" />}
+                />
+                {errors.amount && <HelperText type="error">{errors.amount.message}</HelperText>}
+              </View>
+            )}
+          />
 
-              <Controller
-                control={control} name="amount"
-                rules={{
-                  required: 'Le montant est requis',
-                  validate: (v) => !isNaN(parseFloat(v.replace(',', '.'))) || 'Montant invalide',
-                }}
-                render={({ field: { onChange, value } }) => (
-                  <>
-                    <TextInput label="Montant (€)" value={value} onChangeText={onChange}
-                      mode="outlined" keyboardType="decimal-pad" error={!!errors.amount} />
-                    {errors.amount && <HelperText type="error">{errors.amount.message}</HelperText>}
-                  </>
-                )}
-              />
+          <Controller
+            control={control} name="bankId"
+            render={({ field: { value } }) => (
+              <BankPicker banks={banks} value={value} onChange={(id) => setValue('bankId', id)} />
+            )}
+          />
 
-            </View>
-          </ScrollView>
-        </Dialog.ScrollArea>
-        <Dialog.Actions>
-          <Button onPress={onDismiss}>Annuler</Button>
-          <Button onPress={handleSubmit(submit)} loading={isSubmitting} mode="contained">
-            {operation ? 'Modifier' : 'Créer'}
-          </Button>
-        </Dialog.Actions>
-      </Dialog>
-    </Portal>
+          <Controller
+            control={control} name="date"
+            rules={{ required: 'Requis' }}
+            render={({ field: { onChange, value } }) => (
+              <View>
+                <TextInput label="Date" value={value} onChangeText={onChange}
+                  mode="outlined" placeholder="YYYY-MM-DD" style={styles.input} error={!!errors.date}
+                  left={<TextInput.Icon icon="calendar-outline" />}
+                />
+                {errors.date && <HelperText type="error">{errors.date.message}</HelperText>}
+              </View>
+            )}
+          />
+
+        </View>
+      </ScrollView>
+
+      <View style={styles.actions}>
+        <Button mode="contained" onPress={handleSubmit(submit)} loading={isSubmitting}
+          style={styles.btnPrimary} contentStyle={styles.btnContent}>
+          {operation ? 'Enregistrer' : 'Créer l\'opération'}
+        </Button>
+        <Button mode="text" onPress={onDismiss} style={styles.btnSecondary}>Annuler</Button>
+      </View>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  dialog:      { maxHeight: '90%' },
-  scrollArea:  { paddingHorizontal: 0 },
-  form:        { gap: 8, padding: 4 },
-  field:       { marginTop: 4 },
-  fieldLabel:  { color: palette.gray500, marginBottom: 4 },
-  bankSelector: {
-    borderWidth:   1,
-    borderColor:   palette.gray200,
-    borderRadius:  8,
-    padding:       14,
-    backgroundColor: palette.white,
-  },
+  title:       { fontWeight: '700', color: palette.gray900, marginBottom: 24 },
+  form:        { gap: 16 },
+  input:       { backgroundColor: palette.white },
+  actions:     { marginTop: 24, gap: 8 },
+  btnPrimary:  { borderRadius: 12 },
+  btnContent:  { paddingVertical: 6 },
+  btnSecondary: { borderRadius: 12 },
 });

@@ -2,11 +2,11 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { DashboardScreen } from '../screens/DashboardScreen';
-import { BanksScreen }     from '../screens/BanksScreen';
-import { RecurringScreen } from '../screens/RecurringScreen';
+import { DashboardScreen } from '@/screens/DashboardScreen';
+import { BanksScreen }     from '@/screens/BanksScreen';
+import { RecurringScreen } from '@/screens/RecurringScreen';
 import type { AppTabParamList } from './types';
-import { palette } from '../theme';
+import { palette } from '@/theme';
 
 const Tab = createBottomTabNavigator<AppTabParamList>();
 

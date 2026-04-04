@@ -1,7 +1,7 @@
 import { IS_LOCAL } from './index';
-import * as local  from '../db/repositories/operations';
-import * as remote from '../api/operations';
-import type { Operation } from '../types';
+import * as local  from '@/db/repositories/operations';
+import * as remote from '@/api/operations';
+import type { Operation } from '@/types';
 
 type CreatePayload = Pick<Operation, 'label' | 'amount' | 'date' | 'bankId' | 'periodId'>;
 

@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Period } from '../types';
+import type { Period } from '@/types';
 
 export const getAll        = (): Promise<Period[]>              => apiClient.get('/periods');
 export const create        = (month: number, year: number): Promise<Period> =>

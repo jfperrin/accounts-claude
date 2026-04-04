@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
-import { getDb, generateId } from '../client';
-import type { User, AuthCredentials } from '../../types';
+import { getDb, generateId } from '@/db/client';
+import type { User, AuthCredentials } from '@/types';
 
 const SESSION_KEY = 'local_user_id';
 

@@ -1,9 +1,8 @@
 import React from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { FlatList } from 'react-native';
 import { OperationItem } from './OperationItem';
-import { EmptyState }    from '../common/EmptyState';
-import type { Operation, Bank } from '../../types';
+import { EmptyState }    from '@/components/common/EmptyState';
+import type { Operation, Bank } from '@/types';
 
 interface Props {
   operations: Operation[];

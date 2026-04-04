@@ -1,7 +1,7 @@
 import { IS_LOCAL } from './index';
-import * as localAuth from '../db/repositories/auth';
-import * as remoteAuth from '../api/auth';
-import type { AuthCredentials, User } from '../types';
+import * as localAuth from '@/db/repositories/auth';
+import * as remoteAuth from '@/api/auth';
+import type { AuthCredentials, User } from '@/types';
 
 export async function me(): Promise<User | null> {
   if (IS_LOCAL) return localAuth.me();

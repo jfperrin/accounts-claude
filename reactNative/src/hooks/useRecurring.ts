@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import * as service from '../services/recurringOperations';
-import type { RecurringOperation } from '../types';
+import * as service from '@/services/recurringOperations';
+import type { RecurringOperation } from '@/types';
 
 export function useRecurring(userId: string) {
   const [items,   setItems]   = useState<RecurringOperation[]>([]);

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { palette } from '../../theme';
+import { palette } from '@/theme';
 
 interface Props {
   icon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];

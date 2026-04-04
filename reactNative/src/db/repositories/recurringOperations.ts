@@ -1,5 +1,5 @@
-import { getDb, generateId } from '../client';
-import type { RecurringOperation } from '../../types';
+import { getDb, generateId } from '@/db/client';
+import type { RecurringOperation } from '@/types';
 
 interface DbRecurring {
   id: string; label: string; amount: number;

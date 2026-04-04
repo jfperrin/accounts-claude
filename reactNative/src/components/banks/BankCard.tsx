@@ -1,8 +1,8 @@
 import React, { memo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Card, Text, TextInput, IconButton } from 'react-native-paper';
-import { palette } from '../../theme';
-import type { Bank, Operation } from '../../types';
+import { palette } from '@/theme';
+import type { Bank, Operation } from '@/types';
 
 interface Props {
   bank: Bank;

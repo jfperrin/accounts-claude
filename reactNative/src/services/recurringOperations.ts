@@ -1,7 +1,7 @@
 import { IS_LOCAL } from './index';
-import * as local  from '../db/repositories/recurringOperations';
-import * as remote from '../api/recurringOperations';
-import type { RecurringOperation } from '../types';
+import * as local  from '@/db/repositories/recurringOperations';
+import * as remote from '@/api/recurringOperations';
+import type { RecurringOperation } from '@/types';
 
 type Payload = Pick<RecurringOperation, 'label' | 'amount' | 'dayOfMonth' | 'bankId'>;
 

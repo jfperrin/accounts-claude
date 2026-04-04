@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet } from 'react-native';
 import { Appbar, FAB, List, IconButton, Snackbar } from 'react-native-paper';
-import { useAuth }        from '../hooks/useAuth';
-import { useBanks }       from '../hooks/useBanks';
-import { BankForm }       from '../components/banks/BankForm';
-import { ConfirmDialog }  from '../components/common/ConfirmDialog';
-import { EmptyState }     from '../components/common/EmptyState';
-import { Screen }         from '../components/common/Screen';
-import { palette }        from '../theme';
-import type { Bank }      from '../types';
+import { useAuth }        from '@/hooks/useAuth';
+import { useBanks }       from '@/hooks/useBanks';
+import { BankForm }       from '@/components/banks/BankForm';
+import { ConfirmDialog }  from '@/components/common/ConfirmDialog';
+import { EmptyState }     from '@/components/common/EmptyState';
+import { Screen }         from '@/components/common/Screen';
+import { palette }        from '@/theme';
+import type { Bank }      from '@/types';
 
 export function BanksScreen() {
   const { user }  = useAuth();

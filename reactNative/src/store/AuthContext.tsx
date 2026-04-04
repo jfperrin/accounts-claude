@@ -1,6 +1,16 @@
+/**
+ * Contexte d'authentification global.
+ *
+ * - `user === undefined`  → chargement initial (affiche un spinner)
+ * - `user === null`       → non authentifié (redirige vers /login)
+ * - `user === User`       → authentifié
+ *
+ * Le service auth sous-jacent bascule automatiquement entre SQLite (dev)
+ * et l'API HTTP (prod) via IS_LOCAL dans `@/services/index`.
+ */
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import * as authService from '../services/auth';
-import type { User, AuthCredentials } from '../types';
+import * as authService from '@/services/auth';
+import type { User, AuthCredentials } from '@/types';
 
 interface AuthContextValue {
   user: User | null | undefined; // undefined = loading

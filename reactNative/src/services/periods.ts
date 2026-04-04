@@ -1,7 +1,7 @@
 import { IS_LOCAL } from './index';
-import * as local  from '../db/repositories/periods';
-import * as remote from '../api/periods';
-import type { Period } from '../types';
+import * as local  from '@/db/repositories/periods';
+import * as remote from '@/api/periods';
+import type { Period } from '@/types';
 
 export async function getAll(userId: string): Promise<Period[]> {
   return IS_LOCAL ? local.getAll(userId) : remote.getAll();

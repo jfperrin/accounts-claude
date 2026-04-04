@@ -1,9 +1,9 @@
 import React, { memo } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Text, Switch, IconButton } from 'react-native-paper';
 import dayjs from 'dayjs';
-import type { Operation, Bank } from '../../types';
-import { palette } from '../../theme';
+import type { Operation } from '@/types';
+import { palette } from '@/theme';
 
 interface Props {
   operation: Operation;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { palette } from '../../theme';
+import { palette } from '@/theme';
 
 interface Props {
   children: React.ReactNode;

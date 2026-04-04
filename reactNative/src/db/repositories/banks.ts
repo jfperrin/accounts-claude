@@ -1,5 +1,5 @@
-import { getDb, generateId } from '../client';
-import type { Bank } from '../../types';
+import { getDb, generateId } from '@/db/client';
+import type { Bank } from '@/types';
 
 interface DbBank { id: string; label: string; user_id: string }
 

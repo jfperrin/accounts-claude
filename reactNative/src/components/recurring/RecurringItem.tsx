@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, IconButton } from 'react-native-paper';
-import type { RecurringOperation } from '../../types';
-import { palette } from '../../theme';
+import type { RecurringOperation } from '@/types';
+import { palette } from '@/theme';
 
 interface Props {
   item:      RecurringOperation;
