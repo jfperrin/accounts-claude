@@ -84,19 +84,18 @@ export default function DashboardPage() {
 
   const handlePoint = async (id) => {
     await operationsApi.point(id);
-    loadOperations(selectedPeriod._id);
+    if (selectedPeriod) loadOperations(selectedPeriod._id);
   };
 
   const handleDelete = async (id) => {
     await operationsApi.remove(id);
-    loadOperations(selectedPeriod._id);
+    if (selectedPeriod) loadOperations(selectedPeriod._id);
   };
 
   const openEdit = (op) => { setEditOp(op); setFormOpen(true); };
 
   return (
     <div className="space-y-6">
-      {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-xs">
         <CalendarDays className="h-5 w-5 text-indigo-600" />
         <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
@@ -129,7 +128,6 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* Bank balances */}
       {banks.length > 0 && (
         <>
           <BankBalances
@@ -142,7 +140,6 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* Operations */}
       {operations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <CalendarDays className="mb-3 h-10 w-10 opacity-30" />

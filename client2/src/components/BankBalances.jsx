@@ -1,23 +1,13 @@
-import { memo, useState, useEffect } from 'react';
+import { memo, useMemo, useState, useEffect } from 'react';
 import { Building2, Pencil, Check } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
+import { cn, formatEur } from '@/lib/utils';
 
-const fmt = (v) => v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtEur = (v) => `${fmt(v)} €`;
-
-function getUnpointedSum(operations, bankId) {
-  return operations
-    .filter((o) => !o.pointed && (o.bankId?._id === bankId || o.bankId === bankId))
-    .reduce((sum, o) => sum + o.amount, 0);
-}
-
-const BankCard = memo(function BankCard({ bank, operations, initialBalance, onSaveBalance }) {
+const BankCard = memo(function BankCard({ bank, unpointedSum, initialBalance, onSaveBalance }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(initialBalance ?? null);
   useEffect(() => { setDraft(initialBalance ?? null); }, [initialBalance]);
 
-  const unpointedSum = getUnpointedSum(operations, bank._id);
   const projected = initialBalance != null ? initialBalance + unpointedSum : null;
 
   const handleSave = () => {
@@ -60,7 +50,7 @@ const BankCard = memo(function BankCard({ bank, operations, initialBalance, onSa
           ) : (
             <>
               <span className="text-lg font-bold text-foreground">
-                {initialBalance != null ? fmtEur(initialBalance) : '—'}
+                {initialBalance != null ? formatEur(initialBalance) : '—'}
               </span>
               <button
                 type="button"
@@ -79,7 +69,7 @@ const BankCard = memo(function BankCard({ bank, operations, initialBalance, onSa
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prévisionnel</p>
         {projected != null ? (
           <span className={cn('text-2xl font-bold', projected >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
-            {fmtEur(projected)}
+            {formatEur(projected)}
           </span>
         ) : (
           <span className="text-sm text-muted-foreground">Saisir un solde</span>
@@ -90,10 +80,23 @@ const BankCard = memo(function BankCard({ bank, operations, initialBalance, onSa
 });
 
 export default function BankBalances({ banks, operations, periodBalances = {}, onSaveBalance }) {
-  const totalProjected = banks
-    .filter((b) => periodBalances[b._id] != null)
-    .reduce((s, b) => s + periodBalances[b._id] + getUnpointedSum(operations, b._id), 0);
-  const hasBalances = banks.some((b) => periodBalances[b._id] != null);
+  const unpointedSums = useMemo(() => {
+    const sums = {};
+    for (const o of operations) {
+      if (!o.pointed) {
+        const bid = o.bankId?._id ?? o.bankId;
+        sums[bid] = (sums[bid] ?? 0) + o.amount;
+      }
+    }
+    return sums;
+  }, [operations]);
+
+  const banksWithBalance = banks.filter((b) => periodBalances[b._id] != null);
+  const hasBalances = banksWithBalance.length > 0;
+  const totalProjected = banksWithBalance.reduce(
+    (s, b) => s + periodBalances[b._id] + (unpointedSums[b._id] ?? 0),
+    0
+  );
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -101,7 +104,7 @@ export default function BankBalances({ banks, operations, periodBalances = {}, o
         <BankCard
           key={bank._id}
           bank={bank}
-          operations={operations}
+          unpointedSum={unpointedSums[bank._id] ?? 0}
           initialBalance={periodBalances[bank._id] ?? null}
           onSaveBalance={onSaveBalance}
         />
@@ -113,7 +116,7 @@ export default function BankBalances({ banks, operations, periodBalances = {}, o
         >
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
           <span className="text-2xl font-extrabold text-white">
-            {totalProjected.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+            {formatEur(totalProjected)}
           </span>
         </div>
       )}

@@ -10,10 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
+import { cn, formatEur } from '@/lib/utils';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
-const fmtEur = (v) => v?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) ?? '';
 const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '' });
 
 export default function RecurringPage() {
@@ -95,7 +95,7 @@ export default function RecurringPage() {
                 <TableCell><Badge variant="secondary">{item.bankId?.label}</Badge></TableCell>
                 <TableCell className="text-center text-muted-foreground">{item.dayOfMonth}</TableCell>
                 <TableCell className={cn('text-right font-semibold', item.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
-                  {item.amount > 0 ? '+' : ''}{fmtEur(item.amount)}
+                  {item.amount > 0 ? '+' : ''}{formatEur(item.amount)}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
@@ -115,7 +115,6 @@ export default function RecurringPage() {
         </Table>
       </div>
 
-      {/* Add/Edit dialog */}
       <Dialog open={!!modal} onOpenChange={(o) => !o && setModal(null)}>
         <DialogContent>
           <DialogHeader>
@@ -158,17 +157,12 @@ export default function RecurringPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Supprimer ?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Cette action est irréversible.</p>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>Annuler</Button>
-            <Button variant="destructive" onClick={onDelete}>Supprimer</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        title="Supprimer ?"
+        onConfirm={onDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

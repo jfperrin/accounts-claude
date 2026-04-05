@@ -22,14 +22,12 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Sidebar */}
       <aside
         className={cn(
           'flex flex-col bg-sidebar text-white transition-all duration-200',
           collapsed ? 'w-16' : 'w-60'
         )}
       >
-        {/* Logo */}
         <div className={cn(
           'flex items-center gap-3 border-b border-white/10 py-4',
           collapsed ? 'justify-center px-0' : 'px-5'
@@ -42,7 +40,6 @@ export default function AppShell() {
           )}
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 px-2 py-3 space-y-1">
           {NAV_ITEMS.map(({ key, icon: Icon, label }) => (
             <button
@@ -64,7 +61,6 @@ export default function AppShell() {
           ))}
         </nav>
 
-        {/* Collapse toggle */}
         <div className="border-t border-white/10 p-2">
           <button
             type="button"
@@ -76,9 +72,7 @@ export default function AppShell() {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex flex-1 flex-col">
-        {/* Header */}
         <header className="flex h-14 items-center justify-end gap-3 border-b border-border bg-card px-6 shadow-xs">
           <Avatar>
             <AvatarFallback>{initials}</AvatarFallback>
@@ -90,7 +84,6 @@ export default function AppShell() {
           </Button>
         </header>
 
-        {/* Content */}
         <main className="flex-1 p-6">
           <Outlet />
         </main>

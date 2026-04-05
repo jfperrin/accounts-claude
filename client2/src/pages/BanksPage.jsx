@@ -11,6 +11,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 export default function BanksPage() {
   const [banks, setBanks] = useState([]);
@@ -86,7 +87,6 @@ export default function BanksPage() {
         </Table>
       </div>
 
-      {/* Add/Edit dialog */}
       <Dialog open={!!modal} onOpenChange={(o) => !o && setModal(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -105,19 +105,12 @@ export default function BanksPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm dialog */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Supprimer la banque ?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">Cette action est irréversible.</p>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>Annuler</Button>
-            <Button variant="destructive" onClick={onDelete}>Supprimer</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        title="Supprimer la banque ?"
+        onConfirm={onDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

@@ -1,16 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
-
-const fmt = (v) => (v == null ? '' : v.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }));
+import { cn, formatEur } from '@/lib/utils';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 const ROWS_PER_PAGE = 20;
 
 export default function OperationsTable({ operations, onPoint, onEdit, onDelete }) {
@@ -18,7 +14,10 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
   const [deleteTarget, setDeleteTarget] = useState(null);
   useEffect(() => { setPage(1); }, [operations]);
 
-  const sorted = [...operations].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sorted = useMemo(
+    () => [...operations].sort((a, b) => new Date(a.date) - new Date(b.date)),
+    [operations]
+  );
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
   const rows = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
@@ -49,7 +48,7 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
                 <Badge variant="secondary">{op.bankId?.label}</Badge>
               </TableCell>
               <TableCell className={cn('text-right font-semibold', op.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
-                {op.amount > 0 ? '+' : ''}{fmt(op.amount)}
+                {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
               </TableCell>
               <TableCell className="text-center">
                 <Switch checked={op.pointed} onCheckedChange={() => onPoint(op._id)} />
@@ -78,18 +77,12 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
         </div>
       )}
 
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Supprimer l'opération ?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">Cette action est irréversible.</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Annuler</Button>
-            <Button variant="destructive" onClick={confirmDelete}>Supprimer</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        title="Supprimer l'opération ?"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 }

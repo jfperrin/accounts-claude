@@ -36,13 +36,10 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900">
-      {/* Glow blobs */}
       <div className="pointer-events-none absolute -right-20 -top-40 h-[700px] w-[700px] rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18)_0%,transparent_65%)]" />
       <div className="pointer-events-none absolute -bottom-40 -left-20 h-[600px] w-[600px] rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.12)_0%,transparent_65%)]" />
 
-      {/* Card */}
       <div className="relative z-10 w-[420px] rounded-2xl bg-white p-12 shadow-2xl">
-        {/* Brand */}
         <div className="mb-9 text-center">
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
             <Wallet className="h-6 w-6 text-white" />
@@ -77,7 +74,6 @@ export default function LoginPage() {
           </>
         )}
 
-        {/* Tab toggle */}
         <div className="mb-7 flex gap-1 rounded-xl bg-slate-100 p-1">
           {[['login', 'Connexion'], ['register', 'Inscription']].map(([key, label]) => (
             <button
