@@ -46,6 +46,7 @@ export default function AppShell() {
         <nav className="flex-1 px-2 py-3 space-y-1">
           {NAV_ITEMS.map(({ key, icon: Icon, label }) => (
             <button
+              type="button"
               key={key}
               onClick={() => navigate(key)}
               className={cn(
@@ -66,6 +67,7 @@ export default function AppShell() {
         {/* Collapse toggle */}
         <div className="border-t border-white/10 p-2">
           <button
+            type="button"
             onClick={() => setCollapsed((v) => !v)}
             className="flex w-full items-center justify-center rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
           >
