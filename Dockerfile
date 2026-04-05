@@ -4,8 +4,8 @@
 FROM node:24-alpine AS client-builder
 WORKDIR /build
 COPY client2/package.json client2/yarn.lock client2/.yarnrc ./
-RUN --mount=type=cache,target=/home/ubuntu/.yarn \
-    YARN_CACHE_FOLDER=/home/ubuntu/.yarn \
+RUN --mount=type=cache,target=/home/ubuntu/.yarn-client \
+    YARN_CACHE_FOLDER=/home/ubuntu/.yarn-client \
     yarn install --frozen-lockfile
 COPY --link client2/ .
 RUN yarn build
@@ -15,8 +15,8 @@ FROM node:24-alpine
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY server/package.json server/yarn.lock server/.yarnrc ./
-RUN --mount=type=cache,target=/home/ubuntu/.yarn \
-    YARN_CACHE_FOLDER=/home/ubuntu/.yarn \
+RUN --mount=type=cache,target=/home/ubuntu/.yarn-server \
+    YARN_CACHE_FOLDER=/home/ubuntu/.yarn-server \
     yarn install --frozen-lockfile --production
 COPY --link server/ .
 COPY --link --from=client-builder /build/dist ./public
