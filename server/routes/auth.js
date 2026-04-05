@@ -4,15 +4,24 @@
 const router = require('express').Router();
 const passport = require('passport');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const wrap = require('../utils/asyncHandler');
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,                   // 20 tentatives par IP par fenêtre
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Trop de tentatives, réessayez dans 15 minutes' },
+});
 
 // POST /api/auth/register
 // Crée un compte local. Vérifie la disponibilité du username avant d'hasher
 // le mot de passe (bcrypt, coût 12). req.login() démarre la session immédiatement
 // après la création, évitant une double requête de connexion.
-router.post('/register', wrap(async (req, res) => {
+router.post('/register', authLimiter, wrap(async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ message: 'Champs requis' });
   const db = req.app.locals.db;
@@ -29,7 +38,7 @@ router.post('/register', wrap(async (req, res) => {
 // Délègue à Passport LocalStrategy (définie dans config/passport.js).
 // On utilise la forme callback pour pouvoir renvoyer un JSON d'erreur personnalisé
 // plutôt que le comportement de redirect par défaut de passport.authenticate().
-router.post('/login', (req, res, next) => {
+router.post('/login', authLimiter, (req, res, next) => {
   passport.authenticate('local', (err, user, info) => {
     if (err) return next(err);
     if (!user) return res.status(401).json({ message: info?.message || 'Échec de connexion' });
