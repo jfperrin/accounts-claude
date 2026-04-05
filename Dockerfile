@@ -12,6 +12,7 @@ RUN yarn build
 
 # ── Server ─────────────────────────────────────────────────────────────────────
 FROM node:24-alpine
+RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY server/package.json server/yarn.lock server/.yarnrc ./
 RUN --mount=type=cache,target=/home/ubuntu/.yarn \
