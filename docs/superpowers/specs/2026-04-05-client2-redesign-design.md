@@ -1,4 +1,4 @@
-# Client2 — Redesign sans antd
+c'est tout bon# Client2 — Redesign sans antd
 
 **Date :** 2026-04-05  
 **Scope :** Nouveau répertoire `client2/` remplaçant `client/` — mêmes fonctionnalités, stack UI entièrement remplacée.

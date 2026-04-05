@@ -2,6 +2,7 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"yarn --cwd server dev\" \"yarn --cwd client dev\"",
+    "dev2": "concurrently \"yarn --cwd server dev\" \"yarn --cwd client2 dev\"",
     "install:all": "yarn --cwd server install && yarn --cwd client install"
   },
   "devDependencies": {

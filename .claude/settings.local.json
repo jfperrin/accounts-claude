@@ -43,7 +43,8 @@
       "Bash(npm info:*)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k: d.get\\(k,''\\) for k in ['peerDependencies','devDependencies']}, indent=2\\)\\)\")",
       "Read(//opt/**)",
-      "Read(//usr/local/**)"
+      "Read(//usr/local/**)",
+      "Bash(awk 'NR>=2259 && NR<=2350')"
     ]
   }
 }
