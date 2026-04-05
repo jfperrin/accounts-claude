@@ -8,6 +8,7 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const cors = require('cors');
+const helmet = require('helmet');
 const requireAuth = require('./middleware/requireAuth');
 
 // mongoUri est null en développement (SQLite) → on utilise MemoryStore pour les sessions.
@@ -23,6 +24,9 @@ module.exports = function createApp(db, mongoUri) {
   // Nécessaire pour que req.ip soit fiable derrière un reverse proxy (nginx, Render, etc.)
   app.set('trust proxy', 1);
 
+  // Security headers (CSP, X-Frame-Options, X-Content-Type-Options, HSTS, etc.)
+  app.use(helmet());
+
   // CORS : autorise les requêtes cross-origin depuis le client Vite en dev.
   // credentials:true est obligatoire pour que le cookie de session soit transmis.
   app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
@@ -35,12 +39,22 @@ module.exports = function createApp(db, mongoUri) {
     ? require('connect-mongo').MongoStore.create({ mongoUrl: mongoUri })
     : undefined;
 
+  const isProd = process.env.NODE_ENV === 'production';
+  if (isProd && !process.env.SESSION_SECRET) {
+    throw new Error('SESSION_SECRET environment variable is required in production');
+  }
+
   app.use(session({
     secret: process.env.SESSION_SECRET || 'dev_secret',
     resave: false,           // ne re-sauvegarde pas si la session n'a pas changé
     saveUninitialized: false, // ne crée pas de session pour les visiteurs non connectés
     store,
-    cookie: { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 }, // 7 jours
+    cookie: {
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours
+      secure: isProd,        // HTTPS uniquement en production
+      sameSite: 'strict',    // protection CSRF
+    },
   }));
 
   app.use(passport.initialize());
