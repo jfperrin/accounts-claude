@@ -38,12 +38,19 @@ export async function create(
   return { _id: id, pointed: false, userId, ...data, bankId: data.bankId as string };
 }
 
+const ALLOWED_UPDATE_FIELDS: Record<string, string> = {
+  label: 'label',
+  amount: 'amount',
+  date: 'date',
+  bankId: 'bank_id',
+};
+
 export async function update(id: string, data: Partial<Pick<Operation, 'label' | 'amount' | 'date' | 'bankId'>>): Promise<Operation> {
   const db = await getDb();
-  const fields = Object.entries(data)
-    .map(([k]) => `${k === 'bankId' ? 'bank_id' : k} = ?`)
-    .join(', ');
-  const values = Object.values(data);
+  const entries = Object.entries(data).filter(([k]) => k in ALLOWED_UPDATE_FIELDS);
+  if (entries.length === 0) throw new Error('No valid fields to update');
+  const fields = entries.map(([k]) => `${ALLOWED_UPDATE_FIELDS[k]} = ?`).join(', ');
+  const values = entries.map(([, v]) => v);
   await db.runAsync(`UPDATE operations SET ${fields} WHERE id = ?`, [...values, id]);
   const row = await db.getFirstAsync<DbOperation>('SELECT * FROM operations WHERE id = ?', [id]);
   if (!row) throw new Error('Operation not found');
