@@ -4,7 +4,7 @@ set -euo pipefail
 REMOTE_USER="ubuntu"
 REMOTE_HOST="perrin.at"
 REMOTE="${REMOTE_USER}@${REMOTE_HOST}"
-REMOTE_DIR="/opt/accounts-claude"
+REMOTE_DIR="/data/git/accounts-claude"
 NO_CACHE=""
 [[ "${1:-}" == "--no-cache" ]] && NO_CACHE="--no-cache"
 
