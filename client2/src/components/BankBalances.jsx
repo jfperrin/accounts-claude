@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Building2, Pencil, Check } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ function getUnpointedSum(operations, bankId) {
 const BankCard = memo(function BankCard({ bank, operations, initialBalance, onSaveBalance }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(initialBalance ?? null);
+  useEffect(() => { setDraft(initialBalance ?? null); }, [initialBalance]);
 
   const unpointedSum = getUnpointedSum(operations, bank._id);
   const projected = initialBalance != null ? initialBalance + unpointedSum : null;
@@ -89,9 +90,9 @@ const BankCard = memo(function BankCard({ bank, operations, initialBalance, onSa
 });
 
 export default function BankBalances({ banks, operations, periodBalances = {}, onSaveBalance }) {
-  const totalInitial = banks.reduce((s, b) => s + (periodBalances[b._id] ?? 0), 0);
-  const totalUnpointed = operations.filter((o) => !o.pointed).reduce((s, o) => s + o.amount, 0);
-  const totalProjected = totalInitial + totalUnpointed;
+  const totalProjected = banks
+    .filter((b) => periodBalances[b._id] != null)
+    .reduce((s, b) => s + periodBalances[b._id] + getUnpointedSum(operations, b._id), 0);
   const hasBalances = banks.some((b) => periodBalances[b._id] != null);
 
   return (

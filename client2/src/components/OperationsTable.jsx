@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -10,12 +10,13 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
-const fmt = (v) => v?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+const fmt = (v) => (v == null ? '' : v.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }));
 const ROWS_PER_PAGE = 20;
 
 export default function OperationsTable({ operations, onPoint, onEdit, onDelete }) {
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  useEffect(() => { setPage(1); }, [operations]);
 
   const sorted = [...operations].sort((a, b) => new Date(a.date) - new Date(b.date));
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
