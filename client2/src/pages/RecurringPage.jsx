@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils';
 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
-const fmtEur = (v) => v?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+const fmtEur = (v) => v?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) ?? '';
 const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '' });
 
 export default function RecurringPage() {
@@ -58,9 +58,13 @@ export default function RecurringPage() {
   };
 
   const onDelete = async () => {
-    await api.remove(deleteTarget);
-    setDeleteTarget(null);
-    load();
+    try {
+      await api.remove(deleteTarget);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la suppression');
+    }
   };
 
   return (

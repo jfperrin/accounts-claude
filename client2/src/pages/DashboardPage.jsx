@@ -59,19 +59,27 @@ export default function DashboardPage() {
   };
 
   const handleImport = async () => {
-    const period = await ensurePeriod();
-    const { imported } = await operationsApi.importRecurring(period._id);
-    toast.success(`${imported} opération(s) importée(s)`);
-    loadOperations(period._id);
+    try {
+      const period = await ensurePeriod();
+      const { imported } = await operationsApi.importRecurring(period._id);
+      toast.success(`${imported} opération(s) importée(s)`);
+      loadOperations(period._id);
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de l\'import');
+    }
   };
 
   const handleFormFinish = async (values) => {
-    const period = await ensurePeriod();
-    if (editOp) await operationsApi.update(editOp._id, values);
-    else await operationsApi.create({ ...values, periodId: period._id });
-    setFormOpen(false);
-    setEditOp(null);
-    loadOperations(period._id);
+    try {
+      const period = await ensurePeriod();
+      if (editOp) await operationsApi.update(editOp._id, values);
+      else await operationsApi.create({ ...values, periodId: period._id });
+      setFormOpen(false);
+      setEditOp(null);
+      loadOperations(period._id);
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de l\'enregistrement');
+    }
   };
 
   const handlePoint = async (id) => {

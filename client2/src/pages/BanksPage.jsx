@@ -37,9 +37,13 @@ export default function BanksPage() {
   };
 
   const onDelete = async () => {
-    await api.remove(deleteTarget);
-    setDeleteTarget(null);
-    load();
+    try {
+      await api.remove(deleteTarget);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la suppression');
+    }
   };
 
   return (
