@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ── Build client ───────────────────────────────────────────────────────────────
-FROM node:22-alpine AS client-builder
+FROM node:24-alpine AS client-builder
 WORKDIR /build
 COPY client2/package.json client2/yarn.lock client2/.yarnrc ./
 RUN --mount=type=cache,target=/home/ubuntu/.yarn \
@@ -11,7 +11,7 @@ COPY --link client2/ .
 RUN yarn build
 
 # ── Server ─────────────────────────────────────────────────────────────────────
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /app
 COPY server/package.json server/yarn.lock server/.yarnrc ./
 RUN --mount=type=cache,target=/home/ubuntu/.yarn \
