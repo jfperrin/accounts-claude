@@ -44,7 +44,15 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k: d.get\\(k,''\\) for k in ['peerDependencies','devDependencies']}, indent=2\\)\\)\")",
       "Read(//opt/**)",
       "Read(//usr/local/**)",
-      "Bash(awk 'NR>=2259 && NR<=2350')"
+      "Bash(awk 'NR>=2259 && NR<=2350')",
+      "Bash(claude mcp:*)",
+      "Bash(claude plugin:*)",
+      "Bash(claude skill:*)",
+      "Skill(code-review:code-review)",
+      "Bash(apt list:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh repo:*)",
+      "Bash(npx jest:*)"
     ]
   }
 }
