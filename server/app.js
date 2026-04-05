@@ -79,7 +79,7 @@ module.exports = function createApp(db, mongoUri) {
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
     // Toutes les routes non-API renvoient index.html pour que le routeur React prenne le relais
-    app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+    app.get('/{*path}', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
   }
 
   // Gestionnaire d'erreurs global : capte tout ce qui est passé à next(err)
