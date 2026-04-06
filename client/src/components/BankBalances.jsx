@@ -98,28 +98,38 @@ export default function BankBalances({ banks, operations, periodBalances = {}, o
     0
   );
 
+  const totalCard = banks.length > 1 && hasBalances && (
+    <div
+      data-testid="total-card"
+      className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-4 shadow-lg shadow-indigo-500/30"
+    >
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
+      <span className="text-2xl font-extrabold text-white">{formatEur(totalProjected)}</span>
+    </div>
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-      {banks.map((bank) => (
-        <BankCard
-          key={bank._id}
-          bank={bank}
-          unpointedSum={unpointedSums[bank._id] ?? 0}
-          initialBalance={periodBalances[bank._id] ?? null}
-          onSaveBalance={onSaveBalance}
-        />
-      ))}
-      {banks.length > 1 && hasBalances && (
-        <div
-          data-testid="total-card"
-          className="sticky top-[5px] z-10 md:static md:z-auto rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-4 shadow-lg shadow-indigo-500/30"
-        >
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
-          <span className="text-2xl font-extrabold text-white">
-            {formatEur(totalProjected)}
-          </span>
+    <div>
+      {/* Mobile : total sticky au-dessus du grid */}
+      {totalCard && (
+        <div className="sticky top-[5px] z-10 mb-4 md:hidden">
+          {totalCard}
         </div>
       )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {banks.map((bank) => (
+          <BankCard
+            key={bank._id}
+            bank={bank}
+            unpointedSum={unpointedSums[bank._id] ?? 0}
+            initialBalance={periodBalances[bank._id] ?? null}
+            onSaveBalance={onSaveBalance}
+          />
+        ))}
+        {/* Desktop : total dans le grid */}
+        {totalCard && <div className="hidden md:block">{totalCard}</div>}
+      </div>
     </div>
   );
 }
