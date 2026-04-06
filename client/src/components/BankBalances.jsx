@@ -112,7 +112,7 @@ export default function BankBalances({ banks, operations, periodBalances = {}, o
       {banks.length > 1 && hasBalances && (
         <div
           data-testid="total-card"
-          className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-4 shadow-lg shadow-indigo-500/30"
+          className="hidden md:block rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-4 shadow-lg shadow-indigo-500/30"
         >
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
           <span className="text-2xl font-extrabold text-white">{formatEur(totalProjected)}</span>
