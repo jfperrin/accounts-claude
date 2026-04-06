@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -18,7 +18,9 @@ export default function AppShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const initials = user?.username?.slice(0, 2).toUpperCase() ?? '??';
+  const displayName = user?.nickname || user?.username;
+  const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
+  const avatarSrc = user?.avatarUrl ? `http://localhost:3001${user.avatarUrl}` : undefined;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -74,10 +76,18 @@ export default function AppShell() {
 
       <div className="flex flex-1 flex-col">
         <header className="flex h-14 items-center justify-end gap-3 border-b border-border bg-card px-6 shadow-xs">
-          <Avatar>
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-          <span className="text-sm font-semibold text-foreground">{user?.username}</span>
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-accent transition-colors"
+            title="Mon profil"
+          >
+            <Avatar className="h-8 w-8">
+              {avatarSrc && <AvatarImage src={avatarSrc} alt={displayName} />}
+              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            </Avatar>
+            <span className="text-sm font-semibold text-foreground">{displayName}</span>
+          </button>
           <Button variant="ghost" size="sm" onClick={logout} className="text-muted-foreground gap-1.5">
             <LogOut className="h-4 w-4" />
             Déconnexion

@@ -1,0 +1,122 @@
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { useAuth } from '@/store/AuthContext';
+import * as profileApi from '@/api/profile';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const TITLES = ['M.', 'Mme', 'Dr', 'Pr'];
+
+export default function ProfilePage() {
+  const { user, updateUser } = useAuth();
+  const fileRef = useRef(null);
+
+  const [form, setForm] = useState({
+    title:     user?.title     ?? '',
+    firstName: user?.firstName ?? '',
+    lastName:  user?.lastName  ?? '',
+    nickname:  user?.nickname  ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target?.value ?? e }));
+
+  const onSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const updated = await profileApi.updateProfile(form);
+      updateUser(updated);
+      toast.success('Profil enregistré');
+    } catch (err) {
+      toast.error(err.message || 'Erreur');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const updated = await profileApi.uploadAvatar(file);
+      updateUser(updated);
+      toast.success('Avatar mis à jour');
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de l\'upload');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const displayName = user?.nickname || user?.username;
+  const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
+  const avatarSrc = user?.avatarUrl ? `http://localhost:3001${user.avatarUrl}` : undefined;
+
+  return (
+    <div className="mx-auto max-w-lg space-y-8">
+      <h1 className="text-xl font-extrabold text-foreground">Mon profil</h1>
+
+      {/* Avatar */}
+      <div className="flex flex-col items-center gap-4">
+        <Avatar className="h-24 w-24 text-2xl">
+          {avatarSrc && <AvatarImage src={avatarSrc} alt={displayName} />}
+          <AvatarFallback>{initials}</AvatarFallback>
+        </Avatar>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onAvatarChange}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+        >
+          {uploading ? 'Envoi…' : 'Changer l\'avatar'}
+        </Button>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={onSave} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+        <div className="space-y-1.5">
+          <Label>Titre</Label>
+          <Select value={form.title} onValueChange={set('title')}>
+            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">—</SelectItem>
+              {TITLES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="firstName">Prénom</Label>
+            <Input id="firstName" value={form.firstName} onChange={set('firstName')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="lastName">Nom</Label>
+            <Input id="lastName" value={form.lastName} onChange={set('lastName')} />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="nickname">Surnom (affiché en haut)</Label>
+          <Input id="nickname" value={form.nickname} onChange={set('nickname')} placeholder={user?.username} />
+        </div>
+        <Button type="submit" disabled={saving} className="w-full">
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </Button>
+      </form>
+    </div>
+  );
+}
