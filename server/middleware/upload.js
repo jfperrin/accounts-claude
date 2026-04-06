@@ -1,21 +1,10 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads', 'avatars');
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-  filename: (req, file, cb) => {
-    const ext = file.mimetype.split('/')[1] || 'jpg';
-    cb(null, `${req.user._id}_${Date.now()}.${ext}`);
-  },
-});
-
+// Stockage en mémoire — le buffer est ensuite converti en data URL Base64
+// et persisté dans MongoDB/SQLite. Aucun fichier écrit sur disque.
 const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 512 * 1024 }, // 512 KB max (stocké inline en base)
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) {
       return cb(new Error('Seules les images sont acceptées'));

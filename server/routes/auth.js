@@ -107,9 +107,10 @@ router.put('/profile', requireAuth, wrap(async (req, res) => {
 }));
 
 // POST /api/auth/avatar — upload de l'avatar (multipart/form-data, champ "avatar")
+// Le fichier est stocké en mémoire puis converti en data URL Base64 persistée en base.
 router.post('/avatar', requireAuth, upload.single('avatar'), wrap(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Aucun fichier reçu' });
-  const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+  const avatarUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
   const db = req.app.locals.db;
   const updated = await db.users.updateAvatar(req.user._id, avatarUrl);
   res.json(serializeUser(updated));
