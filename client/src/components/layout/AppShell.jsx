@@ -1,15 +1,24 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet } from 'lucide-react';
+import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+// Sidebar desktop (3 items)
 const NAV_ITEMS = [
   { key: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
   { key: '/banks', icon: Building2, label: 'Banques' },
   { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
+];
+
+// Bottom nav mobile (4 tabs — labels courts)
+const BOTTOM_TABS = [
+  { key: '/', icon: LayoutDashboard, label: 'Accueil' },
+  { key: '/banks', icon: Building2, label: 'Banques' },
+  { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
+  { key: '/profile', icon: UserCircle, label: 'Profil' },
 ];
 
 export default function AppShell() {
@@ -24,9 +33,11 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-background">
+
+      {/* ── Sidebar desktop uniquement ── */}
       <aside
         className={cn(
-          'flex flex-col bg-sidebar text-white transition-all duration-200',
+          'hidden md:flex flex-col bg-sidebar text-white transition-all duration-200',
           collapsed ? 'w-16' : 'w-60'
         )}
       >
@@ -74,8 +85,23 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
-        <header className="flex h-14 items-center justify-end gap-3 border-b border-border bg-card px-6 shadow-xs">
+      {/* ── Zone principale ── */}
+      <div className="flex flex-1 flex-col min-w-0">
+
+        {/* Header */}
+        <header className="flex h-14 items-center border-b border-border bg-card px-4 shadow-xs">
+
+          {/* Logo — mobile uniquement */}
+          <div className="flex items-center gap-2 md:hidden">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+              <Wallet className="h-3.5 w-3.5 text-white" />
+            </div>
+            <span className="text-sm font-bold tracking-tight text-foreground">Comptes</span>
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Avatar + surnom (cliquable → /profile) */}
           <button
             type="button"
             onClick={() => navigate('/profile')}
@@ -86,18 +112,49 @@ export default function AppShell() {
               {avatarSrc && <AvatarImage src={avatarSrc} alt={displayName} />}
               <AvatarFallback className="text-xs">{initials}</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-semibold text-foreground">{displayName}</span>
+            {/* Surnom masqué sur mobile */}
+            <span className="hidden md:inline text-sm font-semibold text-foreground">{displayName}</span>
           </button>
-          <Button variant="ghost" size="sm" onClick={logout} className="text-muted-foreground gap-1.5">
+
+          {/* Déconnexion — desktop uniquement */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="hidden md:flex text-muted-foreground gap-1.5"
+          >
             <LogOut className="h-4 w-4" />
             Déconnexion
           </Button>
         </header>
 
-        <main className="flex-1 p-6">
+        {/* Contenu — padding bas extra sur mobile pour éviter la bottom nav */}
+        <main className="flex-1 p-4 pb-24 md:p-6 md:pb-6">
           <Outlet />
         </main>
       </div>
+
+      {/* ── Bottom navigation mobile uniquement ── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden border-t border-border bg-card">
+        {BOTTOM_TABS.map(({ key, icon: Icon, label }) => {
+          const active = pathname === key;
+          return (
+            <button
+              type="button"
+              key={key}
+              onClick={() => navigate(key)}
+              className={cn(
+                'flex flex-1 flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
+                active ? 'text-indigo-600' : 'text-slate-400'
+              )}
+            >
+              <Icon className={cn('h-5 w-5', active && 'stroke-[2.5]')} />
+              {label}
+            </button>
+          );
+        })}
+      </nav>
+
     </div>
   );
 }
