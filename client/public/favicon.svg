@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <!-- Fond arrondi indigo → violet (identique au logo sidebar) -->
+  <rect width="32" height="32" rx="8" fill="url(#g)"/>
+  <!-- Corps du portefeuille -->
+  <rect x="5" y="11" width="19" height="13" rx="2" fill="none" stroke="white" stroke-width="1.8"/>
+  <!-- Rabat supérieur -->
+  <path d="M8 11V9.5A1.5 1.5 0 0 1 9.5 8h10A1.5 1.5 0 0 1 21 9.5V11" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+  <!-- Poche carte / monnaie -->
+  <rect x="16" y="14.5" width="6.5" height="5.5" rx="1.5" fill="white" opacity="0.95"/>
+  <!-- Petit point dans la poche (pièce) -->
+  <circle cx="19.25" cy="17.25" r="1.2" fill="#6366f1"/>
+</svg>
