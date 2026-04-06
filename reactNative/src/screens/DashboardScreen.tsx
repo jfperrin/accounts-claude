@@ -93,10 +93,12 @@ export function DashboardScreen() {
   const openEdit = (op: Operation) => { setEditOp(op); setFormOpen(true); };
   const openNew  = () => { setEditOp(null); setFormOpen(true); };
 
+  const displayName = user?.nickname || user?.username || 'Tableau de bord';
+
   return (
     <>
       <Appbar.Header style={styles.appbar}>
-        <Appbar.Content title="Tableau de bord" titleStyle={styles.appbarTitle} />
+        <Appbar.Content title={displayName} titleStyle={styles.appbarTitle} />
         <Appbar.Action icon="logout" onPress={logout} />
       </Appbar.Header>
 

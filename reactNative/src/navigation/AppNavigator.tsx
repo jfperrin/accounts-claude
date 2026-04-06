@@ -5,6 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { BanksScreen }     from '@/screens/BanksScreen';
 import { RecurringScreen } from '@/screens/RecurringScreen';
+import { ProfileScreen }   from '@/screens/ProfileScreen';
 import type { AppTabParamList } from './types';
 import { palette } from '@/theme';
 
@@ -17,20 +18,21 @@ const TABS: Array<{
   label: string;
   icon: IconName;
   iconFocused: IconName;
+  component: React.ComponentType<any>;
 }> = [
-  { name: 'Dashboard', label: 'Tableau de bord', icon: 'view-dashboard-outline', iconFocused: 'view-dashboard' },
-  { name: 'Banks',     label: 'Banques',         icon: 'bank-outline',           iconFocused: 'bank' },
-  { name: 'Recurring', label: 'Récurrents',      icon: 'repeat',                 iconFocused: 'repeat' },
+  { name: 'Dashboard', label: 'Tableau de bord', icon: 'view-dashboard-outline', iconFocused: 'view-dashboard',   component: DashboardScreen },
+  { name: 'Banks',     label: 'Banques',         icon: 'bank-outline',           iconFocused: 'bank',             component: BanksScreen },
+  { name: 'Recurring', label: 'Récurrents',      icon: 'repeat',                 iconFocused: 'repeat',           component: RecurringScreen },
+  { name: 'Profile',   label: 'Profil',          icon: 'account-outline',        iconFocused: 'account',          component: ProfileScreen },
 ];
 
 export function AppNavigator() {
-
   return (
     <Tab.Navigator
       screenOptions={({ route }) => {
         const tab = TABS.find((t) => t.name === route.name)!;
         return {
-          headerShown:          false,
+          headerShown:             false,
           tabBarActiveTintColor:   palette.indigo500,
           tabBarInactiveTintColor: palette.gray400,
           tabBarStyle: {
@@ -54,11 +56,7 @@ export function AppNavigator() {
         <Tab.Screen
           key={t.name}
           name={t.name}
-          component={
-            t.name === 'Dashboard' ? DashboardScreen :
-            t.name === 'Banks'     ? BanksScreen     :
-            RecurringScreen
-          }
+          component={t.component}
           options={{ tabBarLabel: t.label }}
         />
       ))}

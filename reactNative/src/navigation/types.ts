@@ -9,6 +9,7 @@ export type AppTabParamList = {
   Dashboard: undefined;
   Banks:     undefined;
   Recurring: undefined;
+  Profile:   undefined;
 };
 
 export type AuthStackProps<S extends keyof AuthStackParamList> =
