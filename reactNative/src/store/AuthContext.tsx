@@ -13,10 +13,11 @@ import * as authService from '@/services/auth';
 import type { User, AuthCredentials } from '@/types';
 
 interface AuthContextValue {
-  user: User | null | undefined; // undefined = loading
+  user: User | null | undefined;
   login: (c: AuthCredentials) => Promise<void>;
   register: (c: AuthCredentials) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (u: User) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,8 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const updateUser = (u: User) => setUser(u);
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
