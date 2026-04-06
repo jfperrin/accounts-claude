@@ -7,7 +7,10 @@ fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-  filename: (req, _file, cb) => cb(null, `${req.user._id}_${Date.now()}.jpg`),
+  filename: (req, file, cb) => {
+    const ext = file.mimetype.split('/')[1] || 'jpg';
+    cb(null, `${req.user._id}_${Date.now()}.${ext}`);
+  },
 });
 
 const upload = multer({

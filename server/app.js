@@ -88,6 +88,9 @@ module.exports = function createApp(db, mongoUri) {
   // Gestionnaire d'erreurs global : capte tout ce qui est passé à next(err)
   // (notamment via asyncHandler) et renvoie une réponse JSON propre.
   app.use((err, _req, res, _next) => {
+    if (err.name === 'MulterError' || err.message === 'Seules les images sont acceptées') {
+      return res.status(400).json({ message: err.message });
+    }
     console.error(err);
     res.status(500).json({ message: 'Erreur serveur' });
   });
