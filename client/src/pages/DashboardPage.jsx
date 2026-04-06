@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { CalendarDays, Download, Plus } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import OperationForm from '@/components/OperationForm';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { formatEur } from '@/lib/utils';
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const CURRENT_YEAR = dayjs().year();
@@ -94,8 +95,36 @@ export default function DashboardPage() {
 
   const openEdit = (op) => { setEditOp(op); setFormOpen(true); };
 
+  // Total prévisionnel toutes banques — utilisé pour la carte sticky mobile
+  const totalProjected = useMemo(() => {
+    const balances = selectedPeriod?.balances ?? {};
+    const banksWithBalance = banks.filter((b) => balances[b._id] != null);
+    if (banks.length < 2 || banksWithBalance.length === 0) return null;
+    const unpointedSums = {};
+    for (const o of operations) {
+      if (!o.pointed) {
+        const bid = o.bankId?._id ?? o.bankId;
+        unpointedSums[bid] = (unpointedSums[bid] ?? 0) + o.amount;
+      }
+    }
+    return banksWithBalance.reduce(
+      (s, b) => s + balances[b._id] + (unpointedSums[b._id] ?? 0),
+      0
+    );
+  }, [banks, operations, selectedPeriod]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Total prévisionnel sticky — mobile uniquement */}
+      {totalProjected !== null && (
+        <div className="sticky top-[5px] z-10 md:hidden">
+          <div className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-3 shadow-lg shadow-indigo-500/30 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
+            <span className="text-xl font-extrabold text-white">{formatEur(totalProjected)}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-xs">
         <CalendarDays className="h-5 w-5 text-indigo-600" />
         <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
