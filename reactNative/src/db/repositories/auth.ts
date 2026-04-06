@@ -5,7 +5,28 @@ import type { User, AuthCredentials } from '@/types';
 
 const SESSION_KEY = 'local_user_id';
 
-interface DbUser { id: string; username: string; password_hash: string }
+interface DbUser {
+  id: string;
+  username: string;
+  password_hash: string;
+  title: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  nickname: string | null;
+  avatar_url: string | null;
+}
+
+function mapUser(row: DbUser): User {
+  return {
+    _id:       row.id,
+    username:  row.username,
+    title:     row.title      ?? null,
+    firstName: row.first_name ?? null,
+    lastName:  row.last_name  ?? null,
+    nickname:  row.nickname   ?? null,
+    avatarUrl: row.avatar_url ?? null,
+  };
+}
 
 export async function register({ username, password }: AuthCredentials): Promise<User> {
   const db = await getDb();
@@ -21,7 +42,7 @@ export async function register({ username, password }: AuthCredentials): Promise
     [id, username, hash]
   );
   await SecureStore.setItemAsync(SESSION_KEY, id);
-  return { _id: id, username };
+  return { _id: id, username, title: null, firstName: null, lastName: null, nickname: null, avatarUrl: null };
 }
 
 export async function login({ username, password }: AuthCredentials): Promise<User> {
@@ -35,7 +56,7 @@ export async function login({ username, password }: AuthCredentials): Promise<Us
   if (!match) throw new Error('Invalid credentials');
 
   await SecureStore.setItemAsync(SESSION_KEY, user.id);
-  return { _id: user.id, username: user.username };
+  return mapUser(user);
 }
 
 export async function me(): Promise<User | null> {
@@ -44,7 +65,7 @@ export async function me(): Promise<User | null> {
   const db   = await getDb();
   const user = await db.getFirstAsync<DbUser>('SELECT * FROM users WHERE id = ?', [id]);
   if (!user) return null;
-  return { _id: user.id, username: user.username };
+  return mapUser(user);
 }
 
 export async function logout(): Promise<void> {

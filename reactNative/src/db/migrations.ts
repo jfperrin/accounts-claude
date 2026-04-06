@@ -45,4 +45,20 @@ export async function runMigrations(db: SQLiteDatabase): Promise<void> {
       user_id      TEXT NOT NULL
     );
   `);
+
+  // Profile columns — idempotent: silently ignored if column already exists
+  const profileColumns: [string, string][] = [
+    ['title',      'TEXT'],
+    ['first_name', 'TEXT'],
+    ['last_name',  'TEXT'],
+    ['nickname',   'TEXT'],
+    ['avatar_url', 'TEXT'],
+  ];
+  for (const [col, type] of profileColumns) {
+    try {
+      await db.runAsync(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
+    } catch (_) {
+      // column already exists — safe to ignore
+    }
+  }
 }

@@ -1,7 +1,12 @@
 /** Utilisateur authentifié. */
 export interface User {
-  _id: string;
-  username: string;
+  _id:       string;
+  username:  string;
+  title:     string | null;
+  firstName: string | null;
+  lastName:  string | null;
+  nickname:  string | null;
+  avatarUrl: string | null;
 }
 
 /** Compte bancaire appartenant à un utilisateur. */

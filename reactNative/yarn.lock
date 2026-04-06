@@ -2644,6 +2644,18 @@ expo-font@~55.0.6:
   dependencies:
     fontfaceobserver "^2.1.0"
 
+expo-image-loader@~55.0.0:
+  version "55.0.0"
+  resolved "https://registry.yarnpkg.com/expo-image-loader/-/expo-image-loader-55.0.0.tgz#56ae6631a0f43191432296a1f7f1e9737e653cfe"
+  integrity sha512-NOjp56wDrfuA5aiNAybBIjqIn1IxKeGJ8CECWZncQ/GzjZfyTYAHTCyeApYkdKkMBLHINzI4BbTGSlbCa0fXXQ==
+
+expo-image-picker@~55.0.16:
+  version "55.0.16"
+  resolved "https://registry.yarnpkg.com/expo-image-picker/-/expo-image-picker-55.0.16.tgz#7607c6bf96d0e62b373c66044dd9b9966699cfd1"
+  integrity sha512-V0SMNlEdopFlt8drPDuIDcjHab0J+VD73MsTGuz0E/9zoWR6sozZPtTycPTwLifu23zJksG7pppkqFQoID1eFA==
+  dependencies:
+    expo-image-loader "~55.0.0"
+
 expo-keep-awake@~55.0.6:
   version "55.0.6"
   resolved "https://registry.yarnpkg.com/expo-keep-awake/-/expo-keep-awake-55.0.6.tgz#b5bac9a811e0dfe77deefeaf57e9c73b5dbcc839"
