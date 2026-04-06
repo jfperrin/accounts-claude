@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 const TITLES = ['M.', 'Mme', 'Dr', 'Pr'];
 
 export default function ProfilePage() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth();
   const fileRef = useRef(null);
 
   const [form, setForm] = useState({
@@ -120,6 +120,15 @@ export default function ProfilePage() {
           {saving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       </form>
+
+      {/* Déconnexion — utile sur mobile où le header ne l'affiche plus */}
+      <button
+        type="button"
+        onClick={logout}
+        className="w-full rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-100"
+      >
+        Déconnexion
+      </button>
     </div>
   );
 }
