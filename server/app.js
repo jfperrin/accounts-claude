@@ -32,6 +32,9 @@ module.exports = function createApp(db, mongoUri) {
   app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
   app.use(express.json());
 
+  // Sert les avatars uploadés
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
   // Session store :
   //   - MongoStore  → sessions survivent aux redémarrages (prod)
   //   - MemoryStore → sessions perdues au redémarrage, acceptable en dev local

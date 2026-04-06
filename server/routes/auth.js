@@ -6,6 +6,21 @@ const passport = require('passport');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const wrap = require('../utils/asyncHandler');
+const requireAuth = require('../middleware/requireAuth');
+const upload = require('../middleware/upload');
+
+// Helper : sérialise un user Mongoose ou SQLite en réponse JSON uniforme
+function serializeUser(u) {
+  return {
+    _id:       u._id ?? u.id,
+    username:  u.username,
+    title:     u.title     ?? null,
+    firstName: u.firstName ?? null,
+    lastName:  u.lastName  ?? null,
+    nickname:  u.nickname  ?? null,
+    avatarUrl: u.avatarUrl ?? null,
+  };
+}
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
@@ -30,7 +45,7 @@ router.post('/register', authLimiter, wrap(async (req, res) => {
   const user = await db.users.create({ username, passwordHash });
   req.login(user, (err) => {
     if (err) return res.status(500).json({ message: 'Erreur session' });
-    res.json({ _id: user._id, username: user.username });
+    res.json(serializeUser(user));
   });
 }));
 
@@ -44,7 +59,7 @@ router.post('/login', authLimiter, (req, res, next) => {
     if (!user) return res.status(401).json({ message: info?.message || 'Échec de connexion' });
     req.login(user, (err) => {
       if (err) return next(err);
-      res.json({ _id: user._id, username: user.username });
+      res.json(serializeUser(user));
     });
   })(req, res, next);
 });
@@ -80,7 +95,24 @@ router.post('/logout', (req, res) => {
 // Retourne 401 si non authentifié (le client affiche alors la page de login).
 router.get('/me', (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ message: 'Non authentifié' });
-  res.json({ _id: req.user._id, username: req.user.username });
+  res.json(serializeUser(req.user));
 });
+
+// PUT /api/auth/profile — met à jour les champs de profil de l'utilisateur connecté
+router.put('/profile', requireAuth, wrap(async (req, res) => {
+  const { title, firstName, lastName, nickname } = req.body;
+  const db = req.app.locals.db;
+  const updated = await db.users.updateProfile(req.user._id, { title, firstName, lastName, nickname });
+  res.json(serializeUser(updated));
+}));
+
+// POST /api/auth/avatar — upload de l'avatar (multipart/form-data, champ "avatar")
+router.post('/avatar', requireAuth, upload.single('avatar'), wrap(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'Aucun fichier reçu' });
+  const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+  const db = req.app.locals.db;
+  const updated = await db.users.updateAvatar(req.user._id, avatarUrl);
+  res.json(serializeUser(updated));
+}));
 
 module.exports = router;
