@@ -110,7 +110,10 @@ router.put('/profile', requireAuth, wrap(async (req, res) => {
 // Le fichier est stocké en mémoire puis converti en data URL Base64 persistée en base.
 router.post('/avatar', requireAuth, upload.single('avatar'), wrap(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'Aucun fichier reçu' });
-  const avatarUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+  // Dev (disk storage) : chemin statique — Prod (memory storage) : data URL Base64
+  const avatarUrl = req.file.buffer
+    ? `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
+    : `/uploads/avatars/${req.file.filename}`;
   const db = req.app.locals.db;
   const updated = await db.users.updateAvatar(req.user._id, avatarUrl);
   res.json(serializeUser(updated));
