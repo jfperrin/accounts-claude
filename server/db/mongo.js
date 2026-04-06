@@ -27,8 +27,12 @@ const users = {
   create: (data) => User.create(data),
   usernameExists: async (username) => !!(await User.findOne({ username })),
 
-  updateProfile: (id, data) =>
-    User.findByIdAndUpdate(id, { $set: data }, { new: true }).select('-passwordHash'),
+  updateProfile: (id, { title, firstName, lastName, nickname }) =>
+    User.findByIdAndUpdate(
+      id,
+      { $set: { title, firstName, lastName, nickname } },
+      { new: true },
+    ).select('-passwordHash'),
 
   updateAvatar: (id, avatarUrl) =>
     User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { new: true }).select('-passwordHash'),

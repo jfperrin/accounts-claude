@@ -95,7 +95,7 @@ function initSchema(db) {
 const mapUser = (row) => row && {
   _id:          row.id,
   username:     row.username,
-  passwordHash: row.password_hash,
+  passwordHash: row.password_hash, // undefined si la colonne n'était pas dans le SELECT
   googleId:     row.google_id,
   email:        row.email,
   title:        row.title ?? null,
@@ -202,7 +202,7 @@ module.exports = function createSQLiteRepos() {
 
     updateAvatar(id, avatarUrl) {
       db.prepare(`UPDATE users SET avatar_url=?, updated_at=datetime('now') WHERE id=?`)
-        .run(avatarUrl, uid(id));
+        .run(avatarUrl ?? null, uid(id));
       return this.findById(id);
     },
   };
