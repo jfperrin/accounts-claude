@@ -1,41 +1,96 @@
-import { useEffect } from 'react';
-import { Modal, Form, Input, InputNumber, Select, DatePicker } from 'antd';
+import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+
+const empty = () => ({ label: '', bankId: '', date: dayjs().format('YYYY-MM-DD'), amount: '' });
 
 export default function OperationForm({ open, operation, banks, onFinish, onCancel }) {
-  const [form] = Form.useForm();
+  const [form, setForm] = useState(empty());
 
   useEffect(() => {
     if (open) {
-      form.setFieldsValue(operation
-        ? { ...operation, bankId: operation.bankId?._id, date: dayjs(operation.date) }
-        : { date: dayjs(), pointed: false }
+      setForm(operation
+        ? {
+            label: operation.label,
+            bankId: operation.bankId?._id ?? operation.bankId ?? '',
+            date: dayjs(operation.date).format('YYYY-MM-DD'),
+            amount: String(operation.amount),
+          }
+        : empty()
       );
     }
-  }, [open, operation, form]);
+  }, [open, operation]);
 
-  const handleFinish = (values) => {
-    onFinish({ ...values, date: values.date.toISOString(), bankId: values.bankId });
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target?.value ?? e }));
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.label || !form.bankId || !form.date || form.amount === '') return;
+    onFinish({
+      label: form.label,
+      bankId: form.bankId,
+      date: new Date(form.date).toISOString(),
+      amount: parseFloat(form.amount),
+    });
   };
 
   return (
-    <Modal
-      open={open}
-      title={operation ? 'Modifier l\'opération' : 'Nouvelle opération'}
-      onCancel={onCancel}
-      onOk={() => form.submit()}
-      destroyOnClose
-    >
-      <Form form={form} layout="vertical" onFinish={handleFinish} style={{ marginTop: 16 }}>
-        <Form.Item name="label" label="Libellé" rules={[{ required: true }]}><Input autoFocus /></Form.Item>
-        <Form.Item name="bankId" label="Banque" rules={[{ required: true }]}>
-          <Select options={banks.map((b) => ({ value: b._id, label: b.label }))} />
-        </Form.Item>
-        <Form.Item name="date" label="Date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
-        <Form.Item name="amount" label="Montant (€, négatif = débit)" rules={[{ required: true }]}>
-          <InputNumber style={{ width: '100%' }} step={0.01} />
-        </Form.Item>
-      </Form>
-    </Modal>
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{operation ? "Modifier l'opération" : 'Nouvelle opération'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="op-label">Libellé</Label>
+            <Input id="op-label" autoFocus value={form.label} onChange={set('label')} required />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Banque</Label>
+            <Select value={form.bankId} onValueChange={(v) => setForm((f) => ({ ...f, bankId: v }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionner une banque" />
+              </SelectTrigger>
+              <SelectContent>
+                {banks.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>{b.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="op-date">Date</Label>
+            <Input id="op-date" type="date" value={form.date} onChange={set('date')} required />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="op-amount">Montant (€, négatif = débit)</Label>
+            <Input
+              id="op-amount"
+              type="number"
+              step="0.01"
+              value={form.amount}
+              onChange={set('amount')}
+              required
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onCancel}>Annuler</Button>
+            <Button type="submit">Enregistrer</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

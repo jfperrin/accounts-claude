@@ -18,7 +18,6 @@ describe('OperationsTable', () => {
   it('appelle onPoint avec l\'id de l\'opération', async () => {
     const onPoint = vi.fn();
     render(<OperationsTable operations={ops} onPoint={onPoint} onEdit={vi.fn()} onDelete={vi.fn()} />);
-
     const switches = screen.getAllByRole('switch');
     await userEvent.click(switches[0]);
     expect(onPoint).toHaveBeenCalledWith('1');
@@ -27,14 +26,14 @@ describe('OperationsTable', () => {
   it('reflète l\'état pointé initial', () => {
     render(<OperationsTable operations={ops} onPoint={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
     const switches = screen.getAllByRole('switch');
-    expect(switches[0]).not.toBeChecked(); // Loyer non pointé
-    expect(switches[1]).toBeChecked();     // Salaire pointé
+    expect(switches[0]).not.toBeChecked();
+    expect(switches[1]).toBeChecked();
   });
 
   it('appelle onEdit au clic sur le bouton éditer', async () => {
     const onEdit = vi.fn();
     render(<OperationsTable operations={ops} onPoint={vi.fn()} onEdit={onEdit} onDelete={vi.fn()} />);
-    await userEvent.click(screen.getAllByRole('button', { name: /edit/i })[0]);
+    await userEvent.click(screen.getAllByRole('button', { name: /éditer/i })[0]);
     expect(onEdit).toHaveBeenCalledWith(ops[0]);
   });
 });

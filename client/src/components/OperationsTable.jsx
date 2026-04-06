@@ -1,57 +1,88 @@
-import { useMemo } from 'react';
-import { Table, Switch, Button, Space, Popconfirm, Tag, Tooltip } from 'antd';
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useState, useEffect, useMemo } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
-
-const fmt = (v) => v?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { cn, formatEur } from '@/lib/utils';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+const ROWS_PER_PAGE = 20;
 
 export default function OperationsTable({ operations, onPoint, onEdit, onDelete }) {
-  const columns = useMemo(() => [
-    {
-      title: 'Date', dataIndex: 'date', width: 110,
-      render: (v) => dayjs(v).format('DD/MM/YYYY'),
-      sorter: (a, b) => new Date(a.date) - new Date(b.date),
-      defaultSortOrder: 'ascend',
-    },
-    { title: 'Libellé', dataIndex: 'label' },
-    { title: 'Banque', dataIndex: ['bankId', 'label'], render: (v) => <Tag>{v}</Tag> },
-    {
-      title: 'Montant', dataIndex: 'amount', width: 130, align: 'right',
-      render: (v) => (
-        <span style={{ color: v < 0 ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
-          {v > 0 ? '+' : ''}{fmt(v)}
-        </span>
-      ),
-    },
-    {
-      title: 'Pointé', dataIndex: 'pointed', width: 80, align: 'center',
-      render: (v, r) => (
-        <Tooltip title={v ? 'Dé-pointer' : 'Pointer'}>
-          <Switch size="small" checked={v} onChange={() => onPoint(r._id)} />
-        </Tooltip>
-      ),
-    },
-    {
-      title: '', key: 'actions', width: 80, align: 'right',
-      render: (_, r) => (
-        <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(r)} />
-          <Popconfirm title="Supprimer ?" onConfirm={() => onDelete(r._id)}>
-            <Button size="small" icon={<DeleteOutlined />} danger />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ], [onPoint, onEdit, onDelete]);
+  const [page, setPage] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  useEffect(() => { setPage(1); }, [operations]);
+
+  const sorted = useMemo(
+    () => [...operations].sort((a, b) => new Date(a.date) - new Date(b.date)),
+    [operations]
+  );
+  const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
+  const rows = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
+
+  const confirmDelete = () => {
+    onDelete(deleteTarget);
+    setDeleteTarget(null);
+  };
 
   return (
-    <Table
-      dataSource={operations}
-      columns={columns}
-      rowKey="_id"
-      size="small"
-      rowClassName={(r) => r.pointed ? 'op-pointed' : ''}
-      pagination={{ pageSize: 20 }}
-    />
+    <>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Libellé</TableHead>
+            <TableHead>Banque</TableHead>
+            <TableHead className="text-right">Montant</TableHead>
+            <TableHead className="text-center">Pointé</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((op) => (
+            <TableRow key={op._id} className={cn(op.pointed && 'opacity-50')}>
+              <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
+              <TableCell className="font-medium">{op.label}</TableCell>
+              <TableCell>
+                <Badge variant="secondary">{op.bankId?.label}</Badge>
+              </TableCell>
+              <TableCell className={cn('text-right font-semibold', op.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
+              </TableCell>
+              <TableCell className="text-center">
+                <Switch checked={op.pointed} onCheckedChange={() => onPoint(op._id)} />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-1">
+                  <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => onEdit(op)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" aria-label="supprimer" onClick={() => setDeleteTarget(op._id)}
+                    className="text-rose-500 hover:text-rose-700 hover:bg-rose-50">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Précédent</Button>
+          <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
+          <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</Button>
+        </div>
+      )}
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        title="Supprimer l'opération ?"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </>
   );
 }

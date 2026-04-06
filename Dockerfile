@@ -3,11 +3,11 @@
 # ── Build client ───────────────────────────────────────────────────────────────
 FROM node:24-alpine AS client-builder
 WORKDIR /build
-COPY client2/package.json client2/yarn.lock client2/.yarnrc ./
+COPY client/package.json client/yarn.lock client/.yarnrc ./
 RUN --mount=type=cache,target=/home/ubuntu/.yarn-client \
     YARN_CACHE_FOLDER=/home/ubuntu/.yarn-client \
     yarn install --frozen-lockfile
-COPY --link client2/ .
+COPY --link client/ .
 RUN yarn build
 
 # ── Server ─────────────────────────────────────────────────────────────────────

@@ -1,101 +1,125 @@
-import { memo, useState } from 'react';
-import { Row, Col, Card, Statistic, Typography, InputNumber, Divider } from 'antd';
-import { BankOutlined, EditOutlined, CheckOutlined } from '@ant-design/icons';
+import { memo, useMemo, useState, useEffect } from 'react';
+import { Building2, Pencil, Check } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { cn, formatEur } from '@/lib/utils';
 
-function getUnpointedSum(operations, bankId) {
-  return operations
-    .filter((o) => !o.pointed && (o.bankId?._id === bankId || o.bankId === bankId))
-    .reduce((sum, o) => sum + o.amount, 0);
-}
-
-const BankCard = memo(function BankCard({ bank, operations, initialBalance, onSaveBalance }) {
+const BankCard = memo(function BankCard({ bank, unpointedSum, initialBalance, onSaveBalance }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(initialBalance ?? null);
+  useEffect(() => { setDraft(initialBalance ?? null); }, [initialBalance]);
 
-  const unpointedSum = getUnpointedSum(operations, bank._id);
   const projected = initialBalance != null ? initialBalance + unpointedSum : null;
 
   const handleSave = () => {
     setEditing(false);
-    if (draft !== initialBalance) onSaveBalance(bank._id, draft ?? 0);
+    const val = parseFloat(draft) || 0;
+    if (val !== initialBalance) onSaveBalance?.(bank._id, val);
   };
 
   return (
-    <Card size="small" variant="borderless" style={{ borderRadius: 14, boxShadow: '0 2px 12px rgba(0,0,0,.06)', height: '100%', border: '1px solid #ebebf5' }}>
-      <Typography.Text strong style={{ fontSize: 14, color: '#2d2d44' }}>
-        <BankOutlined style={{ marginRight: 6, color: '#6366f1' }} />{bank.label}
-      </Typography.Text>
-      <Divider style={{ margin: '10px 0', borderColor: '#f0f0f8' }} />
+    <div
+      data-testid={`bank-card-${bank._id}`}
+      className="rounded-xl border border-border bg-card p-4 shadow-xs"
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Building2 className="h-4 w-4 text-indigo-600" />
+        {bank.label}
+      </div>
+      <Separator className="my-3" />
 
-      <div style={{ marginBottom: 10 }}>
-        <Typography.Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Solde actuel</Typography.Text>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Solde actuel</p>
+        <div className="flex items-center gap-2">
           {editing ? (
             <>
-              <InputNumber
-                autoFocus value={draft} onChange={setDraft} precision={2} suffix="€"
-                style={{ flex: 1 }} onPressEnter={handleSave} onBlur={handleSave}
+              <input
+                type="number"
+                autoFocus
+                role="spinbutton"
+                step="0.01"
+                value={draft ?? ''}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={handleSave}
+                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              <CheckOutlined style={{ color: '#16a34a', cursor: 'pointer' }} onClick={handleSave} />
+              <button type="button" onClick={handleSave} className="text-emerald-600 hover:text-emerald-700">
+                <Check className="h-4 w-4" />
+              </button>
             </>
           ) : (
             <>
-              <Typography.Text strong style={{ fontSize: 17, color: '#0d0d1c' }}>
-                {initialBalance != null ? `${initialBalance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €` : '—'}
-              </Typography.Text>
-              <EditOutlined style={{ color: '#b0b0c8', cursor: 'pointer', fontSize: 12 }} onClick={() => { setDraft(initialBalance ?? 0); setEditing(true); }} />
+              <span className="text-lg font-bold text-foreground">
+                {initialBalance != null ? formatEur(initialBalance) : '—'}
+              </span>
+              <button
+                type="button"
+                aria-label="modifier"
+                onClick={() => { setDraft(initialBalance ?? 0); setEditing(true); }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
             </>
           )}
         </div>
       </div>
 
       <div>
-        <Typography.Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Prévisionnel</Typography.Text>
-        <div style={{ marginTop: 4 }}>
-          {projected != null ? (
-            <Typography.Text strong style={{ fontSize: 22, color: projected >= 0 ? '#16a34a' : '#dc2626' }}>
-              {projected.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
-            </Typography.Text>
-          ) : (
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>Saisir un solde</Typography.Text>
-          )}
-        </div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prévisionnel</p>
+        {projected != null ? (
+          <span className={cn('text-2xl font-bold', projected >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+            {formatEur(projected)}
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">Saisir un solde</span>
+        )}
       </div>
-    </Card>
+    </div>
   );
 });
 
 export default function BankBalances({ banks, operations, periodBalances = {}, onSaveBalance }) {
-  const totalInitial = banks.reduce((s, b) => s + (periodBalances[b._id] ?? 0), 0);
-  const totalUnpointed = operations.filter((o) => !o.pointed).reduce((s, o) => s + o.amount, 0);
-  const totalProjected = totalInitial + totalUnpointed;
-  const hasBalances = banks.some((b) => periodBalances[b._id] != null);
+  const unpointedSums = useMemo(() => {
+    const sums = {};
+    for (const o of operations) {
+      if (!o.pointed) {
+        const bid = o.bankId?._id ?? o.bankId;
+        sums[bid] = (sums[bid] ?? 0) + o.amount;
+      }
+    }
+    return sums;
+  }, [operations]);
+
+  const banksWithBalance = banks.filter((b) => periodBalances[b._id] != null);
+  const hasBalances = banksWithBalance.length > 0;
+  const totalProjected = banksWithBalance.reduce(
+    (s, b) => s + periodBalances[b._id] + (unpointedSums[b._id] ?? 0),
+    0
+  );
 
   return (
-    <Row gutter={[16, 16]}>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {banks.map((bank) => (
-        <Col key={bank._id} xs={24} sm={12} md={8} lg={6}>
-          <BankCard
-            bank={bank}
-            operations={operations}
-            initialBalance={periodBalances[bank._id] ?? null}
-            onSaveBalance={onSaveBalance}
-          />
-        </Col>
+        <BankCard
+          key={bank._id}
+          bank={bank}
+          unpointedSum={unpointedSums[bank._id] ?? 0}
+          initialBalance={periodBalances[bank._id] ?? null}
+          onSaveBalance={onSaveBalance}
+        />
       ))}
       {banks.length > 1 && hasBalances && (
-        <Col xs={24} sm={12} md={8} lg={6}>
-          <Card size="small" variant="borderless" style={{ borderRadius: 14, background: 'linear-gradient(135deg, #6366f1 0%, #7c3aed 100%)', boxShadow: '0 4px 20px rgba(99,102,241,.35)', height: '100%', border: 'none' }}>
-            <Statistic
-              title={<Typography.Text style={{ color: 'rgba(255,255,255,.75)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Total prévisionnel</Typography.Text>}
-              value={totalProjected}
-              precision={2}
-              suffix="€"
-              styles={{ content: { color: '#fff', fontWeight: 800, fontSize: 22 } }}
-            />
-          </Card>
-        </Col>
+        <div
+          data-testid="total-card"
+          className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-4 shadow-lg shadow-indigo-500/30"
+        >
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
+          <span className="text-2xl font-extrabold text-white">
+            {formatEur(totalProjected)}
+          </span>
+        </div>
       )}
-    </Row>
+    </div>
   );
 }

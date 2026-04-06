@@ -1,17 +1,15 @@
 import { useState } from 'react';
-import { Layout, Menu, Typography, Button, Space, Avatar } from 'antd';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import {
-  DashboardOutlined, BankOutlined, RetweetOutlined, LogoutOutlined,
-} from '@ant-design/icons';
-import { useAuth } from '../../store/AuthContext';
+import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet } from 'lucide-react';
+import { useAuth } from '@/store/AuthContext';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-const { Sider, Header, Content } = Layout;
-
-const MENU_ITEMS = [
-  { key: '/', icon: <DashboardOutlined />, label: 'Tableau de bord' },
-  { key: '/banks', icon: <BankOutlined />, label: 'Banques' },
-  { key: '/recurring', icon: <RetweetOutlined />, label: 'Opérations récurrentes' },
+const NAV_ITEMS = [
+  { key: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
+  { key: '/banks', icon: Building2, label: 'Banques' },
+  { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
 ];
 
 export default function AppShell() {
@@ -23,70 +21,73 @@ export default function AppShell() {
   const initials = user?.username?.slice(0, 2).toUpperCase() ?? '??';
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="dark" width={220}>
-        <div style={{
-          padding: collapsed ? '20px 0' : '20px 20px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex', alignItems: 'center', gap: 10,
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          transition: 'padding 0.2s',
-        }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-            background: 'linear-gradient(135deg, #6366f1, #7c3aed)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(99,102,241,0.4)',
-          }}>
-            <BankOutlined style={{ color: '#fff', fontSize: 15 }} />
+    <div className="flex min-h-screen bg-background">
+      <aside
+        className={cn(
+          'flex flex-col bg-sidebar text-white transition-all duration-200',
+          collapsed ? 'w-16' : 'w-60'
+        )}
+      >
+        <div className={cn(
+          'flex items-center gap-3 border-b border-white/10 py-4',
+          collapsed ? 'justify-center px-0' : 'px-5'
+        )}>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
+            <Wallet className="h-4 w-4 text-white" />
           </div>
           {!collapsed && (
-            <Typography.Text strong style={{ color: '#fff', fontSize: 15, letterSpacing: '-0.3px', fontWeight: 700 }}>
-              Comptes
-            </Typography.Text>
+            <span className="text-sm font-bold tracking-tight">Comptes</span>
           )}
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[pathname]}
-          items={MENU_ITEMS}
-          onClick={({ key }) => navigate(key)}
-          style={{ borderRight: 0, marginTop: 8, background: 'transparent' }}
-        />
-      </Sider>
-      <Layout>
-        <Header style={{
-          background: '#fff',
-          padding: '0 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          borderBottom: '1px solid #ebebf5',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-        }}>
-          <Space size={12}>
-            <Avatar
-              size={32}
-              style={{ background: '#6366f1', fontWeight: 700, fontSize: 12, cursor: 'default' }}
+
+        <nav className="flex-1 px-2 py-3 space-y-1">
+          {NAV_ITEMS.map(({ key, icon: Icon, label }) => (
+            <button
+              type="button"
+              key={key}
+              onClick={() => navigate(key)}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                pathname === key
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-400 hover:bg-white/10 hover:text-white',
+                collapsed && 'justify-center px-0'
+              )}
+              title={collapsed ? label : undefined}
             >
-              {initials}
-            </Avatar>
-            <Typography.Text style={{ fontWeight: 600, color: '#2d2d44' }}>
-              {user?.username}
-            </Typography.Text>
-            <Button
-              icon={<LogoutOutlined />} type="text" onClick={logout}
-              style={{ color: '#8b8ca0', fontWeight: 500 }}
-            >
-              Déconnexion
-            </Button>
-          </Space>
-        </Header>
-        <Content style={{ margin: 24 }}>
+              <Icon className="h-4 w-4 shrink-0" />
+              {!collapsed && <span>{label}</span>}
+            </button>
+          ))}
+        </nav>
+
+        <div className="border-t border-white/10 p-2">
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            className="flex w-full items-center justify-center rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex flex-1 flex-col">
+        <header className="flex h-14 items-center justify-end gap-3 border-b border-border bg-card px-6 shadow-xs">
+          <Avatar>
+            <AvatarFallback>{initials}</AvatarFallback>
+          </Avatar>
+          <span className="text-sm font-semibold text-foreground">{user?.username}</span>
+          <Button variant="ghost" size="sm" onClick={logout} className="text-muted-foreground gap-1.5">
+            <LogOut className="h-4 w-4" />
+            Déconnexion
+          </Button>
+        </header>
+
+        <main className="flex-1 p-6">
           <Outlet />
-        </Content>
-      </Layout>
-    </Layout>
+        </main>
+      </div>
+    </div>
   );
 }

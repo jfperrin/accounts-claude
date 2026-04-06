@@ -2,7 +2,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { ConfigProvider, App as AntApp } from 'antd';
 import LoginPage from '../pages/LoginPage';
 import * as authApi from '../api/auth';
 
@@ -18,13 +17,7 @@ vi.mock('../store/AuthContext', () => ({
   useAuth: () => ({ login: mockLogin, register: mockRegister }),
 }));
 
-const Wrapper = ({ children }) => (
-  <MemoryRouter>
-    <ConfigProvider>
-      <AntApp>{children}</AntApp>
-    </ConfigProvider>
-  </MemoryRouter>
-);
+const Wrapper = ({ children }) => <MemoryRouter>{children}</MemoryRouter>;
 
 describe('LoginPage', () => {
   beforeEach(() => { vi.clearAllMocks(); });

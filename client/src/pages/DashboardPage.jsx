@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Card, Select, Button, Space, Typography, Divider, App, Empty } from 'antd';
-import { PlusOutlined, DownloadOutlined, CalendarOutlined } from '@ant-design/icons';
+import { CalendarDays, Download, Plus } from 'lucide-react';
 import dayjs from 'dayjs';
-import * as periodsApi from '../api/periods';
-import * as operationsApi from '../api/operations';
-import * as banksApi from '../api/banks';
-import BankBalances from '../components/BankBalances';
-import OperationsTable from '../components/OperationsTable';
-import OperationForm from '../components/OperationForm';
+import { toast } from 'sonner';
+import * as periodsApi from '@/api/periods';
+import * as operationsApi from '@/api/operations';
+import * as banksApi from '@/api/banks';
+import BankBalances from '@/components/BankBalances';
+import OperationsTable from '@/components/OperationsTable';
+import OperationForm from '@/components/OperationForm';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const CURRENT_YEAR = dayjs().year();
@@ -22,7 +25,6 @@ export default function DashboardPage() {
   const [editOp, setEditOp] = useState(null);
   const [month, setMonth] = useState(dayjs().month() + 1);
   const [year, setYear] = useState(CURRENT_YEAR);
-  const { message } = App.useApp();
 
   useEffect(() => {
     Promise.all([periodsApi.list(), banksApi.list()]).then(([p, b]) => { setPeriods(p); setBanks(b); });
@@ -30,23 +32,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const period = periods.find((p) => p.month === month && p.year === year);
-    setSelectedPeriod(period || null);
+    setSelectedPeriod(period ?? null);
     if (period) loadOperations(period._id);
     else setOperations([]);
   }, [periods, month, year]);
 
   const loadOperations = (periodId) => operationsApi.list(periodId).then(setOperations);
-
-  const periodBalances = selectedPeriod?.balances ?? {};
-
-  const handleSaveBalance = async (bankId, value) => {
-    const period = await ensurePeriod();
-    const current = period.balances ? { ...period.balances } : {};
-    current[bankId] = value;
-    const updated = await periodsApi.updateBalances(period._id, current);
-    setPeriods((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
-    setSelectedPeriod(updated);
-  };
 
   const ensurePeriod = async () => {
     let period = selectedPeriod;
@@ -58,78 +49,107 @@ export default function DashboardPage() {
     return period;
   };
 
-  const handleImport = async () => {
+  const handleSaveBalance = async (bankId, value) => {
     const period = await ensurePeriod();
-    const { imported } = await operationsApi.importRecurring(period._id);
-    message.success(`${imported} opération(s) importée(s)`);
-    loadOperations(period._id);
+    const current = { ...(period.balances ?? {}) };
+    current[bankId] = value;
+    const updated = await periodsApi.updateBalances(period._id, current);
+    setPeriods((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+    setSelectedPeriod(updated);
+  };
+
+  const handleImport = async () => {
+    try {
+      const period = await ensurePeriod();
+      const { imported } = await operationsApi.importRecurring(period._id);
+      toast.success(`${imported} opération(s) importée(s)`);
+      loadOperations(period._id);
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de l\'import');
+    }
   };
 
   const handleFormFinish = async (values) => {
-    const period = await ensurePeriod();
-    if (editOp) {
-      await operationsApi.update(editOp._id, values);
-    } else {
-      await operationsApi.create({ ...values, periodId: period._id });
+    try {
+      const period = await ensurePeriod();
+      if (editOp) await operationsApi.update(editOp._id, values);
+      else await operationsApi.create({ ...values, periodId: period._id });
+      setFormOpen(false);
+      setEditOp(null);
+      loadOperations(period._id);
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de l\'enregistrement');
     }
-    setFormOpen(false);
-    setEditOp(null);
-    loadOperations(period._id);
   };
 
   const handlePoint = async (id) => {
     await operationsApi.point(id);
-    loadOperations(selectedPeriod._id);
+    if (selectedPeriod) loadOperations(selectedPeriod._id);
   };
 
   const handleDelete = async (id) => {
     await operationsApi.remove(id);
-    loadOperations(selectedPeriod._id);
+    if (selectedPeriod) loadOperations(selectedPeriod._id);
   };
 
-  const openAdd = () => { setEditOp(null); setFormOpen(true); };
   const openEdit = (op) => { setEditOp(op); setFormOpen(true); };
 
   return (
-    <>
-      <Card bordered={false} style={{ marginBottom: 16, borderRadius: 10 }}>
-        <Space wrap>
-          <CalendarOutlined style={{ fontSize: 18, color: '#6366f1' }} />
-          <Select
-            value={month}
-            onChange={setMonth}
-            style={{ width: 140 }}
-            options={MONTHS.map((label, i) => ({ value: i + 1, label }))}
-          />
-          <Select
-            value={year}
-            onChange={setYear}
-            style={{ width: 90 }}
-            options={YEARS.map((y) => ({ value: y, label: `${y}` }))}
-          />
-          <Button icon={<DownloadOutlined />} onClick={handleImport}>
-            Importer récurrentes
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-            Nouvelle opération
-          </Button>
-        </Space>
-      </Card>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-xs">
+        <CalendarDays className="h-5 w-5 text-indigo-600" />
+        <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+          <SelectTrigger className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTHS.map((label, i) => (
+              <SelectItem key={i + 1} value={String(i + 1)}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {YEARS.map((y) => (
+              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" onClick={handleImport} className="gap-2">
+          <Download className="h-4 w-4" />
+          Importer récurrentes
+        </Button>
+        <Button onClick={() => { setEditOp(null); setFormOpen(true); }} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Nouvelle opération
+        </Button>
+      </div>
 
       {banks.length > 0 && (
         <>
-          <BankBalances banks={banks} operations={operations} periodBalances={periodBalances} onSaveBalance={handleSaveBalance} />
-          <Divider />
+          <BankBalances
+            banks={banks}
+            operations={operations}
+            periodBalances={selectedPeriod?.balances ?? {}}
+            onSaveBalance={handleSaveBalance}
+          />
+          <Separator />
         </>
       )}
 
       {operations.length === 0 ? (
-        <Empty description="Aucune opération pour cette période" style={{ marginTop: 48 }} />
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <CalendarDays className="mb-3 h-10 w-10 opacity-30" />
+          <p className="text-sm">Aucune opération pour cette période</p>
+        </div>
       ) : (
-        <Card bordered={false} style={{ borderRadius: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <Typography.Text strong>{MONTHS[month - 1]} {year}</Typography.Text>
-            <Typography.Text type="secondary">{operations.length} opération(s)</Typography.Text>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="font-semibold text-foreground">{MONTHS[month - 1]} {year}</span>
+            <span className="text-sm text-muted-foreground">{operations.length} opération(s)</span>
           </div>
           <OperationsTable
             operations={operations}
@@ -137,7 +157,7 @@ export default function DashboardPage() {
             onEdit={openEdit}
             onDelete={handleDelete}
           />
-        </Card>
+        </div>
       )}
 
       <OperationForm
@@ -147,8 +167,6 @@ export default function DashboardPage() {
         onFinish={handleFormFinish}
         onCancel={() => { setFormOpen(false); setEditOp(null); }}
       />
-
-      <style>{`.op-pointed td { opacity: 0.5; }`}</style>
-    </>
+    </div>
   );
 }

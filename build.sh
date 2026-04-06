@@ -16,7 +16,7 @@ rsync -az --delete \
   --exclude='.git' \
   --exclude='node_modules' \
   --exclude='*/node_modules' \
-  --exclude='client2/dist' \
+  --exclude='client/dist' \
   --exclude='*.log' \
   --exclude='server/.env' \
   ./ "${REMOTE}:${REMOTE_DIR}/"
