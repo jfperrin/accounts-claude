@@ -27,6 +27,16 @@ if ! ssh "${REMOTE}" "test -f ${REMOTE_DIR}/server/.env"; then
   echo "  .env copié — pense à mettre CORS_ORIGIN=http://${REMOTE_HOST} sur le serveur"
 fi
 
+echo "→ Déploiement config nginx"
+scp nginx-account.conf "${REMOTE}:/tmp/nginx-account.conf"
+ssh "${REMOTE}" "
+  set -e
+  sudo mv /tmp/nginx-account.conf /etc/nginx/sites-available/account.perrin.at
+  sudo ln -sf /etc/nginx/sites-available/account.perrin.at /etc/nginx/sites-enabled/account.perrin.at
+  sudo nginx -t
+  sudo systemctl reload nginx
+"
+
 echo "→ Build & deploy${NO_CACHE:+ (--no-cache)}"
 ssh "${REMOTE}" "
   set -e
@@ -37,4 +47,4 @@ ssh "${REMOTE}" "
 "
 
 echo ""
-echo "✓ Déployé → http://${REMOTE_HOST}"
+echo "✓ Déployé → https://account.perrin.at"

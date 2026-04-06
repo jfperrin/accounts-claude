@@ -52,7 +52,9 @@
       "Bash(apt list:*)",
       "Bash(gh pr:*)",
       "Bash(gh repo:*)",
-      "Bash(npx jest:*)"
+      "Bash(npx jest:*)",
+      "Bash(bash:*)",
+      "Bash(ssh:*)"
     ]
   }
 }
