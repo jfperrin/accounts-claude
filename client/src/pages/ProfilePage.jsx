@@ -15,7 +15,7 @@ export default function ProfilePage() {
   const fileRef = useRef(null);
 
   const [form, setForm] = useState({
-    title:     user?.title     ?? '',
+    title:     user?.title     ?? 'none',
     firstName: user?.firstName ?? '',
     lastName:  user?.lastName  ?? '',
     nickname:  user?.nickname  ?? '',
@@ -29,7 +29,10 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const updated = await profileApi.updateProfile(form);
+      const updated = await profileApi.updateProfile({
+        ...form,
+        title: form.title === 'none' ? null : form.title,
+      });
       updateUser(updated);
       toast.success('Profil enregistré');
     } catch (err) {
@@ -57,7 +60,7 @@ export default function ProfilePage() {
 
   const displayName = user?.nickname || user?.username;
   const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
-  const avatarSrc = user?.avatarUrl ? `http://localhost:3001${user.avatarUrl}` : undefined;
+  const avatarSrc = user?.avatarUrl ?? undefined;
 
   return (
     <div className="mx-auto max-w-lg space-y-8">
@@ -94,7 +97,7 @@ export default function ProfilePage() {
           <Select value={form.title} onValueChange={set('title')}>
             <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">—</SelectItem>
+              <SelectItem value="none">—</SelectItem>
               {TITLES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
             </SelectContent>
           </Select>

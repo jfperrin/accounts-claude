@@ -20,7 +20,7 @@ export default function AppShell() {
 
   const displayName = user?.nickname || user?.username;
   const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
-  const avatarSrc = user?.avatarUrl ? `http://localhost:3001${user.avatarUrl}` : undefined;
+  const avatarSrc = user?.avatarUrl ?? undefined;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -79,7 +79,7 @@ export default function AppShell() {
           <button
             type="button"
             onClick={() => navigate('/profile')}
-            className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-accent transition-colors"
+            className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 hover:bg-accent transition-colors"
             title="Mon profil"
           >
             <Avatar className="h-8 w-8">

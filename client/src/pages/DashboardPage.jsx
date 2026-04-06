@@ -37,7 +37,7 @@ export default function DashboardPage() {
     else setOperations([]);
   }, [periods, month, year]);
 
-  const loadOperations = (periodId) => operationsApi.list(periodId).then(setOperations);
+  const loadOperations = (periodId) => operationsApi.list(periodId).then((ops) => setOperations([...ops].sort((a, b) => new Date(a.date) - new Date(b.date))));
 
   const ensurePeriod = async () => {
     let period = selectedPeriod;

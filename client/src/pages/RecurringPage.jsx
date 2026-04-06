@@ -23,7 +23,7 @@ export default function RecurringPage() {
   const [form, setForm] = useState(empty());
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const load = () => Promise.all([api.list(), banksApi.list()]).then(([ops, b]) => { setItems(ops); setBanks(b); });
+  const load = () => Promise.all([api.list(), banksApi.list()]).then(([ops, b]) => { setItems([...ops].sort((a, b) => a.dayOfMonth - b.dayOfMonth)); setBanks(b); });
   useEffect(() => { load(); }, []);
 
   const openAdd = () => { setForm(empty()); setModal({}); };
