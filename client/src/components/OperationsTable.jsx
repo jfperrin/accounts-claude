@@ -41,7 +41,17 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
         </TableHeader>
         <TableBody>
           {rows.map((op) => (
-            <TableRow key={op._id} className={cn(op.pointed && 'opacity-50')}>
+            <TableRow
+              key={op._id}
+              className={cn(op.pointed && 'opacity-50', 'md:cursor-default cursor-pointer active:opacity-70')}
+              onClick={(e) => {
+                // Sur mobile uniquement : clic sur la ligne pointe/dépointe
+                // On ignore si le clic vient d'un bouton/switch (desktop actions)
+                if (window.innerWidth < 768 && !e.target.closest('button, [role="switch"]')) {
+                  onPoint(op._id);
+                }
+              }}
+            >
               <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
               <TableCell className="font-medium">{op.label}</TableCell>
               <TableCell>
