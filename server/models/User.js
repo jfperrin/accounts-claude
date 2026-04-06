@@ -5,10 +5,15 @@
 const { Schema, model } = require('mongoose');
 
 const schema = new Schema({
-  username: { type: String, required: true, unique: true, trim: true },
-  passwordHash: { type: String },   // absent pour les comptes Google (connexion sans mot de passe local)
-  googleId: { type: String, trim: true }, // absent pour les comptes locaux
-  email: { type: String, trim: true },
+  username:     { type: String, required: true, unique: true, trim: true },
+  passwordHash: { type: String },
+  googleId:     { type: String, trim: true },
+  email:        { type: String, trim: true },
+  title:        { type: String, trim: true },
+  firstName:    { type: String, trim: true },
+  lastName:     { type: String, trim: true },
+  nickname:     { type: String, trim: true },
+  avatarUrl:    { type: String, trim: true },
 }, { timestamps: true }); // ajoute createdAt et updatedAt automatiquement
 
 // Index sparse : n'indexe que les documents ayant un googleId,

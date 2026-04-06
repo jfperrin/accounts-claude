@@ -75,6 +75,17 @@ function initSchema(db) {
       updated_at   TEXT DEFAULT (datetime('now'))
     );
   `);
+
+  // Profile columns — idempotent: silently ignored if already exist
+  for (const col of [
+    'ALTER TABLE users ADD COLUMN title      TEXT',
+    'ALTER TABLE users ADD COLUMN first_name TEXT',
+    'ALTER TABLE users ADD COLUMN last_name  TEXT',
+    'ALTER TABLE users ADD COLUMN nickname   TEXT',
+    'ALTER TABLE users ADD COLUMN avatar_url TEXT',
+  ]) {
+    try { db.exec(col); } catch (_) { /* column already exists */ }
+  }
 }
 
 // --- Fonctions de mapping SQLite row → objet métier ---
@@ -82,11 +93,16 @@ function initSchema(db) {
 // vers le format attendu par le client (camelCase, boolean, objet).
 
 const mapUser = (row) => row && {
-  _id: row.id,
-  username: row.username,
-  passwordHash: row.password_hash, // undefined si la colonne n'était pas dans le SELECT
-  googleId: row.google_id,
-  email: row.email,
+  _id:          row.id,
+  username:     row.username,
+  passwordHash: row.password_hash,
+  googleId:     row.google_id,
+  email:        row.email,
+  title:        row.title ?? null,
+  firstName:    row.first_name ?? null,
+  lastName:     row.last_name ?? null,
+  nickname:     row.nickname ?? null,
+  avatarUrl:    row.avatar_url ?? null,
 };
 
 const mapBank = (row) => row && {
@@ -161,7 +177,7 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, username, email, google_id FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, username, email, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
@@ -176,6 +192,19 @@ module.exports = function createSQLiteRepos() {
 
     usernameExists: (username) =>
       !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(username),
+
+    updateProfile(id, { title, firstName, lastName, nickname }) {
+      db.prepare(
+        `UPDATE users SET title=?, first_name=?, last_name=?, nickname=?, updated_at=datetime('now') WHERE id=?`
+      ).run(title ?? null, firstName ?? null, lastName ?? null, nickname ?? null, uid(id));
+      return this.findById(id);
+    },
+
+    updateAvatar(id, avatarUrl) {
+      db.prepare(`UPDATE users SET avatar_url=?, updated_at=datetime('now') WHERE id=?`)
+        .run(avatarUrl, uid(id));
+      return this.findById(id);
+    },
   };
 
   // ─────────────────────────────────────────────

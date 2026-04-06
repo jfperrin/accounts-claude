@@ -26,6 +26,12 @@ const users = {
   findByIdWithHash: (id) => User.findById(id),
   create: (data) => User.create(data),
   usernameExists: async (username) => !!(await User.findOne({ username })),
+
+  updateProfile: (id, data) =>
+    User.findByIdAndUpdate(id, { $set: data }, { new: true }).select('-passwordHash'),
+
+  updateAvatar: (id, avatarUrl) =>
+    User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { new: true }).select('-passwordHash'),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────
