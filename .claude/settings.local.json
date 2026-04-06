@@ -54,7 +54,8 @@
       "Bash(gh repo:*)",
       "Bash(npx jest:*)",
       "Bash(bash:*)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(npx skills:*)"
     ]
   }
 }
