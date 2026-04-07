@@ -80,7 +80,7 @@ describe('HistoryPage', () => {
     expect(screen.queryByText('Évolution')).not.toBeInTheDocument();
   });
 
-  it('charge les opérations pour chaque période en parallèle', async () => {
+  it('charge les opérations pour chaque période', async () => {
     periodsApi.list.mockResolvedValue([
       { _id: 'p1', month: 1, year: 2025, balances: { b1: 500 } },
       { _id: 'p2', month: 2, year: 2025, balances: { b1: 600 } },
@@ -94,5 +94,15 @@ describe('HistoryPage', () => {
     );
     expect(operationsApi.list).toHaveBeenCalledWith('p1');
     expect(operationsApi.list).toHaveBeenCalledWith('p2');
+  });
+
+  it('affiche un message d\'erreur si le chargement échoue', async () => {
+    periodsApi.list.mockRejectedValue(new Error('Network error'));
+
+    render(<HistoryPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Impossible de charger l'historique.")).toBeInTheDocument()
+    );
   });
 });

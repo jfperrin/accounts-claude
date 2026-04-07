@@ -10,21 +10,27 @@ import { computeChartData, computeSummary } from '@/lib/historyUtils';
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [chartData, setChartData] = useState([]);
   const [summary, setSummary] = useState({ current: null, evolution: null, best: null });
 
   useEffect(() => {
     async function load() {
-      const periods = await periodsApi.list();
-      const opsByPeriod = Object.fromEntries(
-        await Promise.all(
-          periods.map(async (p) => [p._id, await operationsApi.list(p._id)])
-        )
-      );
-      const data = computeChartData(periods, opsByPeriod);
-      setChartData(data);
-      setSummary(computeSummary(data));
-      setLoading(false);
+      try {
+        const periods = await periodsApi.list();
+        const opsByPeriod = Object.fromEntries(
+          await Promise.all(
+            periods.map(async (p) => [p._id, await operationsApi.list(p._id)])
+          )
+        );
+        const data = computeChartData(periods, opsByPeriod);
+        setChartData(data);
+        setSummary(computeSummary(data));
+      } catch {
+        setError('Impossible de charger l\'historique.');
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -33,6 +39,14 @@ export default function HistoryPage() {
     return (
       <div className="flex items-center justify-center py-32">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-24 text-rose-600">
+        <p className="text-sm">{error}</p>
       </div>
     );
   }
