@@ -7,6 +7,7 @@ import DashboardPage from '@/pages/DashboardPage';
 import BanksPage from '@/pages/BanksPage';
 import RecurringPage from '@/pages/RecurringPage';
 import ProfilePage from '@/pages/ProfilePage';
+import HistoryPage from '@/pages/HistoryPage';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -31,6 +32,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="banks" element={<BanksPage />} />
           <Route path="recurring" element={<RecurringPage />} />
+          <Route path="history" element={<HistoryPage />} />
           <Route path="profile" element={<ProfilePage />} />
         </Route>
       </Routes>

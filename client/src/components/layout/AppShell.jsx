@@ -1,23 +1,25 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, TrendingUp } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-// Sidebar desktop (3 items)
+// Sidebar desktop (4 items)
 const NAV_ITEMS = [
   { key: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
   { key: '/banks', icon: Building2, label: 'Banques' },
   { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
+  { key: '/history', icon: TrendingUp, label: 'Historique' },
 ];
 
-// Bottom nav mobile (4 tabs — labels courts)
+// Bottom nav mobile (5 tabs — labels courts)
 const BOTTOM_TABS = [
   { key: '/', icon: LayoutDashboard, label: 'Accueil' },
   { key: '/banks', icon: Building2, label: 'Banques' },
   { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
+  { key: '/history', icon: TrendingUp, label: 'Historique' },
   { key: '/profile', icon: UserCircle, label: 'Profil' },
 ];
 
