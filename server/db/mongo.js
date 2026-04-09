@@ -37,6 +37,21 @@ const users = {
 
   updateAvatar: (id, avatarUrl) =>
     User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { new: true }).select('-passwordHash'),
+
+  findAll: () =>
+    User.find({}).select('-passwordHash').sort({ createdAt: -1 }),
+
+  updateByAdmin: (id, { username, email, role }) =>
+    User.findByIdAndUpdate(
+      id,
+      { $set: { username, email, role } },
+      { new: true },
+    ).select('-passwordHash'),
+
+  deleteUser: (id) => User.findByIdAndDelete(id),
+
+  setPassword: (id, passwordHash) =>
+    User.findByIdAndUpdate(id, { $set: { passwordHash } }),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────

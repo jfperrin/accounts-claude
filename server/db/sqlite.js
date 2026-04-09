@@ -231,6 +231,29 @@ module.exports = function createSQLiteRepos() {
         .run(avatarUrl ?? null, uid(id));
       return this.findById(id);
     },
+
+    findAll() {
+      return db.prepare(
+        'SELECT id, username, email, role, title, first_name, last_name, nickname, avatar_url, created_at FROM users ORDER BY created_at DESC',
+      ).all().map(mapUser);
+    },
+
+    updateByAdmin(id, { username, email, role }) {
+      db.prepare(
+        `UPDATE users SET username=?, email=?, role=?, updated_at=datetime('now') WHERE id=?`,
+      ).run(username ?? null, email ?? null, role ?? 'user', uid(id));
+      return this.findById(id);
+    },
+
+    deleteUser(id) {
+      db.prepare('DELETE FROM users WHERE id = ?').run(uid(id));
+    },
+
+    setPassword(id, passwordHash) {
+      db.prepare(
+        `UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?`
+      ).run(passwordHash, uid(id));
+    },
   };
 
   // ─────────────────────────────────────────────
