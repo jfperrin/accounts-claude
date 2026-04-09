@@ -15,6 +15,7 @@ const User = require('../models/User');
 const Operation = require('../models/Operation');
 const Period = require('../models/Period');
 const RecurringOperation = require('../models/RecurringOperation');
+const PasswordResetToken = require('../models/PasswordResetToken');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -135,4 +136,23 @@ const recurringOps = {
   delete: (id, userId) => RecurringOperation.findOneAndDelete({ _id: id, userId }),
 };
 
-module.exports = { users, banks, operations, periods, recurringOps };
+// ─── RESET TOKENS ────────────────────────────────────────────────────────────────
+const resetTokens = {
+  create: (userId, token, expiresAt) =>
+    PasswordResetToken.create({ token, userId, expiresAt }),
+
+  findValid: (token) =>
+    PasswordResetToken.findOne({
+      token,
+      used: false,
+      expiresAt: { $gt: new Date() },
+    }),
+
+  markUsed: (token) =>
+    PasswordResetToken.updateOne({ token }, { $set: { used: true } }),
+
+  deleteByUser: (userId) =>
+    PasswordResetToken.deleteMany({ userId }),
+};
+
+module.exports = { users, banks, operations, periods, recurringOps, resetTokens };

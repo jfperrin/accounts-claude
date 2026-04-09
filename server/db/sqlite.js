@@ -74,6 +74,15 @@ function initSchema(db) {
       created_at   TEXT DEFAULT (datetime('now')),
       updated_at   TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id         TEXT PRIMARY KEY,
+      token      TEXT NOT NULL UNIQUE,
+      user_id    TEXT NOT NULL REFERENCES users(id),
+      expires_at TEXT NOT NULL,
+      used       INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Profile columns — idempotent: silently ignored if already exist
@@ -149,6 +158,14 @@ const mapRecurring = (row) => row && {
   dayOfMonth: row.day_of_month,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
+};
+
+const mapResetToken = (row) => row && {
+  _id:       row.id,
+  token:     row.token,
+  userId:    row.user_id,
+  expiresAt: new Date(row.expires_at),
+  used:      row.used === 1,
 };
 
 // Fragments SQL réutilisés pour les SELECT avec JOIN banks.
@@ -414,5 +431,38 @@ module.exports = function createSQLiteRepos() {
       db.prepare('DELETE FROM recurring_operations WHERE id = ? AND user_id = ?').run(id, uid(userId)),
   };
 
-  return { users, banks, operations, periods, recurringOps };
+  // ─────────────────────────────────────────────
+  // RESET TOKENS
+  // Jetons temporaires pour la réinitialisation de mot de passe.
+  // findValid retourne un token non-utilisé et non-expiré.
+  // markUsed marque le token comme consommé pour l'empêcher de réutilisation.
+  // deleteByUser supprime tous les tokens d'un utilisateur (e.g. lors de la suppression du compte).
+  // ─────────────────────────────────────────────
+  const resetTokens = {
+    create(userId, token, expiresAt) {
+      const id = randomUUID();
+      db.prepare(
+        'INSERT INTO password_reset_tokens (id, token, user_id, expires_at) VALUES (?, ?, ?, ?)',
+      ).run(id, token, uid(userId), expiresAt.toISOString());
+      return mapResetToken(db.prepare('SELECT * FROM password_reset_tokens WHERE id = ?').get(id));
+    },
+
+    findValid(token) {
+      return mapResetToken(
+        db.prepare(
+          "SELECT * FROM password_reset_tokens WHERE token = ? AND used = 0 AND expires_at > datetime('now')",
+        ).get(token),
+      );
+    },
+
+    markUsed(token) {
+      db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE token = ?').run(token);
+    },
+
+    deleteByUser(userId) {
+      db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(uid(userId));
+    },
+  };
+
+  return { users, banks, operations, periods, recurringOps, resetTokens };
 };
