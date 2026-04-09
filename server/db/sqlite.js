@@ -86,6 +86,14 @@ function initSchema(db) {
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
+
+  // Role and email — idempotent
+  for (const col of [
+    "ALTER TABLE users ADD COLUMN role  TEXT NOT NULL DEFAULT 'user'",
+    'ALTER TABLE users ADD COLUMN email TEXT',
+  ]) {
+    try { db.exec(col); } catch (_) { /* column already exists */ }
+  }
 }
 
 // --- Fonctions de mapping SQLite row → objet métier ---
@@ -97,7 +105,8 @@ const mapUser = (row) => row && {
   username:     row.username,
   passwordHash: row.password_hash, // undefined si la colonne n'était pas dans le SELECT
   googleId:     row.google_id,
-  email:        row.email,
+  email:        row.email ?? null,
+  role:         row.role ?? 'user',
   title:        row.title ?? null,
   firstName:    row.first_name ?? null,
   lastName:     row.last_name ?? null,
@@ -177,17 +186,17 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, username, email, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, username, email, role, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
 
-    create({ username, passwordHash, googleId, email }) {
+    create({ username, passwordHash, googleId, email, role }) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO users (id, username, password_hash, google_id, email) VALUES (?, ?, ?, ?, ?)',
-      ).run(id, username, passwordHash ?? null, googleId ?? null, email ?? null);
-      return { _id: id, username };
+        'INSERT INTO users (id, username, password_hash, google_id, email, role) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, username, passwordHash ?? null, googleId ?? null, email ?? null, role ?? 'user');
+      return this.findById(id);
     },
 
     usernameExists: (username) =>

@@ -9,6 +9,7 @@ const schema = new Schema({
   passwordHash: { type: String },
   googleId:     { type: String, trim: true },
   email:        { type: String, trim: true },
+  role:         { type: String, enum: ['user', 'admin'], default: 'user' },
   title:        { type: String, trim: true },
   firstName:    { type: String, trim: true },
   lastName:     { type: String, trim: true },
