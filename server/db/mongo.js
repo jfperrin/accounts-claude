@@ -51,7 +51,7 @@ const users = {
   deleteUser: (id) => User.findByIdAndDelete(id),
 
   setPassword: (id, passwordHash) =>
-    User.findByIdAndUpdate(id, { $set: { passwordHash } }),
+    User.findByIdAndUpdate(id, { $set: { passwordHash } }, { new: true }).select('-passwordHash'),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────
