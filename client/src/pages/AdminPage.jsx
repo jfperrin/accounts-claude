@@ -5,6 +5,11 @@ import { useAuth } from '@/store/AuthContext';
 import * as adminApi from '@/api/admin';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import UserFormModal from '@/components/admin/UserFormModal';
 
 export default function AdminPage() {
@@ -13,6 +18,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -39,14 +45,15 @@ export default function AdminPage() {
     toast.success('Utilisateur mis à jour.');
   };
 
-  const handleDelete = async (u) => {
-    if (!window.confirm(`Supprimer définitivement "${u.username}" et toutes ses données ?`)) return;
+  const handleDelete = async () => {
     try {
-      await adminApi.deleteUser(u._id);
-      setUsers(prev => prev.filter(x => x._id !== u._id));
-      toast.success(`Utilisateur "${u.username}" supprimé.`);
+      await adminApi.deleteUser(deleteTarget._id);
+      setUsers(prev => prev.filter(u => u._id !== deleteTarget._id));
+      toast.success(`Utilisateur "${deleteTarget.username}" supprimé.`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur lors de la suppression.');
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -119,7 +126,7 @@ export default function AdminPage() {
                       <Button
                         size="icon" variant="ghost"
                         disabled={isSelf(u)}
-                        onClick={() => handleDelete(u)}
+                        onClick={() => setDeleteTarget(u)}
                         title="Supprimer"
                         className="text-destructive hover:text-destructive"
                       >
@@ -140,6 +147,23 @@ export default function AdminPage() {
         onSubmit={editing ? handleEdit : handleCreate}
         initial={editing}
       />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer l'utilisateur ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action supprimera définitivement <strong>{deleteTarget?.username}</strong> et toutes ses données (banques, opérations, périodes). Elle est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90 text-white">
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
