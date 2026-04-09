@@ -37,7 +37,8 @@ router.post('/users', wrap(async (req, res) => {
   if (!username || !email || !password) {
     return res.status(400).json({ message: 'username, email et password sont requis' });
   }
-  if (!['user', 'admin'].includes(role)) {
+  const effectiveRole = role ?? 'user';
+  if (!['user', 'admin'].includes(effectiveRole)) {
     return res.status(400).json({ message: 'Rôle invalide' });
   }
   const db = req.app.locals.db;
@@ -48,7 +49,7 @@ router.post('/users', wrap(async (req, res) => {
     return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères' });
   }
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await db.users.create({ username, email, passwordHash, role: role || 'user' });
+  const user = await db.users.create({ username, email, passwordHash, role: effectiveRole });
   res.status(201).json(serializeAdminUser(user));
 }));
 
@@ -58,18 +59,26 @@ router.put('/users/:id', wrap(async (req, res) => {
   if (!username || !email) {
     return res.status(400).json({ message: 'username et email sont requis' });
   }
-  if (!['user', 'admin'].includes(role)) {
+  const effectiveRole = role ?? 'user';
+  if (!['user', 'admin'].includes(effectiveRole)) {
     return res.status(400).json({ message: 'Rôle invalide' });
   }
   // Empêche un admin de se rétrograder lui-même
   const selfId = String(req.user._id ?? req.user.id);
-  if (selfId === req.params.id && role !== 'admin') {
+  if (selfId === req.params.id && effectiveRole !== 'admin') {
     return res.status(400).json({ message: 'Impossible de modifier votre propre rôle' });
   }
   const db = req.app.locals.db;
-  const updated = await db.users.updateByAdmin(req.params.id, { username, email, role });
-  if (!updated) return res.status(404).json({ message: 'Utilisateur introuvable' });
-  res.json(serializeAdminUser(updated));
+  try {
+    const updated = await db.users.updateByAdmin(req.params.id, { username, email, role: effectiveRole });
+    if (!updated) return res.status(404).json({ message: 'Utilisateur introuvable' });
+    res.json(serializeAdminUser(updated));
+  } catch (err) {
+    if (err.code === 11000 || err.message?.includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ message: "Nom d'utilisateur déjà pris" });
+    }
+    throw err;
+  }
 }));
 
 // DELETE /api/admin/users/:id — supprime user + toutes ses données en cascade
@@ -102,7 +111,7 @@ router.post('/users/:id/reset-password', wrap(async (req, res) => {
 
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // +1h
-  await db.resetTokens.create(user._id, token, expiresAt);
+  await db.resetTokens.create(user._id ?? user.id, token, expiresAt);
 
   const resetUrl = `${CLIENT_URL}/reset-password?token=${token}`;
   await sendPasswordResetEmail(user.email, resetUrl);
