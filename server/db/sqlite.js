@@ -280,6 +280,9 @@ module.exports = function createSQLiteRepos() {
 
     delete: (id, userId) =>
       db.prepare('DELETE FROM banks WHERE id = ? AND user_id = ?').run(id, uid(userId)),
+
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM banks WHERE user_id = ?').run(uid(userId)),
   };
 
   // ─────────────────────────────────────────────
@@ -407,6 +410,9 @@ module.exports = function createSQLiteRepos() {
       db.prepare('DELETE FROM periods WHERE id = ? AND user_id = ?').run(id, uid(userId));
       return mapPeriod(row); // retourné pour déclencher la suppression des opérations associées
     },
+
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM periods WHERE user_id = ?').run(uid(userId)),
   };
 
   // ─────────────────────────────────────────────
@@ -452,6 +458,9 @@ module.exports = function createSQLiteRepos() {
 
     delete: (id, userId) =>
       db.prepare('DELETE FROM recurring_operations WHERE id = ? AND user_id = ?').run(id, uid(userId)),
+
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM recurring_operations WHERE user_id = ?').run(uid(userId)),
   };
 
   // ─────────────────────────────────────────────

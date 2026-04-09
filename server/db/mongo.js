@@ -60,6 +60,7 @@ const users = {
 // impossible de modifier la banque d'un autre utilisateur même en connaissant l'ID.
 const banks = {
   findByUser: (userId) => Bank.find({ userId }).sort('label'),
+  deleteByUser: (userId) => Bank.deleteMany({ userId }),
   create: ({ label, userId }) => Bank.create({ label, userId }),
   update: (id, userId, data) =>
     Bank.findOneAndUpdate({ _id: id, userId }, data, { returnDocument: 'after' }),
@@ -121,6 +122,7 @@ const operations = {
 // la suppression en cascade des opérations de la période.
 const periods = {
   findByUser: (userId) => Period.find({ userId }).sort({ year: -1, month: -1 }),
+  deleteByUser: (userId) => Period.deleteMany({ userId }),
   create: (data) => Period.create(data),
   findOne: (id, userId) => Period.findOne({ _id: id, userId }),
   updateBalances: (id, userId, balances) =>
@@ -138,6 +140,8 @@ const recurringOps = {
     RecurringOperation.find({ userId }).populate('bankId', 'label').sort('label'),
 
   findByUserRaw: (userId) => RecurringOperation.find({ userId }),
+
+  deleteByUser: (userId) => RecurringOperation.deleteMany({ userId }),
 
   create: async (data) => {
     const op = await RecurringOperation.create(data);

@@ -1,0 +1,113 @@
+// Routes de gestion des utilisateurs — accès admin uniquement.
+// Préfixe : /api/admin
+// Protégées par requireAuth + requireAdmin dans app.js.
+
+const router = require('express').Router();
+const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
+const wrap = require('../utils/asyncHandler');
+const { sendPasswordResetEmail } = require('../utils/mailer');
+
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
+// Sérialise un user pour la liste admin (pas de passwordHash)
+function serializeAdminUser(u) {
+  return {
+    _id:       u._id ?? u.id,
+    username:  u.username,
+    email:     u.email ?? null,
+    role:      u.role ?? 'user',
+    firstName: u.firstName ?? null,
+    lastName:  u.lastName ?? null,
+    nickname:  u.nickname ?? null,
+    createdAt: u.createdAt ?? null,
+  };
+}
+
+// GET /api/admin/users — liste tous les utilisateurs
+router.get('/users', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const users = await db.users.findAll();
+  res.json(users.map(serializeAdminUser));
+}));
+
+// POST /api/admin/users — crée un utilisateur
+router.post('/users', wrap(async (req, res) => {
+  const { username, email, password, role } = req.body;
+  if (!username || !email || !password) {
+    return res.status(400).json({ message: 'username, email et password sont requis' });
+  }
+  if (!['user', 'admin'].includes(role)) {
+    return res.status(400).json({ message: 'Rôle invalide' });
+  }
+  const db = req.app.locals.db;
+  if (await db.users.usernameExists(username)) {
+    return res.status(409).json({ message: "Nom d'utilisateur déjà pris" });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères' });
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  const user = await db.users.create({ username, email, passwordHash, role: role || 'user' });
+  res.status(201).json(serializeAdminUser(user));
+}));
+
+// PUT /api/admin/users/:id — modifie username, email, role
+router.put('/users/:id', wrap(async (req, res) => {
+  const { username, email, role } = req.body;
+  if (!username || !email) {
+    return res.status(400).json({ message: 'username et email sont requis' });
+  }
+  if (!['user', 'admin'].includes(role)) {
+    return res.status(400).json({ message: 'Rôle invalide' });
+  }
+  // Empêche un admin de se rétrograder lui-même
+  const selfId = String(req.user._id ?? req.user.id);
+  if (selfId === req.params.id && role !== 'admin') {
+    return res.status(400).json({ message: 'Impossible de modifier votre propre rôle' });
+  }
+  const db = req.app.locals.db;
+  const updated = await db.users.updateByAdmin(req.params.id, { username, email, role });
+  if (!updated) return res.status(404).json({ message: 'Utilisateur introuvable' });
+  res.json(serializeAdminUser(updated));
+}));
+
+// DELETE /api/admin/users/:id — supprime user + toutes ses données en cascade
+router.delete('/users/:id', wrap(async (req, res) => {
+  const selfId = String(req.user._id ?? req.user.id);
+  if (selfId === req.params.id) {
+    return res.status(400).json({ message: 'Impossible de supprimer votre propre compte' });
+  }
+  const db = req.app.locals.db;
+  const targetId = req.params.id;
+  // Cascade : operations → periods → recurringOps → banks → resetTokens → user
+  const periods = await db.periods.findByUser(targetId);
+  for (const p of periods) {
+    await db.operations.deleteByPeriod(p._id, targetId);
+  }
+  await db.periods.deleteByUser(targetId);
+  await db.recurringOps.deleteByUser(targetId);
+  await db.banks.deleteByUser(targetId);
+  await db.resetTokens.deleteByUser(targetId);
+  await db.users.deleteUser(targetId);
+  res.json({ message: 'Utilisateur supprimé' });
+}));
+
+// POST /api/admin/users/:id/reset-password — envoie un email de reset
+router.post('/users/:id/reset-password', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const user = await db.users.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'Utilisateur introuvable' });
+  if (!user.email) return res.status(400).json({ message: "L'utilisateur n'a pas d'email" });
+
+  const token = randomUUID();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // +1h
+  await db.resetTokens.create(user._id, token, expiresAt);
+
+  const resetUrl = `${CLIENT_URL}/reset-password?token=${token}`;
+  await sendPasswordResetEmail(user.email, resetUrl);
+
+  res.json({ message: 'Email de réinitialisation envoyé' });
+}));
+
+module.exports = router;
