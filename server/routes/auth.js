@@ -14,6 +14,7 @@ function serializeUser(u) {
   return {
     _id:       u._id ?? u.id,
     username:  u.username,
+    role:      u.role ?? 'user',
     title:     u.title     ?? null,
     firstName: u.firstName ?? null,
     lastName:  u.lastName  ?? null,
@@ -117,6 +118,31 @@ router.post('/avatar', requireAuth, upload.single('avatar'), wrap(async (req, re
   const db = req.app.locals.db;
   const updated = await db.users.updateAvatar(req.user._id, avatarUrl);
   res.json(serializeUser(updated));
+}));
+
+// GET /api/auth/reset-password/:token — vérifie la validité du token
+router.get('/reset-password/:token', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const record = await db.resetTokens.findValid(req.params.token);
+  if (!record) return res.status(410).json({ message: 'Lien invalide ou expiré' });
+  res.json({ valid: true });
+}));
+
+// POST /api/auth/reset-password/:token — applique le nouveau mot de passe
+router.post('/reset-password/:token', wrap(async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 8) {
+    return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères' });
+  }
+  const db = req.app.locals.db;
+  const record = await db.resetTokens.findValid(req.params.token);
+  if (!record) return res.status(410).json({ message: 'Lien invalide ou expiré' });
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  await db.users.setPassword(record.userId, passwordHash);
+  await db.resetTokens.markUsed(req.params.token);
+
+  res.json({ message: 'Mot de passe mis à jour' });
 }));
 
 module.exports = router;
