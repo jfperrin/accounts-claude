@@ -24,10 +24,9 @@ function initSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id          TEXT PRIMARY KEY,
-      username    TEXT NOT NULL UNIQUE,
+      email       TEXT NOT NULL UNIQUE,
       password_hash TEXT,           -- NULL pour les comptes Google (pas de mot de passe local)
       google_id   TEXT UNIQUE,      -- NULL pour les comptes locaux
-      email       TEXT,
       created_at  TEXT DEFAULT (datetime('now')),
       updated_at  TEXT DEFAULT (datetime('now'))
     );
@@ -87,19 +86,12 @@ function initSchema(db) {
 
   // Profile columns — idempotent: silently ignored if already exist
   for (const col of [
+    "ALTER TABLE users ADD COLUMN role  TEXT NOT NULL DEFAULT 'user'",
     'ALTER TABLE users ADD COLUMN title      TEXT',
     'ALTER TABLE users ADD COLUMN first_name TEXT',
     'ALTER TABLE users ADD COLUMN last_name  TEXT',
     'ALTER TABLE users ADD COLUMN nickname   TEXT',
     'ALTER TABLE users ADD COLUMN avatar_url TEXT',
-  ]) {
-    try { db.exec(col); } catch (_) { /* column already exists */ }
-  }
-
-  // Role and email — idempotent
-  for (const col of [
-    "ALTER TABLE users ADD COLUMN role  TEXT NOT NULL DEFAULT 'user'",
-    'ALTER TABLE users ADD COLUMN email TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -111,8 +103,7 @@ function initSchema(db) {
 
 const mapUser = (row) => row && {
   _id:          row.id,
-  username:     row.username,
-  passwordHash: row.password_hash, // undefined si la colonne n'était pas dans le SELECT
+  passwordHash: row.password_hash,
   googleId:     row.google_id,
   email:        row.email ?? null,
   role:         row.role ?? 'user',
@@ -196,33 +187,39 @@ module.exports = function createSQLiteRepos() {
   // findByIdWithHash est réservé à l'authentification locale.
   // ─────────────────────────────────────────────
   const users = {
-    findByUsername: (username) =>
-      mapUser(db.prepare('SELECT * FROM users WHERE username = ?').get(username)),
+    findByEmail: (email) =>
+      mapUser(db.prepare('SELECT * FROM users WHERE email = ?').get(email)),
 
     findByGoogleId: (googleId) =>
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, username, email, role, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, role, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
 
-    create({ username, passwordHash, googleId, email, role }) {
+    create({ email, passwordHash, googleId, role }) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO users (id, username, password_hash, google_id, email, role) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, username, passwordHash ?? null, googleId ?? null, email ?? null, role ?? 'user');
+        'INSERT INTO users (id, email, password_hash, google_id, role) VALUES (?, ?, ?, ?, ?)',
+      ).run(id, email, passwordHash ?? null, googleId ?? null, role ?? 'user');
       return this.findById(id);
     },
 
-    usernameExists: (username) =>
-      !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(username),
+    emailExists: (email) =>
+      !!db.prepare('SELECT 1 FROM users WHERE email = ?').get(email),
 
     updateProfile(id, { title, firstName, lastName, nickname }) {
       db.prepare(
         `UPDATE users SET title=?, first_name=?, last_name=?, nickname=?, updated_at=datetime('now') WHERE id=?`
       ).run(title ?? null, firstName ?? null, lastName ?? null, nickname ?? null, uid(id));
+      return this.findById(id);
+    },
+
+    updateEmail(id, email) {
+      db.prepare(`UPDATE users SET email=?, updated_at=datetime('now') WHERE id=?`)
+        .run(email, uid(id));
       return this.findById(id);
     },
 
@@ -234,14 +231,14 @@ module.exports = function createSQLiteRepos() {
 
     findAll() {
       return db.prepare(
-        'SELECT id, username, email, role, title, first_name, last_name, nickname, avatar_url, created_at FROM users ORDER BY created_at DESC',
+        'SELECT id, email, role, title, first_name, last_name, nickname, avatar_url, created_at FROM users ORDER BY created_at DESC',
       ).all().map(mapUser);
     },
 
-    updateByAdmin(id, { username, email, role }) {
+    updateByAdmin(id, { email, role }) {
       db.prepare(
-        `UPDATE users SET username=?, email=?, role=?, updated_at=datetime('now') WHERE id=?`,
-      ).run(username ?? null, email ?? null, role ?? 'user', uid(id));
+        `UPDATE users SET email=?, role=?, updated_at=datetime('now') WHERE id=?`,
+      ).run(email ?? null, role ?? 'user', uid(id));
       return this.findById(id);
     },
 
