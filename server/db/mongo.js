@@ -25,7 +25,7 @@ const users = {
   findByGoogleId: (googleId) => User.findOne({ googleId }),
   findById: (id) => User.findById(id).select('-passwordHash'),
   findByIdWithHash: (id) => User.findById(id),
-  create: (data) => User.create(data),
+  create: (data) => User.create({ emailVerified: !!data.googleId, ...data }),
   emailExists: async (email) => !!(await User.findOne({ email })),
 
   updateProfile: (id, { title, firstName, lastName, nickname }) =>
@@ -55,6 +55,12 @@ const users = {
 
   setPassword: (id, passwordHash) =>
     User.findByIdAndUpdate(id, { $set: { passwordHash } }, { new: true }).select('-passwordHash'),
+
+  setEmailVerified: (id) =>
+    User.findByIdAndUpdate(id, { $set: { emailVerified: true } }, { new: true }).select('-passwordHash'),
+
+  applyPendingEmail: (id, email) =>
+    User.findByIdAndUpdate(id, { $set: { email, emailVerified: true } }, { new: true }).select('-passwordHash'),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────
@@ -160,8 +166,8 @@ const recurringOps = {
 
 // ─── RESET TOKENS ────────────────────────────────────────────────────────────────
 const resetTokens = {
-  create: (userId, token, expiresAt) =>
-    PasswordResetToken.create({ token, userId, expiresAt }),
+  create: (userId, token, expiresAt, { type = 'password_reset', pendingEmail = null } = {}) =>
+    PasswordResetToken.create({ token, userId, expiresAt, type, pendingEmail }),
 
   findValid: (token) =>
     PasswordResetToken.findOne({
