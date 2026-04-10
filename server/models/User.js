@@ -5,17 +5,16 @@
 const { Schema, model } = require('mongoose');
 
 const schema = new Schema({
-  username:     { type: String, required: true, unique: true, trim: true },
   passwordHash: { type: String },
   googleId:     { type: String, trim: true },
-  email:        { type: String, trim: true },
+  email:        { type: String, required: true, unique: true, trim: true },
   role:         { type: String, enum: ['user', 'admin'], default: 'user' },
   title:        { type: String, trim: true },
   firstName:    { type: String, trim: true },
   lastName:     { type: String, trim: true },
   nickname:     { type: String, trim: true },
   avatarUrl:    { type: String, trim: true },
-}, { timestamps: true }); // ajoute createdAt et updatedAt automatiquement
+}, { timestamps: true });
 
 // Index sparse : n'indexe que les documents ayant un googleId,
 // ce qui autorise plusieurs documents sans googleId sans violer l'unicité.

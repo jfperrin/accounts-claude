@@ -21,12 +21,12 @@ const PasswordResetToken = require('../models/PasswordResetToken');
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
 // l'exposer dans req.user. findByIdWithHash est réservé à l'authentification.
 const users = {
-  findByUsername: (username) => User.findOne({ username }),
+  findByEmail: (email) => User.findOne({ email }),
   findByGoogleId: (googleId) => User.findOne({ googleId }),
   findById: (id) => User.findById(id).select('-passwordHash'),
   findByIdWithHash: (id) => User.findById(id),
   create: (data) => User.create(data),
-  usernameExists: async (username) => !!(await User.findOne({ username })),
+  emailExists: async (email) => !!(await User.findOne({ email })),
 
   updateProfile: (id, { title, firstName, lastName, nickname }) =>
     User.findByIdAndUpdate(
@@ -35,16 +35,19 @@ const users = {
       { new: true },
     ).select('-passwordHash'),
 
+  updateEmail: (id, email) =>
+    User.findByIdAndUpdate(id, { $set: { email } }, { new: true }).select('-passwordHash'),
+
   updateAvatar: (id, avatarUrl) =>
     User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { new: true }).select('-passwordHash'),
 
   findAll: () =>
     User.find({}).select('-passwordHash').sort({ createdAt: -1 }),
 
-  updateByAdmin: (id, { username, email, role }) =>
+  updateByAdmin: (id, { email, role }) =>
     User.findByIdAndUpdate(
       id,
-      { $set: { username, email, role } },
+      { $set: { email, role } },
       { new: true },
     ).select('-passwordHash'),
 
