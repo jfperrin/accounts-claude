@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -7,19 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn, formatEur } from '@/lib/utils';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
-const ROWS_PER_PAGE = 20;
 
 export default function OperationsTable({ operations, onPoint, onEdit, onDelete }) {
-  const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  useEffect(() => { setPage(1); }, [operations]);
 
-  const sorted = useMemo(
+  const rows = useMemo(
     () => [...operations].sort((a, b) => new Date(a.date) - new Date(b.date)),
     [operations]
   );
-  const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
-  const rows = sorted.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
   const confirmDelete = () => {
     onDelete(deleteTarget);
@@ -78,14 +73,6 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
           ))}
         </TableBody>
       </Table>
-
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-end gap-2">
-          <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Précédent</Button>
-          <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
-          <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</Button>
-        </div>
-      )}
 
       <DeleteConfirmDialog
         open={!!deleteTarget}
