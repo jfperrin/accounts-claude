@@ -6,25 +6,25 @@ beforeAll(async () => { app = await setup(); });
 afterAll(teardown);
 beforeEach(clearDB);
 
-const ALICE = { username: 'alice', password: 'pass1234' };
+const ALICE = { email: 'alice@test.com', password: 'pass1234' };
 
 describe('POST /api/auth/register', () => {
   it('crée un compte et retourne une session', async () => {
     const res = await request(app).post('/api/auth/register').send(ALICE);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ username: 'alice' });
+    expect(res.body).toMatchObject({ email: 'alice@test.com' });
     expect(res.body.passwordHash).toBeUndefined();
     expect(res.headers['set-cookie']).toBeDefined();
   });
 
-  it('rejette un username dupliqué', async () => {
+  it('rejette un email dupliqué', async () => {
     await request(app).post('/api/auth/register').send(ALICE);
     const res = await request(app).post('/api/auth/register').send(ALICE);
     expect(res.status).toBe(409);
   });
 
   it('rejette si champs manquants', async () => {
-    const res = await request(app).post('/api/auth/register').send({ username: 'alice' });
+    const res = await request(app).post('/api/auth/register').send({ email: 'alice@test.com' });
     expect(res.status).toBe(400);
   });
 });
@@ -35,7 +35,7 @@ describe('POST /api/auth/login', () => {
   it('connecte avec des credentials valides', async () => {
     const res = await request(app).post('/api/auth/login').send(ALICE);
     expect(res.status).toBe(200);
-    expect(res.body.username).toBe('alice');
+    expect(res.body.email).toBe('alice@test.com');
   });
 
   it('rejette un mauvais mot de passe', async () => {
@@ -44,7 +44,7 @@ describe('POST /api/auth/login', () => {
   });
 
   it('rejette un utilisateur inconnu', async () => {
-    const res = await request(app).post('/api/auth/login').send({ username: 'nobody', password: 'x' });
+    const res = await request(app).post('/api/auth/login').send({ email: 'nobody@test.com', password: 'x' });
     expect(res.status).toBe(401);
   });
 });
@@ -59,7 +59,7 @@ describe('GET /api/auth/me', () => {
     await agent.post('/api/auth/register').send(ALICE);
     const res = await agent.get('/api/auth/me');
     expect(res.status).toBe(200);
-    expect(res.body.username).toBe('alice');
+    expect(res.body.email).toBe('alice@test.com');
     expect(res.body.passwordHash).toBeUndefined();
   });
 });

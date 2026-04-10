@@ -10,8 +10,8 @@ beforeEach(async () => {
   await clearDB();
   alice = request.agent(app);
   bob = request.agent(app);
-  await alice.post('/api/auth/register').send({ username: 'alice', password: 'pass1234' });
-  await bob.post('/api/auth/register').send({ username: 'bob', password: 'pass1234' });
+  await alice.post('/api/auth/register').send({ email: 'alice@test.com', password: 'pass1234' });
+  await bob.post('/api/auth/register').send({ email: 'bob@test.com', password: 'pass1234' });
 });
 
 describe('GET /api/banks', () => {

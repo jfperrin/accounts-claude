@@ -1,14 +1,16 @@
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 const createApp = require('../app');
+const db = require('../db/mongo');
 
 let mongod;
 let app;
 
 async function setup() {
   mongod = await MongoMemoryServer.create();
-  await mongoose.connect(mongod.getUri());
-  app = createApp(mongod.getUri());
+  const uri = mongod.getUri();
+  await mongoose.connect(uri);
+  app = createApp(db, uri);
   return app;
 }
 

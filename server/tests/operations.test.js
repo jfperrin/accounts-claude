@@ -11,7 +11,7 @@ let bankId, periodId;
 beforeEach(async () => {
   await clearDB();
   agent = request.agent(app);
-  await agent.post('/api/auth/register').send({ username: 'alice', password: 'pass1234' });
+  await agent.post('/api/auth/register').send({ email: 'alice@test.com', password: 'pass1234' });
   bankId = (await agent.post('/api/banks').send({ label: 'BNP' })).body._id;
   periodId = (await agent.post('/api/periods').send({ month: 4, year: 2025 })).body._id;
 });

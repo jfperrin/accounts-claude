@@ -36,7 +36,7 @@ export default function AdminPage() {
   const handleCreate = async (data) => {
     const created = await adminApi.createUser(data);
     setUsers(prev => [created, ...prev]);
-    toast.success(`Utilisateur "${created.username}" créé.`);
+    toast.success(`Utilisateur "${created.email}" créé.`);
   };
 
   const handleEdit = async (data) => {
@@ -49,7 +49,7 @@ export default function AdminPage() {
     try {
       await adminApi.deleteUser(deleteTarget._id);
       setUsers(prev => prev.filter(u => u._id !== deleteTarget._id));
-      toast.success(`Utilisateur "${deleteTarget.username}" supprimé.`);
+      toast.success(`Utilisateur "${deleteTarget.email}" supprimé.`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur lors de la suppression.');
     } finally {
@@ -87,7 +87,7 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Utilisateur</th>
+                <th className="px-4 py-3 text-left font-medium">Email</th>
                 <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Email</th>
                 <th className="px-4 py-3 text-left font-medium">Rôle</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -97,7 +97,7 @@ export default function AdminPage() {
               {users.map(u => (
                 <tr key={u._id} className="bg-card hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3 font-medium">
-                    {u.username}
+                    {u.email}
                     {isSelf(u) && <span className="ml-2 text-xs text-muted-foreground">(vous)</span>}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">{u.email ?? '—'}</td>
@@ -153,7 +153,7 @@ export default function AdminPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer l'utilisateur ?</AlertDialogTitle>
             <AlertDialogDescription>
-              Cette action supprimera définitivement <strong>{deleteTarget?.username}</strong> et toutes ses données (banques, opérations, périodes). Elle est irréversible.
+              Cette action supprimera définitivement <strong>{deleteTarget?.email}</strong> et toutes ses données (banques, opérations, périodes). Elle est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
