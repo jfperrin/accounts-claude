@@ -20,7 +20,9 @@ export default function ProfilePage() {
     lastName:  user?.lastName  ?? '',
     nickname:  user?.nickname  ?? '',
   });
+  const [email, setEmail] = useState(user?.email ?? '');
   const [saving, setSaving] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target?.value ?? e }));
@@ -42,6 +44,24 @@ export default function ProfilePage() {
     }
   };
 
+  const onSaveEmail = async (e) => {
+    e.preventDefault();
+    setSavingEmail(true);
+    try {
+      const updated = await profileApi.updateEmail(email);
+      updateUser(updated);
+      toast.success('Adresse email mise à jour');
+    } catch (err) {
+      if (err.response?.status === 409) {
+        toast.error('Adresse email déjà utilisée');
+      } else {
+        toast.error(err.message || 'Erreur');
+      }
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   const onAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -51,14 +71,15 @@ export default function ProfilePage() {
       updateUser(updated);
       toast.success('Avatar mis à jour');
     } catch (err) {
-      toast.error(err.message || 'Erreur lors de l\'upload');
+      toast.error(err.message || "Erreur lors de l'upload");
     } finally {
       setUploading(false);
       e.target.value = '';
     }
   };
 
-  const displayName = user?.nickname || user?.username;
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+  const displayName = user?.nickname || fullName || user?.email;
   const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
   const avatarSrc = user?.avatarUrl ?? undefined;
 
@@ -86,11 +107,27 @@ export default function ProfilePage() {
           disabled={uploading}
           onClick={() => fileRef.current?.click()}
         >
-          {uploading ? 'Envoi…' : 'Changer l\'avatar'}
+          {uploading ? 'Envoi…' : "Changer l'avatar"}
         </Button>
       </div>
 
-      {/* Form */}
+      {/* Email */}
+      <form onSubmit={onSaveEmail} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Adresse email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <Button type="submit" disabled={savingEmail} className="w-full">
+          {savingEmail ? 'Enregistrement…' : "Mettre à jour l'email"}
+        </Button>
+      </form>
+
+      {/* Profil */}
       <form onSubmit={onSave} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
         <div className="space-y-1.5">
           <Label>Titre</Label>
@@ -114,14 +151,14 @@ export default function ProfilePage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="nickname">Surnom (affiché en haut)</Label>
-          <Input id="nickname" value={form.nickname} onChange={set('nickname')} placeholder={user?.username} />
+          <Input id="nickname" value={form.nickname} onChange={set('nickname')} placeholder={user?.email} />
         </div>
         <Button type="submit" disabled={saving} className="w-full">
           {saving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       </form>
 
-      {/* Déconnexion — utile sur mobile où le header ne l'affiche plus */}
+      {/* Déconnexion */}
       <button
         type="button"
         onClick={logout}

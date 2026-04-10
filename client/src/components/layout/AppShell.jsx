@@ -29,7 +29,8 @@ export default function AppShell() {
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Admin' }] : []),
   ];
 
-  const displayName = user?.nickname || user?.username;
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+  const displayName = user?.nickname || fullName || user?.email;
   const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
   const avatarSrc = user?.avatarUrl ?? undefined;
 

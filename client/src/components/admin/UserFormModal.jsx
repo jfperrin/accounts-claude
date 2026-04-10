@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const EMPTY = { username: '', email: '', password: '', role: 'user' };
+const EMPTY = { email: '', password: '', role: 'user' };
 
 export default function UserFormModal({ open, onClose, onSubmit, initial }) {
   const isEdit = !!initial;
@@ -16,7 +16,7 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
   useEffect(() => {
     if (open) {
       setForm(initial
-        ? { username: initial.username, email: initial.email ?? '', password: '', role: initial.role }
+        ? { email: initial.email ?? '', password: '', role: initial.role }
         : EMPTY
       );
       setError('');
@@ -28,8 +28,8 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!form.username.trim() || !form.email.trim()) {
-      return setError('Username et email sont requis.');
+    if (!form.email.trim()) {
+      return setError('Email requis.');
     }
     if (!isEdit && form.password.length < 8) {
       return setError('Le mot de passe doit faire au moins 8 caractères.');
@@ -37,12 +37,12 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
     setSaving(true);
     try {
       const payload = isEdit
-        ? { username: form.username, email: form.email, role: form.role }
-        : { username: form.username, email: form.email, password: form.password, role: form.role };
+        ? { email: form.email, role: form.role }
+        : { email: form.email, password: form.password, role: form.role };
       await onSubmit(payload);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur lors de l\'enregistrement.');
+      setError(err.response?.data?.message || "Erreur lors de l'enregistrement.");
     } finally {
       setSaving(false);
     }
@@ -52,13 +52,9 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Modifier l\'utilisateur' : 'Nouvel utilisateur'}</DialogTitle>
+          <DialogTitle>{isEdit ? "Modifier l'utilisateur" : 'Nouvel utilisateur'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="space-y-1">
-            <Label htmlFor="uf-username">Nom d'utilisateur</Label>
-            <Input id="uf-username" value={form.username} onChange={set('username')} autoComplete="off" />
-          </div>
           <div className="space-y-1">
             <Label htmlFor="uf-email">Email</Label>
             <Input id="uf-email" type="email" value={form.email} onChange={set('email')} />
