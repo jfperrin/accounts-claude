@@ -114,20 +114,28 @@ router.put('/profile', requireAuth, wrap(async (req, res) => {
   res.json(serializeUser(updated));
 }));
 
-// PUT /api/auth/email — change l'email de l'utilisateur connecté
+// PUT /api/auth/email — demande un changement d'email
+// Ne modifie pas l'email immédiatement : envoie un lien au nouvel email.
+// L'email en base est mis à jour uniquement après clic sur le lien (GET /verify-email/:token).
 router.put('/email', requireAuth, wrap(async (req, res) => {
   const { email } = req.body;
   if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ message: 'Email invalide' });
   const normalizedEmail = email.trim().toLowerCase();
   const db = req.app.locals.db;
   const selfId = String(req.user._id ?? req.user.id);
-  // Vérifier le doublon uniquement sur les autres utilisateurs
   const existing = await db.users.findByEmail(normalizedEmail);
   if (existing && String(existing._id ?? existing.id) !== selfId) {
     return res.status(409).json({ message: 'Email déjà utilisé' });
   }
-  const updated = await db.users.updateEmail(selfId, normalizedEmail);
-  res.json(serializeUser(updated));
+  const token = randomUUID();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.resetTokens.create(req.user._id ?? req.user.id, token, expiresAt, {
+    type: 'email_change',
+    pendingEmail: normalizedEmail,
+  });
+  const verifyUrl = `${CLIENT_URL}/api/auth/verify-email/${token}`;
+  await mailer.sendEmailChangeEmail(normalizedEmail, verifyUrl);
+  res.json({ message: `Un lien de confirmation a été envoyé à ${normalizedEmail}` });
 }));
 
 // POST /api/auth/avatar — upload de l'avatar (multipart/form-data, champ "avatar")
