@@ -8,6 +8,8 @@ const { randomUUID } = require('crypto');
 const wrap = require('../utils/asyncHandler');
 const { sendPasswordResetEmail } = require('../utils/mailer');
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // Sérialise un user pour la liste admin (pas de passwordHash)
@@ -33,7 +35,7 @@ router.get('/users', wrap(async (req, res) => {
 // POST /api/admin/users — crée un utilisateur
 router.post('/users', wrap(async (req, res) => {
   const { email, password, role } = req.body;
-  if (!email || !password) {
+  if (!email || !EMAIL_RE.test(email) || !password) {
     return res.status(400).json({ message: 'email et password sont requis' });
   }
   const effectiveRole = role ?? 'user';
@@ -62,6 +64,7 @@ router.put('/users/:id', wrap(async (req, res) => {
   if (!['user', 'admin'].includes(effectiveRole)) {
     return res.status(400).json({ message: 'Rôle invalide' });
   }
+  // Empêche un admin de se rétrograder lui-même
   const selfId = String(req.user._id ?? req.user.id);
   if (selfId === req.params.id && effectiveRole !== 'admin') {
     return res.status(400).json({ message: 'Impossible de modifier votre propre rôle' });
