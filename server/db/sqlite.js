@@ -98,6 +98,9 @@ function initSchema(db) {
     'ALTER TABLE users ADD COLUMN last_name  TEXT',
     'ALTER TABLE users ADD COLUMN nickname   TEXT',
     'ALTER TABLE users ADD COLUMN avatar_url TEXT',
+    'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE password_reset_tokens ADD COLUMN type TEXT NOT NULL DEFAULT 'password_reset'",
+    'ALTER TABLE password_reset_tokens ADD COLUMN pending_email TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -108,11 +111,12 @@ function initSchema(db) {
 // vers le format attendu par le client (camelCase, boolean, objet).
 
 const mapUser = (row) => row && {
-  _id:          row.id,
-  passwordHash: row.password_hash,
-  googleId:     row.google_id,
-  email:        row.email ?? null,
-  role:         row.role ?? 'user',
+  _id:           row.id,
+  passwordHash:  row.password_hash,
+  googleId:      row.google_id,
+  email:         row.email ?? null,
+  emailVerified: row.email_verified === 1,
+  role:          row.role ?? 'user',
   title:        row.title ?? null,
   firstName:    row.first_name ?? null,
   lastName:     row.last_name ?? null,
@@ -158,11 +162,13 @@ const mapRecurring = (row) => row && {
 };
 
 const mapResetToken = (row) => row && {
-  _id:       row.id,
-  token:     row.token,
-  userId:    row.user_id,
-  expiresAt: new Date(row.expires_at),
-  used:      row.used === 1,
+  _id:          row.id,
+  token:        row.token,
+  userId:       row.user_id,
+  expiresAt:    new Date(row.expires_at),
+  used:         row.used === 1,
+  type:         row.type ?? 'password_reset',
+  pendingEmail: row.pending_email ?? null,
 };
 
 // Fragments SQL réutilisés pour les SELECT avec JOIN banks.
@@ -200,16 +206,17 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, email, role, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
 
     create({ email, passwordHash, googleId, role }) {
       const id = randomUUID();
+      const emailVerified = googleId ? 1 : 0;
       db.prepare(
-        'INSERT INTO users (id, email, password_hash, google_id, role) VALUES (?, ?, ?, ?, ?)',
-      ).run(id, email, passwordHash ?? null, googleId ?? null, role ?? 'user');
+        'INSERT INTO users (id, email, password_hash, google_id, role, email_verified) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, email, passwordHash ?? null, googleId ?? null, role ?? 'user', emailVerified);
       return this.findById(id);
     },
 
@@ -237,7 +244,7 @@ module.exports = function createSQLiteRepos() {
 
     findAll() {
       return db.prepare(
-        'SELECT id, email, role, title, first_name, last_name, nickname, avatar_url, created_at FROM users ORDER BY created_at DESC',
+        'SELECT id, email, email_verified, role, title, first_name, last_name, nickname, avatar_url, created_at FROM users ORDER BY created_at DESC',
       ).all().map(mapUser);
     },
 
@@ -256,6 +263,18 @@ module.exports = function createSQLiteRepos() {
       db.prepare(
         `UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?`
       ).run(passwordHash, uid(id));
+    },
+
+    setEmailVerified(id) {
+      db.prepare(`UPDATE users SET email_verified = 1, updated_at = datetime('now') WHERE id = ?`).run(uid(id));
+      return this.findById(id);
+    },
+
+    applyPendingEmail(id, email) {
+      db.prepare(
+        `UPDATE users SET email = ?, email_verified = 1, updated_at = datetime('now') WHERE id = ?`
+      ).run(email, uid(id));
+      return this.findById(id);
     },
   };
 
@@ -474,11 +493,11 @@ module.exports = function createSQLiteRepos() {
   // deleteByUser supprime tous les tokens d'un utilisateur (e.g. lors de la suppression du compte).
   // ─────────────────────────────────────────────
   const resetTokens = {
-    create(userId, token, expiresAt) {
+    create(userId, token, expiresAt, { type = 'password_reset', pendingEmail = null } = {}) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO password_reset_tokens (id, token, user_id, expires_at) VALUES (?, ?, ?, ?)',
-      ).run(id, token, uid(userId), expiresAt.toISOString());
+        'INSERT INTO password_reset_tokens (id, token, user_id, expires_at, type, pending_email) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, token, uid(userId), expiresAt.toISOString(), type, pendingEmail ?? null);
       return mapResetToken(db.prepare('SELECT * FROM password_reset_tokens WHERE id = ?').get(id));
     },
 
