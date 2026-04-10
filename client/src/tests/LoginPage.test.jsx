@@ -28,16 +28,16 @@ describe('LoginPage', () => {
     expect(screen.getByText('Inscription')).toBeInTheDocument();
   });
 
-  it('soumet le formulaire de connexion', async () => {
-    mockLogin.mockResolvedValue({ _id: '1', username: 'alice' });
+  it('soumet le formulaire de connexion avec email', async () => {
+    mockLogin.mockResolvedValue({ _id: '1', email: 'alice@test.com' });
     render(<LoginPage />, { wrapper: Wrapper });
 
-    await userEvent.type(screen.getByLabelText("Nom d'utilisateur"), 'alice');
+    await userEvent.type(screen.getByLabelText('Adresse email'), 'alice@test.com');
     await userEvent.type(screen.getByLabelText('Mot de passe'), 'pass1234');
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
     await waitFor(() =>
-      expect(mockLogin).toHaveBeenCalledWith({ username: 'alice', password: 'pass1234' })
+      expect(mockLogin).toHaveBeenCalledWith({ email: 'alice@test.com', password: 'pass1234' })
     );
   });
 

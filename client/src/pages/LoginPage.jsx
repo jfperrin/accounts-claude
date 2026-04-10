@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [tab, setTab] = useState('login');
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const { login, register } = useAuth();
   const [searchParams] = useSearchParams();
   const googleError = searchParams.get('error') === 'google';
@@ -79,7 +79,7 @@ export default function LoginPage() {
             <button
               type="button"
               key={key}
-              onClick={() => { setTab(key); setForm({ username: '', password: '' }); }}
+              onClick={() => { setTab(key); setForm({ email: '', password: '' }); }}
               className={cn(
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                 tab === key
@@ -94,12 +94,13 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="username">Nom d'utilisateur</Label>
+            <Label htmlFor="email">Adresse email</Label>
             <Input
-              id="username"
+              id="email"
+              type="email"
               autoFocus
-              value={form.username}
-              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               className="h-11"
             />
           </div>
