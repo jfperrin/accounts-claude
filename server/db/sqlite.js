@@ -211,9 +211,9 @@ module.exports = function createSQLiteRepos() {
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
 
-    create({ email, passwordHash, googleId, role }) {
+    create({ email, passwordHash, googleId, role, emailVerified: emailVerifiedParam }) {
       const id = randomUUID();
-      const emailVerified = googleId ? 1 : 0;
+      const emailVerified = emailVerifiedParam ? 1 : (googleId ? 1 : 0);
       db.prepare(
         'INSERT INTO users (id, email, password_hash, google_id, role, email_verified) VALUES (?, ?, ?, ?, ?, ?)',
       ).run(id, email, passwordHash ?? null, googleId ?? null, role ?? 'user', emailVerified);

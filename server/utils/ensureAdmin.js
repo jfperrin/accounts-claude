@@ -14,6 +14,9 @@ module.exports = async function ensureAdmin(db) {
         role: 'admin',
       });
     }
+    if (!existing.emailVerified) {
+      await db.users.setEmailVerified(existing._id ?? existing.id);
+    }
     console.log(`[admin] Compte admin "${ADMIN_EMAIL}" prêt.`);
     return;
   }
@@ -23,6 +26,7 @@ module.exports = async function ensureAdmin(db) {
     email: ADMIN_EMAIL,
     passwordHash,
     role: 'admin',
+    emailVerified: true,
   });
   console.log(`[admin] Compte admin "${ADMIN_EMAIL}" créé.`);
 };
