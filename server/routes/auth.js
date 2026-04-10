@@ -143,6 +143,44 @@ router.post('/avatar', requireAuth, upload.single('avatar'), wrap(async (req, re
   res.json(serializeUser(updated));
 }));
 
+// GET /api/auth/verify-email/:token
+// Valide un token de type email_verify ou email_change.
+// email_verify → active le compte (emailVerified = true)
+// email_change → applique pendingEmail comme nouvel email
+// Redirige vers /login?verified=1 en cas de succès.
+router.get('/verify-email/:token', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const record = await db.resetTokens.findValid(req.params.token);
+  if (!record || !['email_verify', 'email_change'].includes(record.type)) {
+    return res.redirect(`${CLIENT_URL}/login?error=token_expired`);
+  }
+  if (record.type === 'email_change') {
+    const existing = await db.users.findByEmail(record.pendingEmail);
+    if (existing && String(existing._id ?? existing.id) !== String(record.userId)) {
+      await db.resetTokens.markUsed(record.token);
+      return res.redirect(`${CLIENT_URL}/login?error=email_taken`);
+    }
+    await db.users.applyPendingEmail(record.userId, record.pendingEmail);
+  } else {
+    await db.users.setEmailVerified(record.userId);
+  }
+  await db.resetTokens.markUsed(record.token);
+  res.redirect(`${CLIENT_URL}/login?verified=1`);
+}));
+
+// POST /api/auth/resend-verification
+// Renvoie un email de vérification à l'utilisateur connecté non-vérifié.
+router.post('/resend-verification', requireAuth, authLimiter, wrap(async (req, res) => {
+  if (req.user.emailVerified) return res.status(400).json({ message: 'Email déjà vérifié' });
+  const db = req.app.locals.db;
+  const token = randomUUID();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.resetTokens.create(req.user._id ?? req.user.id, token, expiresAt, { type: 'email_verify' });
+  const verifyUrl = `${CLIENT_URL}/api/auth/verify-email/${token}`;
+  await mailer.sendVerificationEmail(req.user.email, verifyUrl);
+  res.json({ message: 'Email de vérification envoyé' });
+}));
+
 // GET /api/auth/reset-password/:token — vérifie la validité du token
 router.get('/reset-password/:token', wrap(async (req, res) => {
   const db = req.app.locals.db;
