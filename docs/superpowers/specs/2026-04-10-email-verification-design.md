@@ -108,6 +108,8 @@ Les comptes Google OAuth sont créés avec `emailVerified: true`.
 verifyUrl = `${CLIENT_URL}/api/auth/verify-email/${token}`
 ```
 
+`CLIENT_URL` pointe vers le client (`:5173` en dev). Le proxy Vite redirige `/api/*` vers le serveur (`:3001`), donc le lien fonctionne en dev et en prod (reverse proxy identique).
+
 En dev sans clé Resend : log de l'URL dans la console (comportement actuel conservé).
 
 ---
@@ -162,6 +164,7 @@ User saisit nouvel email → PUT /auth/email
 |-----|-------------|
 | Token expiré | Redirect `CLIENT_URL/login?error=token_expired` |
 | Token déjà utilisé | Même redirect |
-| Email déjà utilisé (changement) | 409, toast côté client |
+| Email déjà utilisé au moment de la demande | 409, toast côté client |
+| Email déjà utilisé au moment de l'application du token | Redirect `CLIENT_URL/login?error=email_taken` |
 | Resend non configuré (dev) | Log console, pas d'envoi |
 | Compte Google tente login sans emailVerified | N/A — Google crée avec `emailVerified=true` |
