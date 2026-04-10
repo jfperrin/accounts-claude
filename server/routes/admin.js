@@ -14,7 +14,6 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 function serializeAdminUser(u) {
   return {
     _id:       u._id ?? u.id,
-    username:  u.username,
     email:     u.email ?? null,
     role:      u.role ?? 'user',
     firstName: u.firstName ?? null,
@@ -33,49 +32,48 @@ router.get('/users', wrap(async (req, res) => {
 
 // POST /api/admin/users — crée un utilisateur
 router.post('/users', wrap(async (req, res) => {
-  const { username, email, password, role } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ message: 'username, email et password sont requis' });
+  const { email, password, role } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'email et password sont requis' });
   }
   const effectiveRole = role ?? 'user';
   if (!['user', 'admin'].includes(effectiveRole)) {
     return res.status(400).json({ message: 'Rôle invalide' });
   }
   const db = req.app.locals.db;
-  if (await db.users.usernameExists(username)) {
-    return res.status(409).json({ message: "Nom d'utilisateur déjà pris" });
+  if (await db.users.emailExists(email)) {
+    return res.status(409).json({ message: 'Email déjà utilisé' });
   }
   if (password.length < 8) {
     return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères' });
   }
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await db.users.create({ username, email, passwordHash, role: effectiveRole });
+  const user = await db.users.create({ email, passwordHash, role: effectiveRole });
   res.status(201).json(serializeAdminUser(user));
 }));
 
-// PUT /api/admin/users/:id — modifie username, email, role
+// PUT /api/admin/users/:id — modifie email, role
 router.put('/users/:id', wrap(async (req, res) => {
-  const { username, email, role } = req.body;
-  if (!username || !email) {
-    return res.status(400).json({ message: 'username et email sont requis' });
+  const { email, role } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: 'email est requis' });
   }
   const effectiveRole = role ?? 'user';
   if (!['user', 'admin'].includes(effectiveRole)) {
     return res.status(400).json({ message: 'Rôle invalide' });
   }
-  // Empêche un admin de se rétrograder lui-même
   const selfId = String(req.user._id ?? req.user.id);
   if (selfId === req.params.id && effectiveRole !== 'admin') {
     return res.status(400).json({ message: 'Impossible de modifier votre propre rôle' });
   }
   const db = req.app.locals.db;
   try {
-    const updated = await db.users.updateByAdmin(req.params.id, { username, email, role: effectiveRole });
+    const updated = await db.users.updateByAdmin(req.params.id, { email, role: effectiveRole });
     if (!updated) return res.status(404).json({ message: 'Utilisateur introuvable' });
     res.json(serializeAdminUser(updated));
   } catch (err) {
     if (err.code === 11000 || err.message?.includes('UNIQUE constraint failed')) {
-      return res.status(409).json({ message: "Nom d'utilisateur déjà pris" });
+      return res.status(409).json({ message: 'Email déjà utilisé' });
     }
     throw err;
   }
