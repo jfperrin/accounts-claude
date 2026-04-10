@@ -129,3 +129,31 @@ describe('PUT /api/auth/email', () => {
     expect(res.status).toBe(409);
   });
 });
+
+describe('POST /api/auth/resend-verification', () => {
+  it('retourne 400 si email déjà vérifié', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send(ALICE);
+    const res = await agent.post('/api/auth/resend-verification');
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/déjà vérifié/i);
+  });
+
+  it('envoie un email et retourne 200 si email non vérifié', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send(ALICE);
+    // Repasser emailVerified à false en DB pour simuler un compte non-vérifié avec session active
+    const User = require('../models/User');
+    await User.updateOne({ email: ALICE.email }, { emailVerified: false });
+    const res = await agent.post('/api/auth/resend-verification');
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/envoyé/i);
+  });
+
+  it('retourne 401 sans session', async () => {
+    const res = await request(app).post('/api/auth/resend-verification');
+    expect(res.status).toBe(401);
+  });
+});

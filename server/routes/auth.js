@@ -27,6 +27,10 @@ function serializeUser(u) {
 }
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+// URL de base pour les liens dans les emails : cible le serveur directement.
+// En prod sur le même domaine : identique à CLIENT_URL. Si l'API est sur un sous-domaine,
+// utiliser SERVER_URL pour garantir l'accessibilité des liens.
+const SERVER_URL = process.env.SERVER_URL || CLIENT_URL;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const authLimiter = rateLimit({
@@ -51,7 +55,7 @@ router.post('/register', authLimiter, wrap(async (req, res) => {
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
   await db.resetTokens.create(user._id, token, expiresAt, { type: 'email_verify' });
-  const verifyUrl = `${CLIENT_URL}/api/auth/verify-email/${token}`;
+  const verifyUrl = `${SERVER_URL}/api/auth/verify-email/${token}`;
   await mailer.sendVerificationEmail(normalizedEmail, verifyUrl);
   res.status(201).json({ message: 'Vérifiez votre email pour activer votre compte' });
 }));
@@ -133,7 +137,7 @@ router.put('/email', requireAuth, wrap(async (req, res) => {
     type: 'email_change',
     pendingEmail: normalizedEmail,
   });
-  const verifyUrl = `${CLIENT_URL}/api/auth/verify-email/${token}`;
+  const verifyUrl = `${SERVER_URL}/api/auth/verify-email/${token}`;
   await mailer.sendEmailChangeEmail(normalizedEmail, verifyUrl);
   res.json({ message: `Un lien de confirmation a été envoyé à ${normalizedEmail}` });
 }));
@@ -168,7 +172,15 @@ router.get('/verify-email/:token', wrap(async (req, res) => {
       await db.resetTokens.markUsed(record.token);
       return res.redirect(`${CLIENT_URL}/login?error=email_taken`);
     }
-    await db.users.applyPendingEmail(record.userId, record.pendingEmail);
+    try {
+      await db.users.applyPendingEmail(record.userId, record.pendingEmail);
+    } catch (err) {
+      if (err.code === 11000) {
+        await db.resetTokens.markUsed(record.token);
+        return res.redirect(`${CLIENT_URL}/login?error=email_taken`);
+      }
+      throw err;
+    }
   } else {
     await db.users.setEmailVerified(record.userId);
   }
@@ -184,7 +196,7 @@ router.post('/resend-verification', requireAuth, authLimiter, wrap(async (req, r
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   await db.resetTokens.create(req.user._id ?? req.user.id, token, expiresAt, { type: 'email_verify' });
-  const verifyUrl = `${CLIENT_URL}/api/auth/verify-email/${token}`;
+  const verifyUrl = `${SERVER_URL}/api/auth/verify-email/${token}`;
   await mailer.sendVerificationEmail(req.user.email, verifyUrl);
   res.json({ message: 'Email de vérification envoyé' });
 }));
