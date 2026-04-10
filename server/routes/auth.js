@@ -24,6 +24,7 @@ function serializeUser(u) {
 }
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -39,11 +40,12 @@ const authLimiter = rateLimit({
 // après la création, évitant une double requête de connexion.
 router.post('/register', authLimiter, wrap(async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ message: 'Champs requis' });
+  if (!email || !EMAIL_RE.test(email) || !password) return res.status(400).json({ message: 'Champs requis' });
+  const normalizedEmail = email.trim().toLowerCase();
   const db = req.app.locals.db;
-  if (await db.users.emailExists(email)) return res.status(409).json({ message: 'Email déjà utilisé' });
+  if (await db.users.emailExists(normalizedEmail)) return res.status(409).json({ message: 'Email déjà utilisé' });
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await db.users.create({ email, passwordHash });
+  const user = await db.users.create({ email: normalizedEmail, passwordHash });
   req.login(user, (err) => {
     if (err) return res.status(500).json({ message: 'Erreur session' });
     res.json(serializeUser(user));
@@ -110,15 +112,16 @@ router.put('/profile', requireAuth, wrap(async (req, res) => {
 // PUT /api/auth/email — change l'email de l'utilisateur connecté
 router.put('/email', requireAuth, wrap(async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ message: 'Email requis' });
+  if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ message: 'Email invalide' });
+  const normalizedEmail = email.trim().toLowerCase();
   const db = req.app.locals.db;
   const selfId = String(req.user._id ?? req.user.id);
   // Vérifier le doublon uniquement sur les autres utilisateurs
-  const existing = await db.users.findByEmail(email);
+  const existing = await db.users.findByEmail(normalizedEmail);
   if (existing && String(existing._id ?? existing.id) !== selfId) {
     return res.status(409).json({ message: 'Email déjà utilisé' });
   }
-  const updated = await db.users.updateEmail(selfId, email);
+  const updated = await db.users.updateEmail(selfId, normalizedEmail);
   res.json(serializeUser(updated));
 }));
 
