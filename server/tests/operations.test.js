@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { setup, teardown, clearDB } = require('./helpers');
+const { setup, teardown, clearDB, createVerifiedUser } = require('./helpers');
 
 let app;
 beforeAll(async () => { app = await setup(); });
@@ -10,8 +10,9 @@ let bankId, periodId;
 
 beforeEach(async () => {
   await clearDB();
+  await createVerifiedUser(app, 'alice@test.com', 'pass1234');
   agent = request.agent(app);
-  await agent.post('/api/auth/register').send({ email: 'alice@test.com', password: 'pass1234' });
+  await agent.post('/api/auth/login').send({ email: 'alice@test.com', password: 'pass1234' });
   bankId = (await agent.post('/api/banks').send({ label: 'BNP' })).body._id;
   periodId = (await agent.post('/api/periods').send({ month: 4, year: 2025 })).body._id;
 });

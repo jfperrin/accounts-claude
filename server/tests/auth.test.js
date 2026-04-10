@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { setup, teardown, clearDB } = require('./helpers');
+const { setup, teardown, clearDB, createVerifiedUser } = require('./helpers');
 
 let app;
 beforeAll(async () => { app = await setup(); });
@@ -9,12 +9,11 @@ beforeEach(clearDB);
 const ALICE = { email: 'alice@test.com', password: 'pass1234' };
 
 describe('POST /api/auth/register', () => {
-  it('crée un compte et retourne une session', async () => {
+  it('crée un compte, envoie un email, retourne 201 sans session', async () => {
     const res = await request(app).post('/api/auth/register').send(ALICE);
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ email: 'alice@test.com' });
-    expect(res.body.passwordHash).toBeUndefined();
-    expect(res.headers['set-cookie']).toBeDefined();
+    expect(res.status).toBe(201);
+    expect(res.body.message).toMatch(/vérifi/i);
+    expect(res.headers['set-cookie']).toBeUndefined();
   });
 
   it('rejette un email dupliqué', async () => {
@@ -30,15 +29,23 @@ describe('POST /api/auth/register', () => {
 });
 
 describe('POST /api/auth/login', () => {
-  beforeEach(() => request(app).post('/api/auth/register').send(ALICE));
-
-  it('connecte avec des credentials valides', async () => {
+  it('connecte un compte vérifié', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send(ALICE);
     expect(res.status).toBe(200);
     expect(res.body.email).toBe('alice@test.com');
+    expect(res.body.emailVerified).toBe(true);
+  });
+
+  it('bloque un compte non-vérifié (403)', async () => {
+    await request(app).post('/api/auth/register').send(ALICE);
+    const res = await request(app).post('/api/auth/login').send(ALICE);
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/non vérifié/i);
   });
 
   it('rejette un mauvais mot de passe', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, password: 'wrong' });
     expect(res.status).toBe(401);
   });
@@ -55,20 +62,70 @@ describe('GET /api/auth/me', () => {
   });
 
   it("retourne l'utilisateur de la session active", async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
     const agent = request.agent(app);
-    await agent.post('/api/auth/register').send(ALICE);
+    await agent.post('/api/auth/login').send(ALICE);
     const res = await agent.get('/api/auth/me');
     expect(res.status).toBe(200);
     expect(res.body.email).toBe('alice@test.com');
     expect(res.body.passwordHash).toBeUndefined();
+    expect(res.body.emailVerified).toBe(true);
   });
 });
 
 describe('POST /api/auth/logout', () => {
   it('détruit la session', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
     const agent = request.agent(app);
-    await agent.post('/api/auth/register').send(ALICE);
+    await agent.post('/api/auth/login').send(ALICE);
     await agent.post('/api/auth/logout');
     expect((await agent.get('/api/auth/me')).status).toBe(401);
+  });
+});
+
+describe('GET /api/auth/verify-email/:token', () => {
+  it('valide un token email_verify et permet la connexion ensuite', async () => {
+    await request(app).post('/api/auth/register').send(ALICE);
+    const PasswordResetToken = require('../models/PasswordResetToken');
+    const user = await app.locals.db.users.findByEmail(ALICE.email);
+    const record = await PasswordResetToken.findOne({ userId: user._id, type: 'email_verify' });
+    expect(record).toBeTruthy();
+
+    const res = await request(app).get(`/api/auth/verify-email/${record.token}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toMatch(/verified=1/);
+
+    const loginRes = await request(app).post('/api/auth/login').send(ALICE);
+    expect(loginRes.status).toBe(200);
+    expect(loginRes.body.emailVerified).toBe(true);
+  });
+
+  it('redirige avec error sur token invalide', async () => {
+    const res = await request(app).get('/api/auth/verify-email/token-bidon');
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toMatch(/error=token_expired/);
+  });
+});
+
+describe('PUT /api/auth/email', () => {
+  let agent;
+  beforeEach(async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    agent = request.agent(app);
+    await agent.post('/api/auth/login').send(ALICE);
+  });
+
+  it("envoie un lien de vérification sans changer l'email immédiatement", async () => {
+    const res = await agent.put('/api/auth/email').send({ email: 'new@test.com' });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/lien/i);
+    const meRes = await agent.get('/api/auth/me');
+    expect(meRes.body.email).toBe(ALICE.email);
+  });
+
+  it('rejette un email déjà utilisé', async () => {
+    await createVerifiedUser(app, 'bob@test.com', 'pass1234');
+    const res = await agent.put('/api/auth/email').send({ email: 'bob@test.com' });
+    expect(res.status).toBe(409);
   });
 });

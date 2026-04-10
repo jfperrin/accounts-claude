@@ -1,5 +1,5 @@
 const request = require('supertest');
-const { setup, teardown, clearDB } = require('./helpers');
+const { setup, teardown, clearDB, createVerifiedUser } = require('./helpers');
 
 let app;
 beforeAll(async () => { app = await setup(); });
@@ -8,10 +8,12 @@ afterAll(teardown);
 let alice, bob;
 beforeEach(async () => {
   await clearDB();
+  await createVerifiedUser(app, 'alice@test.com', 'pass1234');
+  await createVerifiedUser(app, 'bob@test.com', 'pass1234');
   alice = request.agent(app);
   bob = request.agent(app);
-  await alice.post('/api/auth/register').send({ email: 'alice@test.com', password: 'pass1234' });
-  await bob.post('/api/auth/register').send({ email: 'bob@test.com', password: 'pass1234' });
+  await alice.post('/api/auth/login').send({ email: 'alice@test.com', password: 'pass1234' });
+  await bob.post('/api/auth/login').send({ email: 'bob@test.com', password: 'pass1234' });
 });
 
 describe('GET /api/banks', () => {
