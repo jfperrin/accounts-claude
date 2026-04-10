@@ -4,4 +4,6 @@ dist/
 .DS_Store
 .idea/
 server/dev.db
+server/dev.db-shm
+server/dev.db-wal
 .worktrees/
