@@ -44,6 +44,7 @@ module.exports = function configurePassport(db) {
 
         // Nouvel utilisateur Google : on crée le compte avec l'email du profil.
         const email = profile.emails?.[0]?.value;
+        if (!email) return done(null, false, { message: 'Aucune adresse email fournie par Google' });
 
         user = await db.users.create({ googleId: profile.id, email });
         done(null, user);

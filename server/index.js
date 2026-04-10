@@ -22,7 +22,7 @@ async function main() {
     mongoUri = process.env.MONGODB_URI; // transmis à app.js pour le session store
   }
 
-  // Crée ou met à jour le compte admin si ADMIN_USERNAME/PASSWORD/EMAIL sont définis
+  // Crée ou met à jour le compte admin si ADMIN_EMAIL/ADMIN_PASSWORD sont définis
   await require('./utils/ensureAdmin')(db);
 
   // createApp reçoit les repos et l'URI Mongo (null en dev) pour configurer
