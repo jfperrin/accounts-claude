@@ -84,7 +84,13 @@ function initSchema(db) {
     );
   `);
 
-  // Profile columns — idempotent: silently ignored if already exist
+  // Migration: drop username column if it exists (schema change from username to email)
+  // SQLite 3.35+ supports DROP COLUMN. The try/catch handles older versions gracefully.
+  try {
+    db.exec('ALTER TABLE users DROP COLUMN username');
+  } catch (_) { /* column already dropped or SQLite < 3.35 */ }
+
+  // Profile and role columns — idempotent: silently ignored if already exist
   for (const col of [
     "ALTER TABLE users ADD COLUMN role  TEXT NOT NULL DEFAULT 'user'",
     'ALTER TABLE users ADD COLUMN title      TEXT',
