@@ -8,18 +8,21 @@ const rateLimit = require('express-rate-limit');
 const wrap = require('../utils/asyncHandler');
 const requireAuth = require('../middleware/requireAuth');
 const upload = require('../middleware/upload');
+const { randomUUID } = require('crypto');
+const mailer = require('../utils/mailer');
 
 // Helper : sérialise un user Mongoose ou SQLite en réponse JSON uniforme
 function serializeUser(u) {
   return {
-    _id:       u._id ?? u.id,
-    email:     u.email ?? null,
-    role:      u.role ?? 'user',
-    title:     u.title     ?? null,
-    firstName: u.firstName ?? null,
-    lastName:  u.lastName  ?? null,
-    nickname:  u.nickname  ?? null,
-    avatarUrl: u.avatarUrl ?? null,
+    _id:           u._id ?? u.id,
+    email:         u.email ?? null,
+    emailVerified: u.emailVerified ?? false,
+    role:          u.role ?? 'user',
+    title:         u.title     ?? null,
+    firstName:     u.firstName ?? null,
+    lastName:      u.lastName  ?? null,
+    nickname:      u.nickname  ?? null,
+    avatarUrl:     u.avatarUrl ?? null,
   };
 }
 
@@ -35,9 +38,8 @@ const authLimiter = rateLimit({
 });
 
 // POST /api/auth/register
-// Crée un compte local. Vérifie la disponibilité de l'email avant d'hasher
-// le mot de passe (bcrypt, coût 12). req.login() démarre la session immédiatement
-// après la création, évitant une double requête de connexion.
+// Crée un compte local. Envoie un email de vérification.
+// Ne crée pas de session — l'utilisateur doit valider son email avant de se connecter.
 router.post('/register', authLimiter, wrap(async (req, res) => {
   const { email, password } = req.body;
   if (!email || !EMAIL_RE.test(email) || !password) return res.status(400).json({ message: 'Champs requis' });
@@ -46,20 +48,23 @@ router.post('/register', authLimiter, wrap(async (req, res) => {
   if (await db.users.emailExists(normalizedEmail)) return res.status(409).json({ message: 'Email déjà utilisé' });
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await db.users.create({ email: normalizedEmail, passwordHash });
-  req.login(user, (err) => {
-    if (err) return res.status(500).json({ message: 'Erreur session' });
-    res.json(serializeUser(user));
-  });
+  const token = randomUUID();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+  await db.resetTokens.create(user._id, token, expiresAt, { type: 'email_verify' });
+  const verifyUrl = `${CLIENT_URL}/api/auth/verify-email/${token}`;
+  await mailer.sendVerificationEmail(normalizedEmail, verifyUrl);
+  res.status(201).json({ message: 'Vérifiez votre email pour activer votre compte' });
 }));
 
 // POST /api/auth/login
-// Délègue à Passport LocalStrategy (définie dans config/passport.js).
-// On utilise la forme callback pour pouvoir renvoyer un JSON d'erreur personnalisé
-// plutôt que le comportement de redirect par défaut de passport.authenticate().
+// Délègue à Passport LocalStrategy. Bloque les comptes locaux non-vérifiés.
 router.post('/login', authLimiter, (req, res, next) => {
   passport.authenticate('local', (err, user, info) => {
     if (err) return next(err);
     if (!user) return res.status(401).json({ message: info?.message || 'Échec de connexion' });
+    if (!user.googleId && !user.emailVerified) {
+      return res.status(403).json({ message: 'Email non vérifié. Consultez votre boîte mail.' });
+    }
     req.login(user, (err) => {
       if (err) return next(err);
       res.json(serializeUser(user));
