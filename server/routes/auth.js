@@ -13,7 +13,7 @@ const upload = require('../middleware/upload');
 function serializeUser(u) {
   return {
     _id:       u._id ?? u.id,
-    username:  u.username,
+    email:     u.email ?? null,
     role:      u.role ?? 'user',
     title:     u.title     ?? null,
     firstName: u.firstName ?? null,
@@ -34,16 +34,16 @@ const authLimiter = rateLimit({
 });
 
 // POST /api/auth/register
-// Crée un compte local. Vérifie la disponibilité du username avant d'hasher
+// Crée un compte local. Vérifie la disponibilité de l'email avant d'hasher
 // le mot de passe (bcrypt, coût 12). req.login() démarre la session immédiatement
 // après la création, évitant une double requête de connexion.
 router.post('/register', authLimiter, wrap(async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ message: 'Champs requis' });
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ message: 'Champs requis' });
   const db = req.app.locals.db;
-  if (await db.users.usernameExists(username)) return res.status(409).json({ message: "Nom d'utilisateur déjà pris" });
+  if (await db.users.emailExists(email)) return res.status(409).json({ message: 'Email déjà utilisé' });
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await db.users.create({ username, passwordHash });
+  const user = await db.users.create({ email, passwordHash });
   req.login(user, (err) => {
     if (err) return res.status(500).json({ message: 'Erreur session' });
     res.json(serializeUser(user));
@@ -104,6 +104,21 @@ router.put('/profile', requireAuth, wrap(async (req, res) => {
   const { title, firstName, lastName, nickname } = req.body;
   const db = req.app.locals.db;
   const updated = await db.users.updateProfile(req.user._id, { title, firstName, lastName, nickname });
+  res.json(serializeUser(updated));
+}));
+
+// PUT /api/auth/email — change l'email de l'utilisateur connecté
+router.put('/email', requireAuth, wrap(async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email requis' });
+  const db = req.app.locals.db;
+  const selfId = String(req.user._id ?? req.user.id);
+  // Vérifier le doublon uniquement sur les autres utilisateurs
+  const existing = await db.users.findByEmail(email);
+  if (existing && String(existing._id ?? existing.id) !== selfId) {
+    return res.status(409).json({ message: 'Email déjà utilisé' });
+  }
+  const updated = await db.users.updateEmail(selfId, email);
   res.json(serializeUser(updated));
 }));
 
