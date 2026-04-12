@@ -1,3 +1,4 @@
+process.env.RATE_LIMIT_MAX = '1000';
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
