@@ -22,6 +22,7 @@ export default function LoginPage() {
   const emailTaken = searchParams.get('error') === 'email_taken';
   const tokenExpired = searchParams.get('error') === 'token_expired';
   const verified = searchParams.get('verified') === '1';
+  const passwordCancelled = searchParams.get('password_cancelled') === '1';
 
   useEffect(() => {
     fetchConfig().then((c) => setGoogleEnabled(c.googleEnabled)).catch(() => {});
@@ -89,6 +90,12 @@ export default function LoginPage() {
         {verified && (
           <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             Email vérifié avec succès. Vous pouvez maintenant vous connecter.
+          </div>
+        )}
+
+        {passwordCancelled && (
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            Votre changement de mot de passe a été annulé. Vous pouvez vous connecter avec votre ancien mot de passe.
           </div>
         )}
 
