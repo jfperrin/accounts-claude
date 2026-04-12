@@ -157,3 +157,126 @@ describe('POST /api/auth/resend-verification', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('PUT /api/auth/password', () => {
+  let agent;
+  beforeEach(async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    agent = request.agent(app);
+    await agent.post('/api/auth/login').send(ALICE);
+  });
+
+  it('retourne 401 sans session', async () => {
+    const res = await request(app).put('/api/auth/password').send({
+      currentPassword: ALICE.password,
+      newPassword: 'newpass1234',
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('retourne 400 si nouveau mot de passe trop court', async () => {
+    const res = await agent.put('/api/auth/password').send({
+      currentPassword: ALICE.password,
+      newPassword: 'abc',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/8 caractères/);
+  });
+
+  it('retourne 401 si mot de passe actuel incorrect', async () => {
+    const res = await agent.put('/api/auth/password').send({
+      currentPassword: 'wrongpassword',
+      newPassword: 'newpass1234',
+    });
+    expect(res.status).toBe(401);
+    expect(res.body.message).toMatch(/incorrect/i);
+  });
+
+  it('change le mot de passe et crée un token d\'annulation', async () => {
+    const res = await agent.put('/api/auth/password').send({
+      currentPassword: ALICE.password,
+      newPassword: 'newpass1234',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/mis à jour/i);
+
+    // Le nouveau mot de passe fonctionne
+    const loginNew = await request(app).post('/api/auth/login').send({
+      email: ALICE.email,
+      password: 'newpass1234',
+    });
+    expect(loginNew.status).toBe(200);
+
+    // L'ancien mot de passe ne fonctionne plus
+    const loginOld = await request(app).post('/api/auth/login').send(ALICE);
+    expect(loginOld.status).toBe(401);
+
+    // Un token password_change_cancel a été créé
+    const PasswordResetToken = require('../models/PasswordResetToken');
+    const user = await app.locals.db.users.findByEmail(ALICE.email);
+    const record = await PasswordResetToken.findOne({ userId: user._id, type: 'password_change_cancel' });
+    expect(record).toBeTruthy();
+    expect(record.oldPasswordHash).toBeTruthy();
+  });
+});
+
+describe('GET /api/auth/cancel-password-change/:token', () => {
+  it('redirige avec token_expired si token invalide', async () => {
+    const res = await request(app).get('/api/auth/cancel-password-change/bidon');
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toMatch(/error=token_expired/);
+  });
+
+  it('restaure l\'ancien mot de passe et redirige avec password_cancelled=1', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send(ALICE);
+
+    // Changer le mot de passe pour créer le token d'annulation
+    await agent.put('/api/auth/password').send({
+      currentPassword: ALICE.password,
+      newPassword: 'newpass1234',
+    });
+
+    // Récupérer le token depuis la DB
+    const PasswordResetToken = require('../models/PasswordResetToken');
+    const user = await app.locals.db.users.findByEmail(ALICE.email);
+    const record = await PasswordResetToken.findOne({ userId: user._id, type: 'password_change_cancel' });
+
+    // Annuler le changement
+    const res = await request(app).get(`/api/auth/cancel-password-change/${record.token}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toMatch(/password_cancelled=1/);
+
+    // L'ancien mot de passe fonctionne à nouveau
+    const loginOld = await request(app).post('/api/auth/login').send(ALICE);
+    expect(loginOld.status).toBe(200);
+
+    // Le nouveau mot de passe ne fonctionne plus
+    const loginNew = await request(app).post('/api/auth/login').send({
+      email: ALICE.email,
+      password: 'newpass1234',
+    });
+    expect(loginNew.status).toBe(401);
+  });
+
+  it('rejette un token déjà utilisé', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send(ALICE);
+    await agent.put('/api/auth/password').send({
+      currentPassword: ALICE.password,
+      newPassword: 'newpass1234',
+    });
+    const PasswordResetToken = require('../models/PasswordResetToken');
+    const user = await app.locals.db.users.findByEmail(ALICE.email);
+    const record = await PasswordResetToken.findOne({ userId: user._id, type: 'password_change_cancel' });
+
+    // Premier clic : OK
+    await request(app).get(`/api/auth/cancel-password-change/${record.token}`);
+    // Deuxième clic : token marqué used → token_expired
+    const res2 = await request(app).get(`/api/auth/cancel-password-change/${record.token}`);
+    expect(res2.status).toBe(302);
+    expect(res2.headers.location).toMatch(/error=token_expired/);
+  });
+});
