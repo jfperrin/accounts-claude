@@ -226,4 +226,47 @@ router.post('/reset-password/:token', wrap(async (req, res) => {
   res.json({ message: 'Mot de passe mis à jour' });
 }));
 
+// PUT /api/auth/password — change le mot de passe de l'utilisateur connecté
+// Vérifie le mot de passe actuel, enregistre le nouveau, envoie un email avec lien d'annulation.
+router.put('/password', requireAuth, authLimiter, wrap(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères' });
+  }
+  const db = req.app.locals.db;
+  const userWithHash = await db.users.findByIdWithHash(req.user._id ?? req.user.id);
+  if (!userWithHash.passwordHash) {
+    return res.status(400).json({ message: 'Compte Google, changement de mot de passe non disponible' });
+  }
+  const valid = await bcrypt.compare(currentPassword ?? '', userWithHash.passwordHash);
+  if (!valid) return res.status(401).json({ message: 'Mot de passe actuel incorrect' });
+
+  const oldPasswordHash = userWithHash.passwordHash;
+  const newHash = await bcrypt.hash(newPassword, 12);
+  await db.users.setPassword(req.user._id ?? req.user.id, newHash);
+
+  const token = randomUUID();
+  const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); // 12h
+  await db.resetTokens.create(req.user._id ?? req.user.id, token, expiresAt, {
+    type: 'password_change_cancel',
+    oldPasswordHash,
+  });
+  const cancelUrl = `${SERVER_URL}/api/auth/cancel-password-change/${token}`;
+  await mailer.sendPasswordChangeEmail(req.user.email, cancelUrl);
+  res.json({ message: 'Mot de passe mis à jour' });
+}));
+
+// GET /api/auth/cancel-password-change/:token — annule un changement de mot de passe
+// Restaure l'ancien hash, invalide le token, redirige vers /login?password_cancelled=1.
+router.get('/cancel-password-change/:token', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const record = await db.resetTokens.findValid(req.params.token);
+  if (!record || record.type !== 'password_change_cancel') {
+    return res.redirect(`${CLIENT_URL}/login?error=token_expired`);
+  }
+  await db.users.setPassword(record.userId, record.oldPasswordHash);
+  await db.resetTokens.markUsed(record.token);
+  res.redirect(`${CLIENT_URL}/login?password_cancelled=1`);
+}));
+
 module.exports = router;
