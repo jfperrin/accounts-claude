@@ -11,3 +11,6 @@ export const uploadAvatar = (file) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
+
+export const changePassword = (currentPassword, newPassword) =>
+  client.put('/auth/password', { currentPassword, newPassword });

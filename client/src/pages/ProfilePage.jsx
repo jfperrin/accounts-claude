@@ -26,6 +26,8 @@ export default function ProfilePage() {
   const [savingEmail, setSavingEmail] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target?.value ?? e }));
 
@@ -72,6 +74,32 @@ export default function ProfilePage() {
       toast.error(err.message || 'Erreur');
     } finally {
       setResending(false);
+    }
+  };
+
+  const onChangePassword = async (e) => {
+    e.preventDefault();
+    if (passwordForm.next !== passwordForm.confirm) {
+      toast.error('Les mots de passe ne correspondent pas');
+      return;
+    }
+    if (passwordForm.next.length < 8) {
+      toast.error('Le mot de passe doit faire au moins 8 caractères');
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      await profileApi.changePassword(passwordForm.current, passwordForm.next);
+      toast.success('Mot de passe mis à jour. Un email de confirmation vous a été envoyé.');
+      setPasswordForm({ current: '', next: '', confirm: '' });
+    } catch (err) {
+      if (err.response?.status === 401) {
+        toast.error('Mot de passe actuel incorrect');
+      } else {
+        toast.error(err.response?.data?.message || err.message || 'Erreur');
+      }
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -152,6 +180,43 @@ export default function ProfilePage() {
         </div>
         <Button type="submit" disabled={savingEmail} className="w-full">
           {savingEmail ? 'Enregistrement…' : "Mettre à jour l'email"}
+        </Button>
+      </form>
+
+      {/* Mot de passe */}
+      <form onSubmit={onChangePassword} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+        <div className="space-y-1.5">
+          <Label htmlFor="currentPassword">Mot de passe actuel</Label>
+          <Input
+            id="currentPassword"
+            type="password"
+            value={passwordForm.current}
+            onChange={(e) => setPasswordForm((f) => ({ ...f, current: e.target.value }))}
+            autoComplete="current-password"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="newPassword">Nouveau mot de passe</Label>
+          <Input
+            id="newPassword"
+            type="password"
+            value={passwordForm.next}
+            onChange={(e) => setPasswordForm((f) => ({ ...f, next: e.target.value }))}
+            autoComplete="new-password"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="confirmPassword">Confirmer le nouveau mot de passe</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            value={passwordForm.confirm}
+            onChange={(e) => setPasswordForm((f) => ({ ...f, confirm: e.target.value }))}
+            autoComplete="new-password"
+          />
+        </div>
+        <Button type="submit" disabled={savingPassword} className="w-full">
+          {savingPassword ? 'Enregistrement…' : 'Changer le mot de passe'}
         </Button>
       </form>
 
