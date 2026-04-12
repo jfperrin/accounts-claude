@@ -15,13 +15,14 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // Sérialise un user pour la liste admin (pas de passwordHash)
 function serializeAdminUser(u) {
   return {
-    _id:       u._id ?? u.id,
-    email:     u.email ?? null,
-    role:      u.role ?? 'user',
-    firstName: u.firstName ?? null,
-    lastName:  u.lastName ?? null,
-    nickname:  u.nickname ?? null,
-    createdAt: u.createdAt ?? null,
+    _id:           u._id ?? u.id,
+    email:         u.email ?? null,
+    emailVerified: u.emailVerified ?? false,
+    role:          u.role ?? 'user',
+    firstName:     u.firstName ?? null,
+    lastName:      u.lastName ?? null,
+    nickname:      u.nickname ?? null,
+    createdAt:     u.createdAt ?? null,
   };
 }
 
@@ -118,6 +119,15 @@ router.post('/users/:id/reset-password', wrap(async (req, res) => {
   await sendPasswordResetEmail(user.email, resetUrl);
 
   res.json({ message: 'Email de réinitialisation envoyé' });
+}));
+
+// POST /api/admin/users/:id/verify-email — marque l'email d'un utilisateur comme vérifié
+router.post('/users/:id/verify-email', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const user = await db.users.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'Utilisateur introuvable' });
+  const updated = await db.users.setEmailVerified(req.params.id);
+  res.json(serializeAdminUser(updated));
 }));
 
 module.exports = router;
