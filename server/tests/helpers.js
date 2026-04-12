@@ -1,3 +1,5 @@
+// Set a high rate limit so the test suite never hits the limiter.
+// Must be assigned before createApp() is called (rate limiter reads this at startup).
 process.env.RATE_LIMIT_MAX = '1000';
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');

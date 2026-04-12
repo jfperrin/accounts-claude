@@ -35,7 +35,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX ?? '20', 10),
+  max: parseInt(process.env.RATE_LIMIT_MAX ?? '20', 10) || 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Trop de tentatives, réessayez dans 15 minutes' },

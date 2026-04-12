@@ -192,6 +192,19 @@ describe('PUT /api/auth/password', () => {
     expect(res.body.message).toMatch(/incorrect/i);
   });
 
+  it('retourne 400 pour un compte sans mot de passe local', async () => {
+    // Retirer le mot de passe de Alice pour simuler un compte Google
+    const User = require('../models/User');
+    await User.findOneAndUpdate({ email: ALICE.email }, { $unset: { passwordHash: 1 } });
+
+    const res = await agent.put('/api/auth/password').send({
+      currentPassword: ALICE.password,
+      newPassword: 'newpass1234',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Google/i);
+  });
+
   it('change le mot de passe et crée un token d\'annulation', async () => {
     const res = await agent.put('/api/auth/password').send({
       currentPassword: ALICE.password,
