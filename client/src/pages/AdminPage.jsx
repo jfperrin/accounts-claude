@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, KeyRound, ShieldCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, KeyRound, ShieldCheck, MailCheck, CheckCircle2, XCircle } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import * as adminApi from '@/api/admin';
 import { Button } from '@/components/ui/button';
@@ -66,6 +66,16 @@ export default function AdminPage() {
     }
   };
 
+  const handleVerify = async (u) => {
+    try {
+      const updated = await adminApi.verifyEmail(u._id);
+      setUsers(prev => prev.map(x => x._id === updated._id ? updated : x));
+      toast.success(`Email de ${u.email} vérifié.`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Erreur.');
+    }
+  };
+
   const isSelf = (u) => u._id === (me?._id ?? me?.id);
 
   return (
@@ -89,6 +99,7 @@ export default function AdminPage() {
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Email</th>
                 <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Email</th>
+                <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Vérifié</th>
                 <th className="px-4 py-3 text-left font-medium">Rôle</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -101,6 +112,12 @@ export default function AdminPage() {
                     {isSelf(u) && <span className="ml-2 text-xs text-muted-foreground">(vous)</span>}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">{u.email ?? '—'}</td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {u.emailVerified
+                      ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      : <XCircle className="h-4 w-4 text-amber-500" />
+                    }
+                  </td>
                   <td className="px-4 py-3">
                     <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>
                       {u.role === 'admin' ? 'Admin' : 'Utilisateur'}
@@ -122,6 +139,14 @@ export default function AdminPage() {
                         title="Réinitialiser le mot de passe"
                       >
                         <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost"
+                        disabled={u.emailVerified}
+                        onClick={() => handleVerify(u)}
+                        title="Vérifier l'email"
+                      >
+                        <MailCheck className="h-4 w-4" />
                       </Button>
                       <Button
                         size="icon" variant="ghost"
