@@ -55,4 +55,19 @@ async function sendEmailChangeEmail(to, verifyUrl) {
   });
 }
 
-module.exports = { sendPasswordResetEmail, sendVerificationEmail, sendEmailChangeEmail };
+async function sendPasswordChangeEmail(to, cancelUrl) {
+  await send({
+    to,
+    subject: 'Votre mot de passe a été modifié — Comptes',
+    html: `
+      <p>Bonjour,</p>
+      <p>Le mot de passe de votre compte a été modifié.</p>
+      <p>Si vous êtes à l'origine de ce changement, ignorez cet email.</p>
+      <p>Dans le cas contraire, annulez le changement en cliquant ci-dessous :</p>
+      <p><a href="${cancelUrl}" style="background:#6366f1;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">Annuler le changement de mot de passe</a></p>
+      <p>Ce lien expire dans <strong>12 heures</strong>.</p>
+    `,
+  });
+}
+
+module.exports = { sendPasswordResetEmail, sendVerificationEmail, sendEmailChangeEmail, sendPasswordChangeEmail };
