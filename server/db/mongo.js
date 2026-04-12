@@ -166,8 +166,8 @@ const recurringOps = {
 
 // ─── RESET TOKENS ────────────────────────────────────────────────────────────────
 const resetTokens = {
-  create: (userId, token, expiresAt, { type = 'password_reset', pendingEmail = null } = {}) =>
-    PasswordResetToken.create({ token, userId, expiresAt, type, pendingEmail }),
+  create: (userId, token, expiresAt, { type = 'password_reset', pendingEmail = null, oldPasswordHash = null } = {}) =>
+    PasswordResetToken.create({ token, userId, expiresAt, type, pendingEmail, oldPasswordHash }),
 
   findValid: (token) =>
     PasswordResetToken.findOne({

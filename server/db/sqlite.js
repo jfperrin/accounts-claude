@@ -101,6 +101,7 @@ function initSchema(db) {
     'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0',
     "ALTER TABLE password_reset_tokens ADD COLUMN type TEXT NOT NULL DEFAULT 'password_reset'",
     'ALTER TABLE password_reset_tokens ADD COLUMN pending_email TEXT',
+    'ALTER TABLE password_reset_tokens ADD COLUMN old_password_hash TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -162,13 +163,14 @@ const mapRecurring = (row) => row && {
 };
 
 const mapResetToken = (row) => row && {
-  _id:          row.id,
-  token:        row.token,
-  userId:       row.user_id,
-  expiresAt:    new Date(row.expires_at),
-  used:         row.used === 1,
-  type:         row.type ?? 'password_reset',
-  pendingEmail: row.pending_email ?? null,
+  _id:             row.id,
+  token:           row.token,
+  userId:          row.user_id,
+  expiresAt:       new Date(row.expires_at),
+  used:            row.used === 1,
+  type:            row.type ?? 'password_reset',
+  pendingEmail:    row.pending_email ?? null,
+  oldPasswordHash: row.old_password_hash ?? null,
 };
 
 // Fragments SQL réutilisés pour les SELECT avec JOIN banks.
@@ -493,11 +495,11 @@ module.exports = function createSQLiteRepos() {
   // deleteByUser supprime tous les tokens d'un utilisateur (e.g. lors de la suppression du compte).
   // ─────────────────────────────────────────────
   const resetTokens = {
-    create(userId, token, expiresAt, { type = 'password_reset', pendingEmail = null } = {}) {
+    create(userId, token, expiresAt, { type = 'password_reset', pendingEmail = null, oldPasswordHash = null } = {}) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO password_reset_tokens (id, token, user_id, expires_at, type, pending_email) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, token, uid(userId), expiresAt.toISOString(), type, pendingEmail ?? null);
+        'INSERT INTO password_reset_tokens (id, token, user_id, expires_at, type, pending_email, old_password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, token, uid(userId), expiresAt.toISOString(), type, pendingEmail ?? null, oldPasswordHash ?? null);
       return mapResetToken(db.prepare('SELECT * FROM password_reset_tokens WHERE id = ?').get(id));
     },
 
