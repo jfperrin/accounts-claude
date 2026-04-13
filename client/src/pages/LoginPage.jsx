@@ -122,7 +122,7 @@ export default function LoginPage() {
 
         {unverifiedEmail && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            <p>Email non vérifié. Consultez votre boîte mail pour le lien d'activation.</p>
+            <p>Email non vérifié. Un nouveau lien d'activation vient de vous être envoyé.</p>
             {resendDone ? (
               <p className="mt-2 font-medium">Email renvoyé !</p>
             ) : (

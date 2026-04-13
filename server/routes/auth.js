@@ -63,11 +63,20 @@ router.post('/register', authLimiter, wrap(async (req, res) => {
 // POST /api/auth/login
 // Délègue à Passport LocalStrategy. Bloque les comptes locaux non-vérifiés.
 router.post('/login', authLimiter, (req, res, next) => {
-  passport.authenticate('local', (err, user, info) => {
+  passport.authenticate('local', async (err, user, info) => {
     if (err) return next(err);
     if (!user) return res.status(401).json({ message: info?.message || 'Échec de connexion' });
     if (!user.googleId && !user.emailVerified) {
-      return res.status(403).json({ message: 'Email non vérifié. Consultez votre boîte mail.' });
+      // Renvoie automatiquement un email de vérification à chaque tentative de connexion bloquée
+      try {
+        const db = req.app.locals.db;
+        const token = randomUUID();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await db.resetTokens.create(user._id ?? user.id, token, expiresAt, { type: 'email_verify' });
+        const verifyUrl = `${SERVER_URL}/api/auth/verify-email/${token}`;
+        await mailer.sendVerificationEmail(user.email, verifyUrl);
+      } catch (_) { /* ne pas bloquer la réponse 403 si l'envoi échoue */ }
+      return res.status(403).json({ message: 'Email non vérifié. Un lien de vérification vous a été envoyé.' });
     }
     req.login(user, (err) => {
       if (err) return next(err);
