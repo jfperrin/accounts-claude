@@ -189,16 +189,30 @@ router.get('/verify-email/:token', wrap(async (req, res) => {
 }));
 
 // POST /api/auth/resend-verification
-// Renvoie un email de vérification à l'utilisateur connecté non-vérifié.
-router.post('/resend-verification', requireAuth, authLimiter, wrap(async (req, res) => {
-  if (req.user.emailVerified) return res.status(400).json({ message: 'Email déjà vérifié' });
+// Accessible sans session (utilisateur bloqué au login faute de vérification).
+// Authentifié → utilise req.user. Non authentifié → attend { email } dans le body.
+// Répond toujours 200 pour éviter l'énumération d'adresses.
+router.post('/resend-verification', authLimiter, wrap(async (req, res) => {
+  const neutral = { message: 'Email de vérification envoyé' };
   const db = req.app.locals.db;
+
+  let user;
+  if (req.isAuthenticated()) {
+    user = req.user;
+  } else {
+    const { email } = req.body;
+    if (!email) return res.json(neutral);
+    user = await db.users.findByEmail(email.trim().toLowerCase());
+  }
+
+  if (!user || user.emailVerified || user.googleId) return res.json(neutral);
+
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  await db.resetTokens.create(req.user._id ?? req.user.id, token, expiresAt, { type: 'email_verify' });
+  await db.resetTokens.create(user._id ?? user.id, token, expiresAt, { type: 'email_verify' });
   const verifyUrl = `${SERVER_URL}/api/auth/verify-email/${token}`;
-  await mailer.sendVerificationEmail(req.user.email, verifyUrl);
-  res.json({ message: 'Email de vérification envoyé' });
+  await mailer.sendVerificationEmail(user.email, verifyUrl);
+  res.json(neutral);
 }));
 
 // GET /api/auth/reset-password/:token — vérifie la validité du token

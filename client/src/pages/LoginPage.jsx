@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Wallet, Globe, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
-import { config as fetchConfig } from '@/api/auth';
+import { config as fetchConfig, resendVerification } from '@/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,8 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [registered, setRegistered] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
   const { login, register } = useAuth();
   const [searchParams] = useSearchParams();
   const googleError = searchParams.get('error') === 'google';
@@ -32,6 +34,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setUnverifiedEmail(null);
+    setResendDone(false);
     try {
       if (tab === 'login') {
         await login(form);
@@ -119,7 +122,24 @@ export default function LoginPage() {
 
         {unverifiedEmail && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            Email non vérifié. Consultez votre boîte mail pour le lien d'activation.
+            <p>Email non vérifié. Consultez votre boîte mail pour le lien d'activation.</p>
+            {resendDone ? (
+              <p className="mt-2 font-medium">Email renvoyé !</p>
+            ) : (
+              <button
+                type="button"
+                disabled={resendLoading}
+                className="mt-2 font-medium underline disabled:opacity-50"
+                onClick={async () => {
+                  setResendLoading(true);
+                  try { await resendVerification(unverifiedEmail); setResendDone(true); }
+                  catch { toast.error('Erreur lors du renvoi'); }
+                  finally { setResendLoading(false); }
+                }}
+              >
+                {resendLoading ? 'Envoi…' : "Renvoyer l'email de vérification"}
+              </button>
+            )}
           </div>
         )}
 
