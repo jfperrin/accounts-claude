@@ -26,6 +26,8 @@ function serializeUser(u) {
   };
 }
 
+const ALLOWED_DAYS = [1, 30, 365];
+
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // URL de base pour les liens dans les emails : cible le serveur directement.
 // En prod sur le même domaine : identique à CLIENT_URL. Si l'API est sur un sous-domaine,
@@ -78,8 +80,23 @@ router.post('/login', authLimiter, (req, res, next) => {
       } catch (_) { /* ne pas bloquer la réponse 403 si l'envoi échoue */ }
       return res.status(403).json({ message: 'Email non vérifié. Un lien de vérification vous a été envoyé.' });
     }
-    req.login(user, (err) => {
+    const days = ALLOWED_DAYS.includes(Number(req.body.rememberDays))
+      ? Number(req.body.rememberDays)
+      : 30;
+    req.login(user, async (err) => {
       if (err) return next(err);
+      try {
+        const db = req.app.locals.db;
+        const rememberToken = randomUUID();
+        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        await db.resetTokens.create(user._id ?? user.id, rememberToken, expiresAt, { type: 'remember_me' });
+        res.cookie('remember_me', rememberToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: days * 24 * 60 * 60 * 1000,
+        });
+      } catch (_) { /* ne pas bloquer la connexion si la création du token échoue */ }
       res.json(serializeUser(user));
     });
   })(req, res, next);

@@ -55,6 +55,66 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(401);
   });
 
+  it('pose un cookie remember_me avec Max-Age 1 jour quand rememberDays=1', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 1 });
+    expect(res.status).toBe(200);
+    const cookies = res.headers['set-cookie'] ?? [];
+    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
+    expect(rmCookie).toBeDefined();
+    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
+    expect(maxAgeMatch).not.toBeNull();
+    expect(Number(maxAgeMatch[1])).toBe(1 * 24 * 60 * 60);
+  });
+
+  it('pose un cookie remember_me avec Max-Age 30 jours quand rememberDays=30', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
+    expect(res.status).toBe(200);
+    const cookies = res.headers['set-cookie'] ?? [];
+    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
+    expect(rmCookie).toBeDefined();
+    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
+    expect(maxAgeMatch).not.toBeNull();
+    expect(Number(maxAgeMatch[1])).toBe(30 * 24 * 60 * 60);
+  });
+
+  it('pose un cookie remember_me avec Max-Age 365 jours quand rememberDays=365', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 365 });
+    expect(res.status).toBe(200);
+    const cookies = res.headers['set-cookie'] ?? [];
+    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
+    expect(rmCookie).toBeDefined();
+    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
+    expect(maxAgeMatch).not.toBeNull();
+    expect(Number(maxAgeMatch[1])).toBe(365 * 24 * 60 * 60);
+  });
+
+  it('pose un cookie remember_me 30 jours par défaut si rememberDays absent', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app).post('/api/auth/login').send(ALICE);
+    expect(res.status).toBe(200);
+    const cookies = res.headers['set-cookie'] ?? [];
+    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
+    expect(rmCookie).toBeDefined();
+    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
+    expect(maxAgeMatch).not.toBeNull();
+    expect(Number(maxAgeMatch[1])).toBe(30 * 24 * 60 * 60);
+  });
+
+  it('pose un cookie remember_me 30 jours par défaut si rememberDays invalide', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 999 });
+    expect(res.status).toBe(200);
+    const cookies = res.headers['set-cookie'] ?? [];
+    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
+    expect(rmCookie).toBeDefined();
+    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
+    expect(maxAgeMatch).not.toBeNull();
+    expect(Number(maxAgeMatch[1])).toBe(30 * 24 * 60 * 60);
+  });
+
 });
 
 describe('GET /api/auth/me', () => {
