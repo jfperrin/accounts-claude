@@ -13,7 +13,7 @@ module.exports = (db) => async (req, res, next) => {
     if (!record || record.type !== 'remember_me') return next();
     const user = await db.users.findById(record.userId);
     if (!user) return next();
-    req.login(user, (err) => next(err ?? undefined));
+    req.login(user, (err) => { if (err) return next(err); next(); });
   } catch (_) {
     next();
   }
