@@ -128,7 +128,9 @@ router.get('/google/callback',
 router.post('/logout', wrap(async (req, res) => {
   const token = parseCookies(req.headers.cookie || '').remember_me;
   if (token) {
-    try { await req.app.locals.db.resetTokens.markUsed(token); } catch (_) {}
+    try { await req.app.locals.db.resetTokens.markUsed(token); } catch (e) {
+      console.error('[logout] failed to invalidate remember_me token:', e.message);
+    }
   }
   res.clearCookie('remember_me', {
     httpOnly: true,
