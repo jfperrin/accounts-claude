@@ -125,8 +125,12 @@ router.get('/google/callback',
 
 // POST /api/auth/logout
 // req.logout() (Passport) détruit la session côté serveur.
+// On efface aussi le cookie remember_me pour éviter la reconnexion automatique.
 router.post('/logout', (req, res) => {
-  req.logout(() => res.json({ message: 'Déconnecté' }));
+  req.logout(() => {
+    res.clearCookie('remember_me');
+    res.json({ message: 'Déconnecté' });
+  });
 });
 
 // GET /api/auth/me

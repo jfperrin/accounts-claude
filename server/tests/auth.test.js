@@ -294,6 +294,41 @@ describe('PUT /api/auth/password', () => {
   });
 });
 
+describe('middleware remember_me — auto-login', () => {
+  function extractRememberToken(res) {
+    const cookies = res.headers['set-cookie'] ?? [];
+    const c = cookies.find(s => s.startsWith('remember_me='));
+    if (!c) return null;
+    return c.split(';')[0].split('=')[1];
+  }
+
+  it('GET /api/auth/me retourne 200 avec un cookie remember_me valide (pas de session)', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const loginRes = await request(app).post('/api/auth/login').send(ALICE);
+    const token = extractRememberToken(loginRes);
+    expect(token).not.toBeNull();
+
+    // Nouvelle requête sans session (request(app) ne partage pas de cookies)
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', `remember_me=${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe(ALICE.email);
+  });
+
+  it('GET /api/auth/me retourne 401 avec un cookie remember_me invalide', async () => {
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', 'remember_me=token-bidon');
+    expect(res.status).toBe(401);
+  });
+
+  it('GET /api/auth/me retourne 401 sans cookie remember_me ni session', async () => {
+    const res = await request(app).get('/api/auth/me');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('GET /api/auth/cancel-password-change/:token', () => {
   it('redirige avec token_expired si token invalide', async () => {
     const res = await request(app).get('/api/auth/cancel-password-change/bidon');

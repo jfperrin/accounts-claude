@@ -63,6 +63,7 @@ module.exports = function createApp(db, mongoUri) {
 
   app.use(passport.initialize());
   app.use(passport.session()); // restaure req.user depuis la session à chaque requête
+  app.use(require('./middleware/remember')(db));
 
   // Les repos (users, banks, operations, periods, recurringOps) sont attachés à
   // app.locals.db pour être accessibles dans toutes les routes via req.app.locals.db.
