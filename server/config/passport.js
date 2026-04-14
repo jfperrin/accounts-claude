@@ -9,13 +9,13 @@ const bcrypt = require('bcryptjs');
 
 module.exports = function configurePassport(db) {
 
-  // --- Stratégie locale (username / password) ---
+  // --- Stratégie locale (email / password) ---
   // Passport appelle cette fonction à chaque POST /api/auth/login.
-  // On cherche l'utilisateur par nom, vérifie l'existence d'un hash
+  // On cherche l'utilisateur par email, vérifie l'existence d'un hash
   // (les comptes Google n'ont pas de mot de passe), puis compare avec bcrypt.
-  passport.use(new LocalStrategy(async (username, password, done) => {
+  passport.use(new LocalStrategy({ usernameField: 'email' }, async (email, password, done) => {
     try {
-      const user = await db.users.findByUsername(username);
+      const user = await db.users.findByEmail(email);
       if (!user) return done(null, false, { message: 'Utilisateur introuvable' });
       if (!user.passwordHash) return done(null, false, { message: 'Ce compte utilise la connexion Google' });
       const valid = await bcrypt.compare(password, user.passwordHash);
@@ -42,13 +42,11 @@ module.exports = function configurePassport(db) {
         let user = await db.users.findByGoogleId(profile.id);
         if (user) return done(null, user);
 
-        // Nouvel utilisateur Google : on génère un username depuis l'email ou le nom affiché.
-        // En cas de conflit (username déjà pris), on suffixe avec les 6 derniers chiffres du Google ID.
+        // Nouvel utilisateur Google : on crée le compte avec l'email du profil.
         const email = profile.emails?.[0]?.value;
-        let username = email || profile.displayName;
-        if (await db.users.usernameExists(username)) username = `${username}_${profile.id.slice(-6)}`;
+        if (!email) return done(null, false, { message: 'Aucune adresse email fournie par Google' });
 
-        user = await db.users.create({ googleId: profile.id, username, email });
+        user = await db.users.create({ googleId: profile.id, email });
         done(null, user);
       } catch (err) {
         done(err);

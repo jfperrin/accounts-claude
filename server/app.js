@@ -10,6 +10,7 @@ const passport = require('passport');
 const cors = require('cors');
 const helmet = require('helmet');
 const requireAuth = require('./middleware/requireAuth');
+const requireAdmin = require('./middleware/requireAdmin');
 
 // mongoUri est null en développement (SQLite) → on utilise MemoryStore pour les sessions.
 // En production, mongoUri est fourni → sessions persistées dans MongoDB via connect-mongo.
@@ -75,6 +76,7 @@ module.exports = function createApp(db, mongoUri) {
   app.use('/api/recurring-operations', requireAuth, require('./routes/recurringOperations'));
   app.use('/api/periods', requireAuth, require('./routes/periods'));
   app.use('/api/operations', requireAuth, require('./routes/operations'));
+  app.use('/api/admin', requireAuth, requireAdmin, require('./routes/admin'));
 
   // Sert le build Vite en production (client/dist copié dans server/public).
   // En dev, Vite tourne sur son propre port et ce bloc est ignoré.

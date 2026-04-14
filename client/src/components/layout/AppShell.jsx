@@ -1,27 +1,10 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-
-// Sidebar desktop (4 items)
-const NAV_ITEMS = [
-  { key: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
-  { key: '/banks', icon: Building2, label: 'Banques' },
-  { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
-  { key: '/history', icon: TrendingUp, label: 'Historique' },
-];
-
-// Bottom nav mobile (5 tabs — labels courts)
-const BOTTOM_TABS = [
-  { key: '/', icon: LayoutDashboard, label: 'Accueil' },
-  { key: '/banks', icon: Building2, label: 'Banques' },
-  { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
-  { key: '/history', icon: TrendingUp, label: 'Historique' },
-  { key: '/profile', icon: UserCircle, label: 'Profil' },
-];
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
@@ -29,7 +12,25 @@ export default function AppShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const displayName = user?.nickname || user?.username;
+  const isAdmin = user?.role === 'admin';
+
+  const NAV_ITEMS = [
+    { key: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
+    { key: '/banks', icon: Building2, label: 'Banques' },
+    { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
+    ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Administration' }] : []),
+  ];
+
+  const BOTTOM_TABS = [
+    { key: '/', icon: LayoutDashboard, label: 'Accueil' },
+    { key: '/banks', icon: Building2, label: 'Banques' },
+    { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
+    { key: '/profile', icon: UserCircle, label: 'Profil' },
+    ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Admin' }] : []),
+  ];
+
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+  const displayName = user?.nickname || fullName || user?.email;
   const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
   const avatarSrc = user?.avatarUrl ?? undefined;
 

@@ -16,10 +16,9 @@ export function AuthProvider({ children }) {
     return u;
   };
 
+  // register retourne { message } et n'ouvre pas de session
   const register = async (credentials) => {
-    const u = await authApi.register(credentials);
-    setUser(u);
-    return u;
+    return authApi.register(credentials);
   };
 
   const logout = async () => {

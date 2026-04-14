@@ -57,7 +57,11 @@
       "Bash(ssh:*)",
       "Bash(npx skills:*)",
       "Bash(find /data/git/github.com/accounts-claude -path /data/git/github.com/accounts-claude/*/node_modules -prune -o -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.jsx\" \\\\\\) -print)",
-      "Bash(npx expo:*)"
+      "Bash(npx expo:*)",
+      "Bash(npm test:*)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npm list:*)",
+      "Bash(wc -l /tmp/auth_part*.j)"
     ]
   }
 }

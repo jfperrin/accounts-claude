@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
 import * as profileApi from '@/api/profile';
+import { resendVerification } from '@/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,8 +21,13 @@ export default function ProfilePage() {
     lastName:  user?.lastName  ?? '',
     nickname:  user?.nickname  ?? '',
   });
+  const [email, setEmail] = useState(user?.email ?? '');
   const [saving, setSaving] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target?.value ?? e }));
 
@@ -42,6 +48,61 @@ export default function ProfilePage() {
     }
   };
 
+  const onSaveEmail = async (e) => {
+    e.preventDefault();
+    setSavingEmail(true);
+    try {
+      const data = await profileApi.updateEmail(email);
+      toast.success(data.message || 'Un lien de confirmation a été envoyé');
+    } catch (err) {
+      if (err.response?.status === 409) {
+        toast.error('Adresse email déjà utilisée');
+      } else {
+        toast.error(err.message || 'Erreur');
+      }
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const onResendVerification = async () => {
+    setResending(true);
+    try {
+      await resendVerification();
+      toast.success('Email de vérification envoyé');
+    } catch (err) {
+      toast.error(err.message || 'Erreur');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const onChangePassword = async (e) => {
+    e.preventDefault();
+    if (passwordForm.next !== passwordForm.confirm) {
+      toast.error('Les mots de passe ne correspondent pas');
+      return;
+    }
+    if (passwordForm.next.length < 8) {
+      toast.error('Le mot de passe doit faire au moins 8 caractères');
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      await profileApi.changePassword(passwordForm.current, passwordForm.next);
+      toast.success('Mot de passe mis à jour. Un email de confirmation vous a été envoyé.');
+      setPasswordForm({ current: '', next: '', confirm: '' });
+    } catch (err) {
+      if (err.response?.status === 401) {
+        toast.error('Mot de passe actuel incorrect');
+      } else {
+        toast.error(err.response?.data?.message || err.message || 'Erreur');
+      }
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const onAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -51,20 +112,36 @@ export default function ProfilePage() {
       updateUser(updated);
       toast.success('Avatar mis à jour');
     } catch (err) {
-      toast.error(err.message || 'Erreur lors de l\'upload');
+      toast.error(err.message || "Erreur lors de l'upload");
     } finally {
       setUploading(false);
       e.target.value = '';
     }
   };
 
-  const displayName = user?.nickname || user?.username;
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
+  const displayName = user?.nickname || fullName || user?.email;
   const initials = displayName?.slice(0, 2).toUpperCase() ?? '??';
   const avatarSrc = user?.avatarUrl ?? undefined;
 
   return (
     <div className="mx-auto max-w-lg space-y-8">
       <h1 className="text-xl font-extrabold text-foreground">Mon profil</h1>
+
+      {/* Bannière email non-vérifié */}
+      {user?.emailVerified === false && (
+        <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>Votre adresse email n'est pas encore vérifiée.</span>
+          <button
+            type="button"
+            onClick={onResendVerification}
+            disabled={resending}
+            className="ml-3 shrink-0 font-semibold underline hover:no-underline disabled:opacity-50"
+          >
+            {resending ? 'Envoi…' : 'Renvoyer'}
+          </button>
+        </div>
+      )}
 
       {/* Avatar */}
       <div className="flex flex-col items-center gap-4">
@@ -86,11 +163,64 @@ export default function ProfilePage() {
           disabled={uploading}
           onClick={() => fileRef.current?.click()}
         >
-          {uploading ? 'Envoi…' : 'Changer l\'avatar'}
+          {uploading ? 'Envoi…' : "Changer l'avatar"}
         </Button>
       </div>
 
-      {/* Form */}
+      {/* Email */}
+      <form onSubmit={onSaveEmail} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Adresse email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <Button type="submit" disabled={savingEmail} className="w-full">
+          {savingEmail ? 'Enregistrement…' : "Mettre à jour l'email"}
+        </Button>
+      </form>
+
+      {/* Mot de passe */}
+      <form onSubmit={onChangePassword} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
+        <div className="space-y-1.5">
+          <Label htmlFor="currentPassword">Mot de passe actuel</Label>
+          <Input
+            id="currentPassword"
+            type="password"
+            value={passwordForm.current}
+            onChange={(e) => setPasswordForm((f) => ({ ...f, current: e.target.value }))}
+            autoComplete="current-password"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="newPassword">Nouveau mot de passe</Label>
+          <Input
+            id="newPassword"
+            type="password"
+            value={passwordForm.next}
+            onChange={(e) => setPasswordForm((f) => ({ ...f, next: e.target.value }))}
+            autoComplete="new-password"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="confirmPassword">Confirmer le nouveau mot de passe</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            value={passwordForm.confirm}
+            onChange={(e) => setPasswordForm((f) => ({ ...f, confirm: e.target.value }))}
+            autoComplete="new-password"
+          />
+        </div>
+        <Button type="submit" disabled={savingPassword} className="w-full">
+          {savingPassword ? 'Enregistrement…' : 'Changer le mot de passe'}
+        </Button>
+      </form>
+
+      {/* Profil */}
       <form onSubmit={onSave} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
         <div className="space-y-1.5">
           <Label>Titre</Label>
@@ -114,14 +244,14 @@ export default function ProfilePage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="nickname">Surnom (affiché en haut)</Label>
-          <Input id="nickname" value={form.nickname} onChange={set('nickname')} placeholder={user?.username} />
+          <Input id="nickname" value={form.nickname} onChange={set('nickname')} placeholder={user?.email} />
         </div>
         <Button type="submit" disabled={saving} className="w-full">
           {saving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       </form>
 
-      {/* Déconnexion — utile sur mobile où le header ne l'affiche plus */}
+      {/* Déconnexion */}
       <button
         type="button"
         onClick={logout}

@@ -15,17 +15,18 @@ const User = require('../models/User');
 const Operation = require('../models/Operation');
 const Period = require('../models/Period');
 const RecurringOperation = require('../models/RecurringOperation');
+const PasswordResetToken = require('../models/PasswordResetToken');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
 // l'exposer dans req.user. findByIdWithHash est réservé à l'authentification.
 const users = {
-  findByUsername: (username) => User.findOne({ username }),
+  findByEmail: (email) => User.findOne({ email }),
   findByGoogleId: (googleId) => User.findOne({ googleId }),
   findById: (id) => User.findById(id).select('-passwordHash'),
   findByIdWithHash: (id) => User.findById(id),
-  create: (data) => User.create(data),
-  usernameExists: async (username) => !!(await User.findOne({ username })),
+  create: (data) => User.create({ emailVerified: !!data.googleId, ...data }),
+  emailExists: async (email) => !!(await User.findOne({ email })),
 
   updateProfile: (id, { title, firstName, lastName, nickname }) =>
     User.findByIdAndUpdate(
@@ -34,8 +35,32 @@ const users = {
       { new: true },
     ).select('-passwordHash'),
 
+  updateEmail: (id, email) =>
+    User.findByIdAndUpdate(id, { $set: { email } }, { new: true }).select('-passwordHash'),
+
   updateAvatar: (id, avatarUrl) =>
     User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { new: true }).select('-passwordHash'),
+
+  findAll: () =>
+    User.find({}).select('-passwordHash').sort({ createdAt: -1 }),
+
+  updateByAdmin: (id, { email, role }) =>
+    User.findByIdAndUpdate(
+      id,
+      { $set: { email, role } },
+      { new: true },
+    ).select('-passwordHash'),
+
+  deleteUser: (id) => User.findByIdAndDelete(id),
+
+  setPassword: (id, passwordHash) =>
+    User.findByIdAndUpdate(id, { $set: { passwordHash } }, { new: true }).select('-passwordHash'),
+
+  setEmailVerified: (id) =>
+    User.findByIdAndUpdate(id, { $set: { emailVerified: true } }, { new: true }).select('-passwordHash'),
+
+  applyPendingEmail: (id, email) =>
+    User.findByIdAndUpdate(id, { $set: { email, emailVerified: true } }, { new: true }).select('-passwordHash'),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────
@@ -44,6 +69,7 @@ const users = {
 // impossible de modifier la banque d'un autre utilisateur même en connaissant l'ID.
 const banks = {
   findByUser: (userId) => Bank.find({ userId }).sort('label'),
+  deleteByUser: (userId) => Bank.deleteMany({ userId }),
   create: ({ label, userId }) => Bank.create({ label, userId }),
   update: (id, userId, data) =>
     Bank.findOneAndUpdate({ _id: id, userId }, data, { returnDocument: 'after' }),
@@ -105,6 +131,7 @@ const operations = {
 // la suppression en cascade des opérations de la période.
 const periods = {
   findByUser: (userId) => Period.find({ userId }).sort({ year: -1, month: -1 }),
+  deleteByUser: (userId) => Period.deleteMany({ userId }),
   create: (data) => Period.create(data),
   findOne: (id, userId) => Period.findOne({ _id: id, userId }),
   updateBalances: (id, userId, balances) =>
@@ -123,6 +150,8 @@ const recurringOps = {
 
   findByUserRaw: (userId) => RecurringOperation.find({ userId }),
 
+  deleteByUser: (userId) => RecurringOperation.deleteMany({ userId }),
+
   create: async (data) => {
     const op = await RecurringOperation.create(data);
     return op.populate('bankId', 'label');
@@ -135,4 +164,23 @@ const recurringOps = {
   delete: (id, userId) => RecurringOperation.findOneAndDelete({ _id: id, userId }),
 };
 
-module.exports = { users, banks, operations, periods, recurringOps };
+// ─── RESET TOKENS ────────────────────────────────────────────────────────────────
+const resetTokens = {
+  create: (userId, token, expiresAt, { type = 'password_reset', pendingEmail = null, oldPasswordHash = null } = {}) =>
+    PasswordResetToken.create({ token, userId, expiresAt, type, pendingEmail, oldPasswordHash }),
+
+  findValid: (token) =>
+    PasswordResetToken.findOne({
+      token,
+      used: false,
+      expiresAt: { $gt: new Date() },
+    }),
+
+  markUsed: (token) =>
+    PasswordResetToken.updateOne({ token }, { $set: { used: true } }),
+
+  deleteByUser: (userId) =>
+    PasswordResetToken.deleteMany({ userId }),
+};
+
+module.exports = { users, banks, operations, periods, recurringOps, resetTokens };

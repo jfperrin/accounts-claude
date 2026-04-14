@@ -24,10 +24,9 @@ function initSchema(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id          TEXT PRIMARY KEY,
-      username    TEXT NOT NULL UNIQUE,
+      email       TEXT NOT NULL UNIQUE,
       password_hash TEXT,           -- NULL pour les comptes Google (pas de mot de passe local)
       google_id   TEXT UNIQUE,      -- NULL pour les comptes locaux
-      email       TEXT,
       created_at  TEXT DEFAULT (datetime('now')),
       updated_at  TEXT DEFAULT (datetime('now'))
     );
@@ -74,15 +73,35 @@ function initSchema(db) {
       created_at   TEXT DEFAULT (datetime('now')),
       updated_at   TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id         TEXT PRIMARY KEY,
+      token      TEXT NOT NULL UNIQUE,
+      user_id    TEXT NOT NULL REFERENCES users(id),
+      expires_at TEXT NOT NULL,
+      used       INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
-  // Profile columns — idempotent: silently ignored if already exist
+  // Migration: drop username column if it exists (schema change from username to email)
+  // SQLite 3.35+ supports DROP COLUMN. The try/catch handles older versions gracefully.
+  try {
+    db.exec('ALTER TABLE users DROP COLUMN username');
+  } catch (_) { /* column already dropped or SQLite < 3.35 */ }
+
+  // Profile and role columns — idempotent: silently ignored if already exist
   for (const col of [
+    "ALTER TABLE users ADD COLUMN role  TEXT NOT NULL DEFAULT 'user'",
     'ALTER TABLE users ADD COLUMN title      TEXT',
     'ALTER TABLE users ADD COLUMN first_name TEXT',
     'ALTER TABLE users ADD COLUMN last_name  TEXT',
     'ALTER TABLE users ADD COLUMN nickname   TEXT',
     'ALTER TABLE users ADD COLUMN avatar_url TEXT',
+    'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0',
+    "ALTER TABLE password_reset_tokens ADD COLUMN type TEXT NOT NULL DEFAULT 'password_reset'",
+    'ALTER TABLE password_reset_tokens ADD COLUMN pending_email TEXT',
+    'ALTER TABLE password_reset_tokens ADD COLUMN old_password_hash TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -93,11 +112,12 @@ function initSchema(db) {
 // vers le format attendu par le client (camelCase, boolean, objet).
 
 const mapUser = (row) => row && {
-  _id:          row.id,
-  username:     row.username,
-  passwordHash: row.password_hash, // undefined si la colonne n'était pas dans le SELECT
-  googleId:     row.google_id,
-  email:        row.email,
+  _id:           row.id,
+  passwordHash:  row.password_hash,
+  googleId:      row.google_id,
+  email:         row.email ?? null,
+  emailVerified: row.email_verified === 1,
+  role:          row.role ?? 'user',
   title:        row.title ?? null,
   firstName:    row.first_name ?? null,
   lastName:     row.last_name ?? null,
@@ -142,6 +162,17 @@ const mapRecurring = (row) => row && {
   userId: row.user_id,
 };
 
+const mapResetToken = (row) => row && {
+  _id:             row.id,
+  token:           row.token,
+  userId:          row.user_id,
+  expiresAt:       new Date(row.expires_at),
+  used:            row.used === 1,
+  type:            row.type ?? 'password_reset',
+  pendingEmail:    row.pending_email ?? null,
+  oldPasswordHash: row.old_password_hash ?? null,
+};
+
 // Fragments SQL réutilisés pour les SELECT avec JOIN banks.
 // Le JOIN LEFT permet de récupérer l'opération même si la banque a été supprimée.
 const OPS_WITH_BANK = `
@@ -170,28 +201,29 @@ module.exports = function createSQLiteRepos() {
   // findByIdWithHash est réservé à l'authentification locale.
   // ─────────────────────────────────────────────
   const users = {
-    findByUsername: (username) =>
-      mapUser(db.prepare('SELECT * FROM users WHERE username = ?').get(username)),
+    findByEmail: (email) =>
+      mapUser(db.prepare('SELECT * FROM users WHERE email = ?').get(email)),
 
     findByGoogleId: (googleId) =>
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, username, email, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
 
-    create({ username, passwordHash, googleId, email }) {
+    create({ email, passwordHash, googleId, role, emailVerified: emailVerifiedParam }) {
       const id = randomUUID();
+      const emailVerified = emailVerifiedParam ? 1 : (googleId ? 1 : 0);
       db.prepare(
-        'INSERT INTO users (id, username, password_hash, google_id, email) VALUES (?, ?, ?, ?, ?)',
-      ).run(id, username, passwordHash ?? null, googleId ?? null, email ?? null);
-      return { _id: id, username };
+        'INSERT INTO users (id, email, password_hash, google_id, role, email_verified) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, email, passwordHash ?? null, googleId ?? null, role ?? 'user', emailVerified);
+      return this.findById(id);
     },
 
-    usernameExists: (username) =>
-      !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(username),
+    emailExists: (email) =>
+      !!db.prepare('SELECT 1 FROM users WHERE email = ?').get(email),
 
     updateProfile(id, { title, firstName, lastName, nickname }) {
       db.prepare(
@@ -200,9 +232,50 @@ module.exports = function createSQLiteRepos() {
       return this.findById(id);
     },
 
+    updateEmail(id, email) {
+      db.prepare(`UPDATE users SET email=?, updated_at=datetime('now') WHERE id=?`)
+        .run(email, uid(id));
+      return this.findById(id);
+    },
+
     updateAvatar(id, avatarUrl) {
       db.prepare(`UPDATE users SET avatar_url=?, updated_at=datetime('now') WHERE id=?`)
         .run(avatarUrl ?? null, uid(id));
+      return this.findById(id);
+    },
+
+    findAll() {
+      return db.prepare(
+        'SELECT id, email, email_verified, role, title, first_name, last_name, nickname, avatar_url, created_at FROM users ORDER BY created_at DESC',
+      ).all().map(mapUser);
+    },
+
+    updateByAdmin(id, { email, role }) {
+      db.prepare(
+        `UPDATE users SET email=?, role=?, updated_at=datetime('now') WHERE id=?`,
+      ).run(email ?? null, role ?? 'user', uid(id));
+      return this.findById(id);
+    },
+
+    deleteUser(id) {
+      db.prepare('DELETE FROM users WHERE id = ?').run(uid(id));
+    },
+
+    setPassword(id, passwordHash) {
+      db.prepare(
+        `UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?`
+      ).run(passwordHash, uid(id));
+    },
+
+    setEmailVerified(id) {
+      db.prepare(`UPDATE users SET email_verified = 1, updated_at = datetime('now') WHERE id = ?`).run(uid(id));
+      return this.findById(id);
+    },
+
+    applyPendingEmail(id, email) {
+      db.prepare(
+        `UPDATE users SET email = ?, email_verified = 1, updated_at = datetime('now') WHERE id = ?`
+      ).run(email, uid(id));
       return this.findById(id);
     },
   };
@@ -231,6 +304,9 @@ module.exports = function createSQLiteRepos() {
 
     delete: (id, userId) =>
       db.prepare('DELETE FROM banks WHERE id = ? AND user_id = ?').run(id, uid(userId)),
+
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM banks WHERE user_id = ?').run(uid(userId)),
   };
 
   // ─────────────────────────────────────────────
@@ -358,6 +434,9 @@ module.exports = function createSQLiteRepos() {
       db.prepare('DELETE FROM periods WHERE id = ? AND user_id = ?').run(id, uid(userId));
       return mapPeriod(row); // retourné pour déclencher la suppression des opérations associées
     },
+
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM periods WHERE user_id = ?').run(uid(userId)),
   };
 
   // ─────────────────────────────────────────────
@@ -403,7 +482,43 @@ module.exports = function createSQLiteRepos() {
 
     delete: (id, userId) =>
       db.prepare('DELETE FROM recurring_operations WHERE id = ? AND user_id = ?').run(id, uid(userId)),
+
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM recurring_operations WHERE user_id = ?').run(uid(userId)),
   };
 
-  return { users, banks, operations, periods, recurringOps };
+  // ─────────────────────────────────────────────
+  // RESET TOKENS
+  // Jetons temporaires pour la réinitialisation de mot de passe.
+  // findValid retourne un token non-utilisé et non-expiré.
+  // markUsed marque le token comme consommé pour l'empêcher de réutilisation.
+  // deleteByUser supprime tous les tokens d'un utilisateur (e.g. lors de la suppression du compte).
+  // ─────────────────────────────────────────────
+  const resetTokens = {
+    create(userId, token, expiresAt, { type = 'password_reset', pendingEmail = null, oldPasswordHash = null } = {}) {
+      const id = randomUUID();
+      db.prepare(
+        'INSERT INTO password_reset_tokens (id, token, user_id, expires_at, type, pending_email, old_password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, token, uid(userId), expiresAt.toISOString(), type, pendingEmail ?? null, oldPasswordHash ?? null);
+      return mapResetToken(db.prepare('SELECT * FROM password_reset_tokens WHERE id = ?').get(id));
+    },
+
+    findValid(token) {
+      return mapResetToken(
+        db.prepare(
+          "SELECT * FROM password_reset_tokens WHERE token = ? AND used = 0 AND expires_at > datetime('now')",
+        ).get(token),
+      );
+    },
+
+    markUsed(token) {
+      db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE token = ?').run(token);
+    },
+
+    deleteByUser(userId) {
+      db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(uid(userId));
+    },
+  };
+
+  return { users, banks, operations, periods, recurringOps, resetTokens };
 };
