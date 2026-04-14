@@ -54,6 +54,66 @@ describe('POST /api/auth/login', () => {
     const res = await request(app).post('/api/auth/login').send({ email: 'nobody@test.com', password: 'x' });
     expect(res.status).toBe(401);
   });
+
+  it('applique maxAge 1 jour quand rememberDays=1', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ ...ALICE, rememberDays: 1 });
+    expect(res.status).toBe(200);
+    const cookie = res.headers['set-cookie']?.[0] ?? '';
+    const match = cookie.match(/Max-Age=(\d+)/i);
+    expect(match).not.toBeNull();
+    expect(Number(match[1])).toBe(1 * 24 * 60 * 60); // 86400 secondes
+  });
+
+  it('applique maxAge 30 jours quand rememberDays=30', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ ...ALICE, rememberDays: 30 });
+    expect(res.status).toBe(200);
+    const cookie = res.headers['set-cookie']?.[0] ?? '';
+    const match = cookie.match(/Max-Age=(\d+)/i);
+    expect(match).not.toBeNull();
+    expect(Number(match[1])).toBe(30 * 24 * 60 * 60); // 2592000 secondes
+  });
+
+  it('applique maxAge 365 jours quand rememberDays=365', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ ...ALICE, rememberDays: 365 });
+    expect(res.status).toBe(200);
+    const cookie = res.headers['set-cookie']?.[0] ?? '';
+    const match = cookie.match(/Max-Age=(\d+)/i);
+    expect(match).not.toBeNull();
+    expect(Number(match[1])).toBe(365 * 24 * 60 * 60); // 31536000 secondes
+  });
+
+  it('utilise 30 jours par défaut si rememberDays absent', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send(ALICE); // sans rememberDays
+    expect(res.status).toBe(200);
+    const cookie = res.headers['set-cookie']?.[0] ?? '';
+    const match = cookie.match(/Max-Age=(\d+)/i);
+    expect(match).not.toBeNull();
+    expect(Number(match[1])).toBe(30 * 24 * 60 * 60);
+  });
+
+  it('utilise 30 jours par défaut si rememberDays invalide', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ ...ALICE, rememberDays: 999 });
+    expect(res.status).toBe(200);
+    const cookie = res.headers['set-cookie']?.[0] ?? '';
+    const match = cookie.match(/Max-Age=(\d+)/i);
+    expect(match).not.toBeNull();
+    expect(Number(match[1])).toBe(30 * 24 * 60 * 60);
+  });
 });
 
 describe('GET /api/auth/me', () => {
