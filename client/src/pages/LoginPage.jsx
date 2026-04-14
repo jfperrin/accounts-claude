@@ -9,6 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
+const REMEMBER_OPTIONS = [
+  { label: '1 jour', value: 1 },
+  { label: '1 mois', value: 30 },
+  { label: '1 an', value: 365 },
+];
+
 export default function LoginPage() {
   const [tab, setTab] = useState('login');
   const [loading, setLoading] = useState(false);
@@ -206,17 +212,18 @@ export default function LoginPage() {
           </div>
           {tab === 'login' && (
             <div className="space-y-1.5">
-              <Label>Rester connecté</Label>
-              <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
-                {[
-                  { label: '1 jour', value: 1 },
-                  { label: '1 mois', value: 30 },
-                  { label: '1 an', value: 365 },
-                ].map(({ label, value }) => (
+              <Label id="remember-label">Rester connecté</Label>
+              <div
+                className="flex gap-1 rounded-xl bg-slate-100 p-1"
+                role="group"
+                aria-labelledby="remember-label"
+              >
+                {REMEMBER_OPTIONS.map(({ label, value }) => (
                   <button
                     type="button"
                     key={value}
                     onClick={() => setRememberDays(value)}
+                    aria-pressed={rememberDays === value}
                     className={cn(
                       'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                       rememberDays === value

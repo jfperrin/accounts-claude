@@ -115,4 +115,18 @@ describe('LoginPage', () => {
       })
     );
   });
+
+  it("réinitialise rememberDays à 30 lors du changement d'onglet", async () => {
+    mockLogin.mockResolvedValue({ _id: '1', email: 'a@b.com' });
+    render(<LoginPage />, { wrapper: Wrapper });
+    await userEvent.click(screen.getByRole('button', { name: '1 jour' }));
+    await userEvent.click(screen.getByText('Inscription'));
+    await userEvent.click(screen.getByText('Connexion'));
+    await userEvent.type(screen.getByLabelText('Adresse email'), 'a@b.com');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'pass1234');
+    await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
+    await waitFor(() =>
+      expect(mockLogin).toHaveBeenCalledWith({ email: 'a@b.com', password: 'pass1234', rememberDays: 30 })
+    );
+  });
 });
