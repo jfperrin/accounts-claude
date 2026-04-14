@@ -27,7 +27,6 @@ function serializeUser(u) {
 }
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-const ALLOWED_DAYS = [1, 30, 365];
 // URL de base pour les liens dans les emails : cible le serveur directement.
 // En prod sur le même domaine : identique à CLIENT_URL. Si l'API est sur un sous-domaine,
 // utiliser SERVER_URL pour garantir l'accessibilité des liens.
@@ -79,30 +78,8 @@ router.post('/login', authLimiter, (req, res, next) => {
       } catch (_) { /* ne pas bloquer la réponse 403 si l'envoi échoue */ }
       return res.status(403).json({ message: 'Email non vérifié. Un lien de vérification vous a été envoyé.' });
     }
-    const days = ALLOWED_DAYS.includes(Number(req.body.rememberDays))
-      ? Number(req.body.rememberDays)
-      : 30;
     req.login(user, (err) => {
       if (err) return next(err);
-      // req.login() calls req.session.regenerate() internally, creating a new session
-      // object with the default cookie options. We apply maxAge after regeneration so
-      // it takes effect on the new session. We also patch the Cookie#data getter to
-      // include `maxAge` (in seconds) so that cookie.serialize() emits Max-Age in the
-      // Set-Cookie header (express-session only serialises `expires` by default).
-      const maxAgeMs = days * 24 * 60 * 60 * 1000;
-      const maxAgeSecs = days * 24 * 60 * 60;
-      req.session.cookie.maxAge = maxAgeMs;
-      const proto = Object.getPrototypeOf(req.session.cookie);
-      const originalDataDescriptor = Object.getOwnPropertyDescriptor(proto, 'data');
-      if (originalDataDescriptor?.get) {
-        Object.defineProperty(req.session.cookie, 'data', {
-          get() {
-            const base = originalDataDescriptor.get.call(this);
-            return { ...base, maxAge: maxAgeSecs };
-          },
-          configurable: true,
-        });
-      }
       res.json(serializeUser(user));
     });
   })(req, res, next);

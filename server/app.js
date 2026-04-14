@@ -55,9 +55,9 @@ module.exports = function createApp(db, mongoUri) {
     store,
     cookie: {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours
       secure: isProd,        // HTTPS uniquement en production
       sameSite: 'strict',    // protection CSRF
+      // pas de maxAge → cookie de session (disparaît à la fermeture du navigateur)
     },
   }));
 
