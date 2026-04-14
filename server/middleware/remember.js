@@ -14,7 +14,8 @@ module.exports = (db) => async (req, res, next) => {
     const user = await db.users.findById(record.userId);
     if (!user) return next();
     req.login(user, (err) => { if (err) return next(err); next(); });
-  } catch (_) {
+  } catch (e) {
+    console.error('[remember] error during auto-login:', e.message);
     next();
   }
 };
