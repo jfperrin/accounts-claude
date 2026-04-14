@@ -27,6 +27,7 @@ function serializeUser(u) {
 }
 
 const ALLOWED_DAYS = [1, 30, 365];
+const parseCookies = require('cookie').parse;
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // URL de base pour les liens dans les emails : cible le serveur directement.
