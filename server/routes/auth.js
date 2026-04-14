@@ -124,14 +124,19 @@ router.get('/google/callback',
 );
 
 // POST /api/auth/logout
-// req.logout() (Passport) détruit la session côté serveur.
-// On efface aussi le cookie remember_me pour éviter la reconnexion automatique.
-router.post('/logout', (req, res) => {
-  req.logout(() => {
-    res.clearCookie('remember_me');
-    res.json({ message: 'Déconnecté' });
+// Invalide le token remember_me en base, efface le cookie, détruit la session.
+router.post('/logout', wrap(async (req, res) => {
+  const token = parseCookies(req.headers.cookie || '').remember_me;
+  if (token) {
+    try { await req.app.locals.db.resetTokens.markUsed(token); } catch (_) {}
+  }
+  res.clearCookie('remember_me', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
   });
-});
+  req.logout(() => res.json({ message: 'Déconnecté' }));
+}));
 
 // GET /api/auth/me
 // Utilisé par AuthContext au montage du client pour savoir si une session existe.

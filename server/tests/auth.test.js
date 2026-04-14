@@ -142,6 +142,44 @@ describe('POST /api/auth/logout', () => {
     await agent.post('/api/auth/logout');
     expect((await agent.get('/api/auth/me')).status).toBe(401);
   });
+
+  it('efface le cookie remember_me au logout', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send(ALICE);
+    const logoutRes = await agent.post('/api/auth/logout');
+    const cookies = logoutRes.headers['set-cookie'] ?? [];
+    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
+    expect(rmCookie).toBeDefined();
+    // Max-Age=0 or Expires=epoch means the browser should delete the cookie
+    const isCleared = /Max-Age=0/i.test(rmCookie) || /Expires=Thu, 01 Jan 1970/i.test(rmCookie);
+    expect(isCleared).toBe(true);
+  });
+
+  it("l'auto-login ne fonctionne plus après logout (token invalidé)", async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    // Login et récupération du token
+    const agent = request.agent(app);
+    const loginRes = await agent.post('/api/auth/login').send(ALICE);
+    const cookies = loginRes.headers['set-cookie'] ?? [];
+    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
+    const token = rmCookie.split(';')[0].split('=')[1];
+
+    // Vérifier que l'auto-login fonctionne avant le logout
+    const beforeRes = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', `remember_me=${token}`);
+    expect(beforeRes.status).toBe(200);
+
+    // Logout (l'agent a le cookie remember_me correspondant au token)
+    await agent.post('/api/auth/logout');
+
+    // Auto-login avec le token révoqué → doit échouer
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', `remember_me=${token}`);
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('GET /api/auth/verify-email/:token', () => {
