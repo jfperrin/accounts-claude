@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [form, setForm] = useState({ email: '', password: '' });
+  const [rememberDays, setRememberDays] = useState(30);
   const [registered, setRegistered] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState(null);
   const [resendLoading, setResendLoading] = useState(false);
@@ -37,7 +38,7 @@ export default function LoginPage() {
     setResendDone(false);
     try {
       if (tab === 'login') {
-        await login(form);
+        await login({ ...form, rememberDays });
       } else {
         await register(form);
         setRegistered(true);
@@ -168,7 +169,7 @@ export default function LoginPage() {
             <button
               type="button"
               key={key}
-              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); }}
+              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setRememberDays(30); }}
               className={cn(
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                 tab === key
@@ -203,6 +204,32 @@ export default function LoginPage() {
               className="h-11"
             />
           </div>
+          {tab === 'login' && (
+            <div className="space-y-1.5">
+              <Label>Rester connecté</Label>
+              <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+                {[
+                  { label: '1 jour', value: 1 },
+                  { label: '1 mois', value: 30 },
+                  { label: '1 an', value: 365 },
+                ].map(({ label, value }) => (
+                  <button
+                    type="button"
+                    key={value}
+                    onClick={() => setRememberDays(value)}
+                    className={cn(
+                      'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
+                      rememberDays === value
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <Button
             type="submit"
             className="mt-2 h-11 w-full text-base shadow-md shadow-indigo-500/30"

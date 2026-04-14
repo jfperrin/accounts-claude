@@ -37,7 +37,11 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
 
     await waitFor(() =>
-      expect(mockLogin).toHaveBeenCalledWith({ email: 'alice@test.com', password: 'pass1234' })
+      expect(mockLogin).toHaveBeenCalledWith({
+        email: 'alice@test.com',
+        password: 'pass1234',
+        rememberDays: 30,
+      })
     );
   });
 
@@ -58,6 +62,57 @@ describe('LoginPage', () => {
     render(<LoginPage />, { wrapper: Wrapper });
     await waitFor(() =>
       expect(screen.getByText('Continuer avec Google')).toBeInTheDocument()
+    );
+  });
+
+  it('affiche le sélecteur de durée uniquement sur l\'onglet connexion', () => {
+    render(<LoginPage />, { wrapper: Wrapper });
+    expect(screen.getByRole('button', { name: '1 jour' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 mois' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 an' })).toBeInTheDocument();
+  });
+
+  it('n\'affiche pas le sélecteur de durée sur l\'onglet inscription', async () => {
+    render(<LoginPage />, { wrapper: Wrapper });
+    await userEvent.click(screen.getByText('Inscription'));
+    expect(screen.queryByRole('button', { name: '1 jour' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '1 mois' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '1 an' })).not.toBeInTheDocument();
+  });
+
+  it('envoie rememberDays=1 quand "1 jour" est sélectionné', async () => {
+    mockLogin.mockResolvedValue({ _id: '1', email: 'alice@test.com' });
+    render(<LoginPage />, { wrapper: Wrapper });
+
+    await userEvent.type(screen.getByLabelText('Adresse email'), 'alice@test.com');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'pass1234');
+    await userEvent.click(screen.getByRole('button', { name: '1 jour' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
+
+    await waitFor(() =>
+      expect(mockLogin).toHaveBeenCalledWith({
+        email: 'alice@test.com',
+        password: 'pass1234',
+        rememberDays: 1,
+      })
+    );
+  });
+
+  it('envoie rememberDays=365 quand "1 an" est sélectionné', async () => {
+    mockLogin.mockResolvedValue({ _id: '1', email: 'alice@test.com' });
+    render(<LoginPage />, { wrapper: Wrapper });
+
+    await userEvent.type(screen.getByLabelText('Adresse email'), 'alice@test.com');
+    await userEvent.type(screen.getByLabelText('Mot de passe'), 'pass1234');
+    await userEvent.click(screen.getByRole('button', { name: '1 an' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Se connecter' }));
+
+    await waitFor(() =>
+      expect(mockLogin).toHaveBeenCalledWith({
+        email: 'alice@test.com',
+        password: 'pass1234',
+        rememberDays: 365,
+      })
     );
   });
 });
