@@ -61,7 +61,13 @@
       "Bash(npm test:*)",
       "Bash(echo \"EXIT: $?\")",
       "Bash(npm list:*)",
-      "Bash(wc -l /tmp/auth_part*.j)"
+      "Bash(wc -l /tmp/auth_part*.j)",
+      "Bash(cmd.exe //c \"where node\")",
+      "Bash(powershell.exe -NoProfile -Command \"Get-Command node | Select-Object -ExpandProperty Source\")",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/jf/AppData/Roaming/**)",
+      "Read(//c/Users/jf/scoop/apps/**)",
+      "Read(//c/Users/jf/AppData/Local/**)"
     ]
   }
 }

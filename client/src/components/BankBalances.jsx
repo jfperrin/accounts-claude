@@ -1,20 +1,25 @@
-import { memo, useMemo, useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { Building2, Pencil, Check } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { cn, formatEur } from '@/lib/utils';
 
-const BankCard = memo(function BankCard({ bank, unpointedSum, initialBalance, onSaveBalance }) {
+// BankCard affiche pour une banque :
+//   - Solde actuel (currentBalance)         → éditable via inline input
+//   - Solde projeté (projectedBalance)      → calculé serveur, lecture seule
+//
+// Les deux valeurs viennent enrichies depuis GET /api/banks (côté serveur).
+const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(initialBalance ?? null);
-  useEffect(() => { setDraft(initialBalance ?? null); }, [initialBalance]);
-
-  const projected = initialBalance != null ? initialBalance + unpointedSum : null;
+  const [draft, setDraft] = useState(bank.currentBalance ?? 0);
+  useEffect(() => { setDraft(bank.currentBalance ?? 0); }, [bank.currentBalance]);
 
   const handleSave = () => {
     setEditing(false);
     const val = parseFloat(draft) || 0;
-    if (val !== initialBalance) onSaveBalance?.(bank._id, val);
+    if (val !== bank.currentBalance) onSaveBalance?.(bank._id, val);
   };
+
+  const projected = bank.projectedBalance ?? 0;
 
   return (
     <div
@@ -49,13 +54,11 @@ const BankCard = memo(function BankCard({ bank, unpointedSum, initialBalance, on
             </>
           ) : (
             <>
-              <span className="text-lg font-bold text-foreground">
-                {initialBalance != null ? formatEur(initialBalance) : '—'}
-              </span>
+              <span className="text-lg font-bold text-foreground">{formatEur(bank.currentBalance ?? 0)}</span>
               <button
                 type="button"
                 aria-label="modifier"
-                onClick={() => { setDraft(initialBalance ?? 0); setEditing(true); }}
+                onClick={() => { setDraft(bank.currentBalance ?? 0); setEditing(true); }}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -67,49 +70,24 @@ const BankCard = memo(function BankCard({ bank, unpointedSum, initialBalance, on
 
       <div>
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prévisionnel</p>
-        {projected != null ? (
-          <span className={cn('text-2xl font-bold', projected >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
-            {formatEur(projected)}
-          </span>
-        ) : (
-          <span className="text-sm text-muted-foreground">Saisir un solde</span>
-        )}
+        <span className={cn('text-2xl font-bold', projected >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+          {formatEur(projected)}
+        </span>
       </div>
     </div>
   );
 });
 
-export default function BankBalances({ banks, operations, periodBalances = {}, onSaveBalance }) {
-  const unpointedSums = useMemo(() => {
-    const sums = {};
-    for (const o of operations) {
-      if (!o.pointed) {
-        const bid = o.bankId?._id ?? o.bankId;
-        sums[bid] = (sums[bid] ?? 0) + o.amount;
-      }
-    }
-    return sums;
-  }, [operations]);
-
-  const banksWithBalance = banks.filter((b) => periodBalances[b._id] != null);
-  const hasBalances = banksWithBalance.length > 0;
-  const totalProjected = banksWithBalance.reduce(
-    (s, b) => s + periodBalances[b._id] + (unpointedSums[b._id] ?? 0),
-    0
-  );
+export default function BankBalances({ banks, onSaveBalance }) {
+  // Total prévisionnel toutes banques confondues — somme des projectedBalance.
+  const totalProjected = banks.reduce((s, b) => s + (b.projectedBalance ?? 0), 0);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {banks.map((bank) => (
-        <BankCard
-          key={bank._id}
-          bank={bank}
-          unpointedSum={unpointedSums[bank._id] ?? 0}
-          initialBalance={periodBalances[bank._id] ?? null}
-          onSaveBalance={onSaveBalance}
-        />
+        <BankCard key={bank._id} bank={bank} onSaveBalance={onSaveBalance} />
       ))}
-      {banks.length > 1 && hasBalances && (
+      {banks.length > 1 && (
         <div
           data-testid="total-card"
           className="hidden md:block rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-4 shadow-lg shadow-indigo-500/30"

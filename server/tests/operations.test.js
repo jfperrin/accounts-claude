@@ -6,36 +6,39 @@ beforeAll(async () => { app = await setup(); });
 afterAll(teardown);
 
 let agent;
-let bankId, periodId;
+let bankId;
 
 beforeEach(async () => {
   await clearDB();
   await createVerifiedUser(app, 'alice@test.com', 'pass1234');
   agent = request.agent(app);
   await agent.post('/api/auth/login').send({ email: 'alice@test.com', password: 'pass1234' });
-  bankId = (await agent.post('/api/banks').send({ label: 'BNP' })).body._id;
-  periodId = (await agent.post('/api/periods').send({ month: 4, year: 2025 })).body._id;
+  bankId = (await agent.post('/api/banks').send({ label: 'BNP', currentBalance: 1000 })).body._id;
 });
 
 const makeOp = (overrides = {}) => ({
   label: 'Loyer',
   amount: -800,
-  date: '2025-04-05',
+  date: '2025-04-05T00:00:00.000Z',
   bankId,
-  periodId,
   ...overrides,
 });
 
 describe('GET /api/operations', () => {
-  it('exige periodId', async () => {
-    expect((await agent.get('/api/operations')).status).toBe(400);
+  it('renvoie le mois courant par défaut (vide)', async () => {
+    const res = await agent.get('/api/operations');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
   });
 
-  it('retourne les opérations de la période', async () => {
+  it('filtre par month/year', async () => {
     await agent.post('/api/operations').send(makeOp());
-    const res = await agent.get('/api/operations').query({ periodId });
+    const res = await agent.get('/api/operations').query({ month: 4, year: 2025 });
     expect(res.body).toHaveLength(1);
     expect(res.body[0].label).toBe('Loyer');
+
+    const other = await agent.get('/api/operations').query({ month: 5, year: 2025 });
+    expect(other.body).toHaveLength(0);
   });
 });
 
@@ -52,7 +55,7 @@ describe('PATCH /api/operations/:id/point', () => {
   });
 });
 
-describe('POST /api/operations/import-recurring', () => {
+describe('POST /api/operations/generate-recurring', () => {
   beforeEach(async () => {
     await agent.post('/api/recurring-operations').send({
       label: 'Loyer', amount: -800, dayOfMonth: 5, bankId,
@@ -62,39 +65,32 @@ describe('POST /api/operations/import-recurring', () => {
     });
   });
 
-  it('importe toutes les opérations récurrentes', async () => {
-    const res = await agent.post('/api/operations/import-recurring').send({ periodId });
+  it('génère les opérations récurrentes du mois cible', async () => {
+    const res = await agent.post('/api/operations/generate-recurring').send({ month: 4, year: 2025 });
     expect(res.body.imported).toBe(2);
 
-    const ops = await agent.get('/api/operations').query({ periodId });
+    const ops = await agent.get('/api/operations').query({ month: 4, year: 2025 });
     expect(ops.body).toHaveLength(2);
   });
 
   it('est idempotent — ne duplique pas', async () => {
-    await agent.post('/api/operations/import-recurring').send({ periodId });
-    const res = await agent.post('/api/operations/import-recurring').send({ periodId });
+    await agent.post('/api/operations/generate-recurring').send({ month: 4, year: 2025 });
+    const res = await agent.post('/api/operations/generate-recurring').send({ month: 4, year: 2025 });
     expect(res.body.imported).toBe(0);
 
-    const ops = await agent.get('/api/operations').query({ periodId });
+    const ops = await agent.get('/api/operations').query({ month: 4, year: 2025 });
     expect(ops.body).toHaveLength(2);
   });
 
   it('calcule le bon jour du mois', async () => {
-    const res = await agent.post('/api/operations/import-recurring').send({ periodId });
-    expect(res.body.imported).toBe(2);
-
-    const ops = (await agent.get('/api/operations').query({ periodId })).body;
+    await agent.post('/api/operations/generate-recurring').send({ month: 4, year: 2025 });
+    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2025 })).body;
     const loyer = ops.find((o) => o.label === 'Loyer');
-    expect(new Date(loyer.date).getDate()).toBe(5);
+    expect(new Date(loyer.date).getUTCDate()).toBe(5);
   });
-});
 
-describe('DELETE /api/periods/:id — cascade', () => {
-  it('supprime les opérations associées', async () => {
-    await agent.post('/api/operations').send(makeOp());
-    await agent.delete(`/api/periods/${periodId}`);
-
-    const ops = await agent.get('/api/operations').query({ periodId });
-    expect(ops.body).toHaveLength(0);
+  it('rejette month/year invalides', async () => {
+    expect((await agent.post('/api/operations/generate-recurring').send({ month: 13, year: 2025 })).status).toBe(400);
+    expect((await agent.post('/api/operations/generate-recurring').send({})).status).toBe(400);
   });
 });

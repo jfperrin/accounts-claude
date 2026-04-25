@@ -1,28 +1,97 @@
 // Routes CRUD pour les opérations — protégées par requireAuth.
 // Préfixe : /api/operations
 //
-// Une opération appartient toujours à une période et une banque.
-// Toutes les réponses contiennent bankId populé { _id, label } pour
-// que le client puisse afficher le nom de la banque sans requête supplémentaire.
+// Une opération appartient à une banque et est datée. Plus de notion de période :
+// on filtre par mois/année via les query params `?month=M&year=YYYY`.
+// Sans paramètre, on renvoie le mois courant.
 
 const router = require('express').Router();
+const multer = require('multer');
+const AdmZip = require('adm-zip');
 const wrap = require('../utils/asyncHandler');
+const { parseBankQif } = require('../utils/parseQif');
+const { parseBankOfx } = require('../utils/parseOfx');
 
-// GET /api/operations?periodId=xxx → opérations d'une période, triées par date
-// periodId est obligatoire : on ne charge jamais toutes les opérations de l'utilisateur.
+// Multer mémoire pour l'import (1 Mo max).
+// Accepte .qif, .ofx ou .zip (qui doit contenir un de ces formats).
+// Le CSV n'est plus accepté : QIF/OFX sont plus stables (encodage déclaré,
+// codes de champs fixes) et suffisent aux exports Fortuneo/BP.
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/\.(qif|ofx|zip)$/i.test(file.originalname)) {
+      return cb(new Error('Seuls les fichiers .qif, .ofx ou .zip sont acceptés'));
+    }
+    cb(null, true);
+  },
+});
+
+// Détermine le format d'import à partir d'un nom de fichier.
+// Retourne 'qif' | 'ofx' | null.
+function formatFromName(name) {
+  if (/\.qif$/i.test(name)) return 'qif';
+  if (/\.ofx$/i.test(name)) return 'ofx';
+  return null;
+}
+
+// Extrait le contenu à parser depuis le fichier uploadé. Retourne
+// `{ buffer, format }` où format ∈ {'qif', 'ofx'}.
+// Pour un ZIP, on prend la première entrée valide en ignorant les résidus
+// macOS (__MACOSX/). Lève une erreur 400 si zip invalide ou vide.
+function extractImportPayload(file) {
+  const directFormat = formatFromName(file.originalname);
+  if (directFormat) {
+    return { buffer: file.buffer, format: directFormat };
+  }
+  // Reste : .zip (filtré par multer en amont)
+  let zip;
+  try {
+    zip = new AdmZip(file.buffer);
+  } catch (_) {
+    const err = new Error('Archive ZIP invalide');
+    err.status = 400;
+    throw err;
+  }
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) continue;
+    if (entry.entryName.startsWith('__MACOSX/')) continue;
+    const fmt = formatFromName(entry.entryName);
+    if (fmt) return { buffer: entry.getData(), format: fmt };
+  }
+  const err = new Error('Aucun .qif ou .ofx trouvé dans l\'archive');
+  err.status = 400;
+  throw err;
+}
+
+// Parse + valide les query params month/year.
+// Renvoie le mois courant si absents. Lève une erreur 400 si mal formés.
+function parseMonthYear(query) {
+  const now = new Date();
+  const month = query.month != null ? Number(query.month) : now.getUTCMonth() + 1;
+  const year = query.year != null ? Number(query.year) : now.getUTCFullYear();
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    const err = new Error('month/year invalides');
+    err.status = 400;
+    throw err;
+  }
+  return { month, year };
+}
+
+// GET /api/operations?month=M&year=YYYY
+// Liste les opérations du mois donné, triées par date. Sans param → mois courant.
 router.get('/', wrap(async (req, res) => {
-  const { periodId } = req.query;
-  if (!periodId) return res.status(400).json({ message: 'periodId requis' });
-  res.json(await req.app.locals.db.operations.findByPeriod(periodId, req.user._id));
+  const { month, year } = parseMonthYear(req.query);
+  res.json(await req.app.locals.db.operations.findByMonth(month, year, req.user._id));
 }));
 
-// POST /api/operations → crée une opération dans la période spécifiée dans le body
+// POST /api/operations → crée une opération (body sans periodId).
 router.post('/', wrap(async (req, res) => {
   const op = await req.app.locals.db.operations.create({ ...req.body, userId: req.user._id });
   res.status(201).json(op);
 }));
 
-// PUT /api/operations/:id → met à jour label, montant, date ou banque
+// PUT /api/operations/:id → met à jour label, montant, date, banque ou pointed
 router.put('/:id', wrap(async (req, res) => {
   const op = await req.app.locals.db.operations.update(req.params.id, req.user._id, req.body);
   if (!op) return res.status(404).json({ message: 'Introuvable' });
@@ -35,63 +104,293 @@ router.delete('/:id', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
-// PATCH /api/operations/:id/point → inverse l'état pointé de l'opération.
-// "Pointer" une opération signifie qu'elle a été vérifiée sur le relevé bancaire.
-// Les opérations pointées sont visuellement grisées dans l'UI et exclues du prévisionnel.
+// PATCH /api/operations/:id/point → inverse l'état pointé.
 router.patch('/:id/point', wrap(async (req, res) => {
   const op = await req.app.locals.db.operations.togglePointed(req.params.id, req.user._id);
   if (!op) return res.status(404).json({ message: 'Introuvable' });
   res.json(op);
 }));
 
-// POST /api/operations/import-recurring
-// Importe les opérations récurrentes dans une période donnée.
-// Idempotent : une opération récurrente déjà présente dans la période
-// (même label, même banque, même montant) n'est pas dupliquée.
-//
-// Algorithme :
-//  1. Charge la période pour connaître mois/année et calculer la date exacte
-//  2. Charge les opérations récurrentes de l'utilisateur
-//  3. Construit un Set des clés "label|bankId|montant" déjà présentes dans la période
-//  4. Filtre les récurrentes absentes du Set, calcule leur date (en tenant compte
-//     des mois courts : ex. 31 février → dernier jour du mois)
-//  5. Insère toutes les nouvelles opérations en une seule passe (insertMany)
-router.post('/import-recurring', wrap(async (req, res) => {
-  const { periodId } = req.body;
-  if (!periodId) return res.status(400).json({ message: 'periodId requis' });
+// POST /api/operations/generate-recurring  body: { month, year }
+// Génère les opérations issues des récurrents pour le mois cible.
+// Idempotent : on dédup par clé `label|bankId|amount|YYYY-MM-DD`.
+router.post('/generate-recurring', wrap(async (req, res) => {
+  const month = Number(req.body.month);
+  const year = Number(req.body.year);
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return res.status(400).json({ message: 'month/year requis et valides' });
+  }
 
-  const { operations, periods, recurringOps } = req.app.locals.db;
+  const { operations, recurringOps } = req.app.locals.db;
   const userId = req.user._id;
-
-  const period = await periods.findOne(periodId, userId);
-  if (!period) return res.status(404).json({ message: 'Période introuvable' });
 
   const recurring = await recurringOps.findByUserRaw(userId);
   if (!recurring.length) return res.json({ imported: 0 });
 
-  // findByPeriodMinimal retourne bankId sous forme d'ID brut (sans populate)
-  // pour que la comparaison avec r.bankId soit cohérente des deux côtés
-  const existing = await operations.findByPeriodMinimal(periodId, userId);
-  const existingKeys = new Set(existing.map((o) => `${o.label}|${o.bankId}|${o.amount}`));
+  const existing = await operations.findByMonthMinimal(month, year, userId);
+  const keyOf = (label, bankId, amount, date) =>
+    `${label}|${bankId}|${amount}|${new Date(date).toISOString().slice(0, 10)}`;
+  const existingKeys = new Set(
+    existing.map((o) => {
+      const bId = o.bankId && o.bankId._id ? String(o.bankId._id) : String(o.bankId);
+      return keyOf(o.label, bId, o.amount, o.date);
+    }),
+  );
 
-  const toInsert = recurring
-    .filter((r) => !existingKeys.has(`${r.label}|${r.bankId}|${r.amount}`))
-    .map((r) => {
-      // Math.min évite les jours invalides (ex: jour 31 en février → jour 28/29)
-      const day = Math.min(r.dayOfMonth, new Date(period.year, period.month, 0).getDate());
-      return {
+  // Pour chaque récurrent, on calcule le jour effectif (Math.min pour février),
+  // on construit l'op datée et on dédup avant insertion.
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const toInsert = [];
+  for (const r of recurring) {
+    const day = Math.min(r.dayOfMonth, lastDay);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    const key = keyOf(r.label, String(r.bankId), r.amount, date);
+    if (existingKeys.has(key)) continue;
+    existingKeys.add(key);
+    toInsert.push({
+      label: r.label,
+      amount: r.amount,
+      date,
+      bankId: r.bankId,
+      userId,
+      pointed: false,
+    });
+  }
+
+  if (toInsert.length) await operations.insertMany(toInsert);
+  res.json({ imported: toInsert.length });
+}));
+
+// Helpers de matching pour l'import (réconciliation avec les ops existantes).
+
+// Clé d'égalité stricte (dédup d'imports successifs).
+const exactKey = (label, bankId, amount, date) =>
+  `${label}|${bankId}|${amount}|${new Date(date).toISOString().slice(0, 10)}`;
+
+// Suffixe le libellé existant par "(libelléFichier)". On ne ré-applique pas le
+// suffixe s'il y figure déjà (idempotent en cas de re-réconciliation), et on
+// ne suffixe pas si les libellés sont déjà identiques (le suffixe serait redondant).
+function appendImportLabel(currentLabel, importedLabel) {
+  if (!importedLabel) return currentLabel;
+  if (currentLabel === importedLabel) return currentLabel;
+  const suffix = ` (${importedLabel})`;
+  if (currentLabel.endsWith(suffix)) return currentLabel;
+  return currentLabel + suffix;
+}
+
+// Normalise bankId d'une opération (Mongo populé OU ID brut SQLite).
+const bankIdOf = (op) =>
+  op.bankId && op.bankId._id ? String(op.bankId._id) : String(op.bankId);
+
+// POST /api/operations/import  (multipart/form-data)
+//   fields: file (.qif, .ofx ou .zip), bankId
+//
+// Importe les opérations d'un relevé bancaire et tente de réconcilier chaque
+// ligne avec une opération existante (typiquement un prévisionnel non pointé) :
+//
+//   - Si une ligne existe déjà à l'identique (label|bankId|amount|date)    → ignorée (doublon)
+//   - Si elle a déjà été réconciliée (suffixe "(label)" sur une op pointée)→ ignorée (doublon)
+//   - Sinon, on cherche les ops non pointées de la même banque + même montant :
+//       * 0 candidat   → l'opération est créée (pointée, label brut)
+//       * 1 candidat   → réconciliation auto (l'existant devient pointé,
+//                        son label est suffixé par " (labelFichier)")
+//       * N candidats  → ajoutée à `pendingMatches` pour résolution manuelle
+//                        (l'utilisateur choisit dans une modale côté client,
+//                        puis appelle POST /import/resolve)
+//
+// La banque cible doit appartenir à l'utilisateur ; l'algorithme reste scopé à userId.
+router.post('/import', (req, res, next) => {
+  importUpload.single('file')(req, res, (err) => err ? next(err) : next());
+}, wrap(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'Fichier requis (champ "file")' });
+  const { bankId } = req.body;
+  if (!bankId) return res.status(400).json({ message: 'bankId requis' });
+
+  const { operations, banks } = req.app.locals.db;
+  const userId = req.user._id;
+
+  const bank = await banks.findById(bankId, userId);
+  if (!bank) return res.status(404).json({ message: 'Banque introuvable' });
+
+  // Parsing — QIF ou OFX uniquement (CSV retiré).
+  const { buffer, format } = extractImportPayload(req.file);
+  const parser = format === 'qif' ? parseBankQif : parseBankOfx;
+  const { rows, invalid } = parser(buffer);
+
+  const existing = await operations.findAllMinimal(userId);
+
+  // Clé numérique du montant : on arrondit au centime pour absorber les écarts
+  // IEEE 754 (ex. -210.4 vs -210.40 décodés différemment selon le format).
+  const amountKey = (a) => Math.round(Number(a) * 100);
+
+  // Index : exactKey(label|bank|amount|date) pour la dédup stricte
+  const existingKeys = new Set(
+    existing.map((o) => exactKey(o.label, bankIdOf(o), amountKey(o.amount), o.date)),
+  );
+
+  // Index par (bankId, amount centimes) → liste d'ops candidates
+  const byBankAmount = new Map();
+  for (const o of existing) {
+    const k = `${bankIdOf(o)}|${amountKey(o.amount)}`;
+    if (!byBankAmount.has(k)) byBankAmount.set(k, []);
+    byBankAmount.get(k).push(o);
+  }
+
+  // Ops déjà consommées en auto-réconciliation pendant ce batch (pour qu'une
+  // 2e ligne du fichier au même montant ne réconcilie pas la même cible).
+  const consumed = new Set();
+
+  const toInsert = [];        // nouvelles ops à insérer (pointées)
+  const toReconcile = [];     // [{ id, newLabel }] mises à jour atomiques
+  const pendingMatches = [];  // [{ importedRow, candidates }] résolutions manuelles
+  let duplicates = 0;
+
+  for (const r of rows) {
+    const k = `${String(bankId)}|${amountKey(r.amount)}`;
+    const sameAmount = byBankAmount.get(k) || [];
+
+    // 1. doublon strict (réimport du même fichier)
+    if (existingKeys.has(exactKey(r.label, String(bankId), amountKey(r.amount), r.date))) {
+      duplicates++; continue;
+    }
+    // 2. réconcilié précédemment : op pointée dont le label inclut " (labelFichier)"
+    const reconciledMarker = ` (${r.label})`;
+    if (sameAmount.some((o) => o.pointed && typeof o.label === 'string' && o.label.endsWith(reconciledMarker))) {
+      duplicates++; continue;
+    }
+
+    // 3. candidats à la réconciliation : non pointés, non encore consommés ce batch
+    const candidates = sameAmount.filter(
+      (o) => !o.pointed && !consumed.has(String(o._id)),
+    );
+
+    if (candidates.length === 0) {
+      // Aucun candidat → on crée la ligne telle quelle
+      toInsert.push({
+        label: r.label, amount: r.amount, date: r.date,
+        bankId, userId, pointed: true,
+      });
+      // Ajout à existingKeys pour éviter des doublons internes au batch
+      existingKeys.add(exactKey(r.label, String(bankId), amountKey(r.amount), r.date));
+    } else if (candidates.length === 1) {
+      // Auto-réconciliation
+      const target = candidates[0];
+      consumed.add(String(target._id));
+      toReconcile.push({
+        id: String(target._id),
+        newLabel: appendImportLabel(target.label, r.label),
+      });
+    } else {
+      // Conflit : à résoudre par l'utilisateur via une modale
+      pendingMatches.push({
+        importedRow: { label: r.label, amount: r.amount, date: r.date, bankId: String(bankId) },
+        candidates: candidates.map((c) => ({
+          _id: String(c._id),
+          label: c.label,
+          amount: c.amount,
+          date: c.date,
+          bankId: bankIdOf(c),
+        })),
+      });
+    }
+  }
+
+  // Application
+  if (toInsert.length) await operations.insertMany(toInsert);
+  for (const r of toReconcile) {
+    await operations.update(r.id, userId, { pointed: true, label: r.newLabel });
+  }
+
+  res.json({
+    imported: toInsert.length,
+    autoReconciled: toReconcile.length,
+    duplicates,
+    invalid,
+    pendingMatches,
+    // Diagnostic temporaire — à retirer une fois la feature stabilisée.
+    _debug: {
+      rowsParsed: rows.length,
+      existingTotal: existing.length,
+      existingForThisBank: existing.filter((o) => bankIdOf(o) === String(bankId)).length,
+      existingNonPointedForThisBank: existing.filter(
+        (o) => bankIdOf(o) === String(bankId) && !o.pointed,
+      ).length,
+      bankIdSent: String(bankId),
+      // Échantillon de 3 ops existantes pour cette banque (clés de matching)
+      sampleExistingForBank: existing
+        .filter((o) => bankIdOf(o) === String(bankId))
+        .slice(0, 3)
+        .map((o) => ({
+          label: o.label,
+          amount: o.amount,
+          amountKey: amountKey(o.amount),
+          date: o.date,
+          pointed: !!o.pointed,
+        })),
+      // Échantillon de 3 lignes parsées du fichier
+      sampleRows: rows.slice(0, 3).map((r) => ({
         label: r.label,
         amount: r.amount,
-        date: new Date(period.year, period.month - 1, day),
-        bankId: r.bankId,
-        periodId,
-        userId,
-        pointed: false,
-      };
-    });
+        amountKey: amountKey(r.amount),
+        date: r.date,
+      })),
+    },
+  });
+}));
 
-  await operations.insertMany(toInsert);
-  res.json({ imported: toInsert.length });
+// POST /api/operations/import/resolve
+//   body: { resolutions: [{ importedRow, selectedOpIds }] }
+//
+// Finalise les résolutions des conflits N-candidats remontés par /import :
+//   - selectedOpIds vide → on crée la ligne du fichier telle quelle (pointée, label brut)
+//   - selectedOpIds non vide → chaque op sélectionnée devient pointée, son label
+//     est suffixé par " (importedRow.label)"
+//
+// La validation passe par userId (toutes les updates filtrent dessus) pour qu'un
+// attaquant ne puisse pas pointer/labelliser l'op d'un autre utilisateur.
+router.post('/import/resolve', wrap(async (req, res) => {
+  const { resolutions } = req.body || {};
+  if (!Array.isArray(resolutions)) {
+    return res.status(400).json({ message: 'resolutions[] requis' });
+  }
+  const { operations } = req.app.locals.db;
+  const userId = req.user._id;
+
+  const toInsert = [];
+  let reconciled = 0;
+
+  for (const r of resolutions) {
+    const row = r && r.importedRow;
+    const ids = Array.isArray(r && r.selectedOpIds) ? r.selectedOpIds : [];
+    if (!row || typeof row.label !== 'string' || typeof row.amount !== 'number'
+        || !row.date || !row.bankId) {
+      return res.status(400).json({ message: 'résolution invalide (importedRow incomplet)' });
+    }
+    if (ids.length === 0) {
+      toInsert.push({
+        label: row.label,
+        amount: row.amount,
+        date: new Date(row.date),
+        bankId: row.bankId,
+        userId,
+        pointed: true,
+      });
+    } else {
+      for (const opId of ids) {
+        const cur = await operations.findById(opId, userId);
+        if (!cur) continue; // ignoré silencieusement (op supprimée/inaccessible)
+        await operations.update(opId, userId, {
+          pointed: true,
+          label: appendImportLabel(cur.label, row.label),
+        });
+        reconciled++;
+      }
+    }
+  }
+
+  if (toInsert.length) await operations.insertMany(toInsert);
+
+  res.json({ imported: toInsert.length, reconciled });
 }));
 
 module.exports = router;

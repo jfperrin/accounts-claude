@@ -44,15 +44,22 @@ Three independent packages sharing the same domain model:
 
 ### Data model
 
-Five entities, all carrying `userId` so every query is scoped to the authenticated user:
+Four entities, all carrying `userId` so every query is scoped to the authenticated user:
 
-- **User** — `username`, `passwordHash`, `title`, `firstName`, `lastName`, `nickname`, `avatarUrl`
-- **Bank** — `label`, `userId`
+- **User** — `email`, `passwordHash`, `title`, `firstName`, `lastName`, `nickname`, `avatarUrl`, `emailVerified`, `role`
+- **Bank** — `label`, `userId`, `currentBalance` (saisi manuellement d'après le site bancaire)
 - **RecurringOperation** — `label`, `amount`, `dayOfMonth` (1–31), `bankId`, `userId`
-- **Period** — `month` (1–12), `year`, `balances` (`{ [bankId]: initialBalance }`), `userId` — unique on `(month, year, userId)`
-- **Operation** — `label`, `amount`, `date` (ISO 8601), `pointed` (bool), `bankId`, `periodId`, `userId`
+- **Operation** — `label`, `amount`, `date` (ISO 8601), `pointed` (bool), `bankId`, `userId`
 
-`amount` negative = debit, positive = credit. Bank balances are computed client-side by summing operations grouped by `bankId`.
+**Plus de `Period`** : les opérations sont stockées en liste plate, filtrées par `?month=M&year=YYYY` à la lecture.
+
+`amount` négatif = débit, positif = crédit.
+
+**Solde projeté** (calculé serveur dans `routes/banks.js`, renvoyé par `GET /api/banks`) :
+```
+projectedBalance(bank) = bank.currentBalance + Σ amount des Operation où bankId=bank ET pointed=false
+```
+Toutes dates confondues : passé non rapproché et futur non encore réalisé entrent dans la somme.
 
 ---
 
@@ -61,7 +68,12 @@ Five entities, all carrying `userId` so every query is scoped to the authenticat
 - **Entry:** `index.js` — Express 5, cors, express-session via connect-mongo, passport
 - **Auth:** session-based with `passport-local`. `config/passport.js` defines the strategy; `middleware/requireAuth.js` guards all routes except `/api/auth/*`
 - **Route pattern:** every route file exports a router; routes use `utils/asyncHandler.js` to forward async errors to Express. All queries include `{ userId: req.user._id }` as a scope filter
-- **Import recurring:** `POST /api/operations/import-recurring` — idempotent, deduplicates by `label|bankId|amount` key before `insertMany`
+- **Operations endpoints** (`routes/operations.js`) :
+  - `GET /api/operations?month=M&year=YYYY` — opérations du mois (mois courant si absents)
+  - `POST /api/operations/generate-recurring` `{ month, year }` — crée les Operation issues des récurrents pour ce mois, idempotent (dédup `label|bankId|amount|YYYY-MM-DD`)
+  - `POST /api/operations/import` (multipart) `file` + `{ bankId }` — accepte **.qif**, **.ofx** ou **.zip** (qui contient un de ces formats). Toutes les opérations sont importées (pas de filtre par mois). Réconciliation par montant : 0 candidat → insertion ; 1 → auto-réconcilie (pointed + label suffixé `(libelléFichier)`) ; N → renvoie `pendingMatches` à résoudre côté client. Réponse `{ imported, autoReconciled, duplicates, invalid, pendingMatches }`
+  - `POST /api/operations/import/resolve` `{ resolutions: [{ importedRow, selectedOpIds }] }` — finalise les conflits N-match. `selectedOpIds` vide = insertion comme nouvelle ; sinon chaque op sélectionnée devient pointée + suffixée
+- **Parsers** (`utils/parseQif.js`, `utils/parseOfx.js`) — codes 1-lettre QIF, OFX 1.x SGML + 2.x XML, encodage UTF-8/Latin-1 auto. Helpers partagés (`parseDate` FR/ISO, `parseAmount` FR/US/EN) dans `utils/parseHelpers.js`.
 - **Auth routes** (`routes/auth.js`):
   - `serializeUser(u)` helper returns `{ _id, username, title, firstName, lastName, nickname, avatarUrl }` — used by `/register`, `/login`, `/me`
   - `PUT /api/auth/profile` — updates `{ title, firstName, lastName, nickname }`
@@ -91,13 +103,16 @@ Five entities, all carrying `userId` so every query is scoped to the authenticat
 - Displays `user.nickname || user.username` as display name; `user.avatarUrl` as avatar (data URL or relative path)
 
 **Key behaviours:**
-- A `Period` is created on demand (in `DashboardPage`) when the user adds an operation or imports recurring ops
-- Operations are sorted by date ascending on load (`DashboardPage`)
-- Recurring operations are sorted by `dayOfMonth` ascending on load (`RecurringPage`)
-- Pointed operations are visually dimmed (opacity 50%) via Tailwind class
-- Mobile only: clicking an operation row calls `onPoint` to toggle pointed state (desktop uses a dedicated button/switch)
-- `DashboardPage` computes `totalProjected` (sum across all banks with a set balance) via `useMemo` and renders a sticky card at 5px from top, mobile only (`sticky top-[5px] z-10 md:hidden`). The duplicate total card inside `BankBalances` is hidden on mobile (`hidden md:block`).
+- `DashboardPage` charge les banques (avec `currentBalance` + `projectedBalance` calculé serveur) et les opérations du mois sélectionné via `?month&year`. Pas de notion de Period côté client.
+- `BankBalances` affiche `currentBalance` éditable inline + `projectedBalance` lecture seule (les deux viennent du serveur)
+- `RecurringPage` propose un bouton « Générer pour un mois » → `POST /api/operations/generate-recurring`
+- `DashboardPage` propose un bouton « Importer » → upload QIF/OFX/ZIP + `POST /api/operations/import`. Si la réponse contient `pendingMatches`, ouvre la modale `ImportResolveDialog` pour résolution multi-select
+- Pointer/dépointer une opération recharge `banks` (le projectedBalance change)
+- Operations sont triées par date ascendante côté serveur ; pointed → opacity 50% côté UI
+- Mobile only: clic sur une ligne d'opération bascule `pointed`
 - Radix UI Select: empty string `""` is forbidden as item value — use sentinel `"none"` and convert to `null` before API calls
+
+**⚠ État du mobile (`reactNative/`) :** non encore migré vers le nouveau modèle (pas de Period + currentBalance). Cassé tant qu'on ne l'aura pas refait — la doc ci-dessous décrit l'ancienne architecture.
 
 **Profile page (`pages/ProfilePage.jsx`):**
 - Edit title (Mr/Mme/etc.), firstName, lastName, nickname

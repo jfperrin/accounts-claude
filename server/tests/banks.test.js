@@ -37,6 +37,36 @@ describe('POST /api/banks', () => {
     expect(res.status).toBe(201);
     expect(res.body.label).toBe('Crédit Agricole');
     expect(res.body.userId).toBeDefined();
+    expect(res.body.currentBalance).toBe(0);
+  });
+
+  it('accepte un currentBalance initial', async () => {
+    const res = await alice.post('/api/banks').send({ label: 'Fortuneo', currentBalance: 1234.56 });
+    expect(res.body.currentBalance).toBeCloseTo(1234.56);
+  });
+});
+
+describe('GET /api/banks projectedBalance', () => {
+  it('renvoie projectedBalance = currentBalance + somme des op non pointées', async () => {
+    const { body: bank } = await alice.post('/api/banks').send({ label: 'BNP', currentBalance: 1000 });
+    await alice.post('/api/operations').send({
+      label: 'Loyer', amount: -800, date: '2025-04-05T00:00:00.000Z', bankId: bank._id,
+    });
+    await alice.post('/api/operations').send({
+      label: 'Salaire', amount: 2500, date: '2025-04-28T00:00:00.000Z', bankId: bank._id,
+    });
+    const res = await alice.get('/api/banks');
+    expect(res.body[0].projectedBalance).toBeCloseTo(1000 - 800 + 2500);
+  });
+
+  it('exclut les opérations pointées du projectedBalance', async () => {
+    const { body: bank } = await alice.post('/api/banks').send({ label: 'BNP', currentBalance: 1000 });
+    const { body: op } = await alice.post('/api/operations').send({
+      label: 'Loyer', amount: -800, date: '2025-04-05T00:00:00.000Z', bankId: bank._id,
+    });
+    await alice.patch(`/api/operations/${op._id}/point`);
+    const res = await alice.get('/api/banks');
+    expect(res.body[0].projectedBalance).toBeCloseTo(1000); // op pointée → exclue
   });
 });
 
@@ -46,6 +76,13 @@ describe('PUT /api/banks/:id', () => {
     const res = await alice.put(`/api/banks/${bank._id}`).send({ label: 'BNP Paribas' });
     expect(res.status).toBe(200);
     expect(res.body.label).toBe('BNP Paribas');
+  });
+
+  it("met à jour currentBalance sans toucher au label", async () => {
+    const { body: bank } = await alice.post('/api/banks').send({ label: 'BNP' });
+    const res = await alice.put(`/api/banks/${bank._id}`).send({ currentBalance: 4242 });
+    expect(res.body.label).toBe('BNP');
+    expect(res.body.currentBalance).toBeCloseTo(4242);
   });
 
   it("ne peut pas modifier la banque d'un autre utilisateur", async () => {

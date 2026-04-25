@@ -32,22 +32,12 @@ function initSchema(db) {
     );
 
     CREATE TABLE IF NOT EXISTS banks (
-      id         TEXT PRIMARY KEY,
-      label      TEXT NOT NULL,
-      user_id    TEXT NOT NULL REFERENCES users(id),
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS periods (
-      id         TEXT PRIMARY KEY,
-      month      INTEGER NOT NULL CHECK(month BETWEEN 1 AND 12),
-      year       INTEGER NOT NULL,
-      user_id    TEXT NOT NULL REFERENCES users(id),
-      balances   TEXT NOT NULL DEFAULT '{}', -- JSON : { "bankId": solde_initial }
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      UNIQUE(month, year, user_id)           -- une seule période par mois/an/utilisateur
+      id              TEXT PRIMARY KEY,
+      label           TEXT NOT NULL,
+      user_id         TEXT NOT NULL REFERENCES users(id),
+      current_balance REAL NOT NULL DEFAULT 0, -- saisi manuellement, base du solde projeté
+      created_at      TEXT DEFAULT (datetime('now')),
+      updated_at      TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS operations (
@@ -57,7 +47,6 @@ function initSchema(db) {
       date       TEXT NOT NULL,   -- stockée en ISO 8601
       pointed    INTEGER NOT NULL DEFAULT 0, -- booléen SQLite : 0=false, 1=true
       bank_id    TEXT NOT NULL REFERENCES banks(id),
-      period_id  TEXT NOT NULL REFERENCES periods(id),
       user_id    TEXT NOT NULL REFERENCES users(id),
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
@@ -90,6 +79,34 @@ function initSchema(db) {
     db.exec('ALTER TABLE users DROP COLUMN username');
   } catch (_) { /* column already dropped or SQLite < 3.35 */ }
 
+  // Migration: suppression de la notion de Period.
+  // L'ancien schéma avait une table `periods` et une colonne `period_id` dans
+  // `operations`. Choix utilisateur : on drop ces données plutôt que de migrer.
+  // On détecte la présence de l'ancien schéma via PRAGMA table_info et on droppe
+  // operations + periods. Le CREATE TABLE IF NOT EXISTS au-dessus a déjà créé
+  // la nouvelle structure si la base était vide ; le drop ci-dessous force la
+  // recréation avec le bon schéma quand on migre une vieille base.
+  const opsCols = db.prepare('PRAGMA table_info(operations)').all();
+  const hasPeriodId = opsCols.some((c) => c.name === 'period_id');
+  if (hasPeriodId) {
+    db.exec('DROP TABLE IF EXISTS operations');
+    db.exec('DROP TABLE IF EXISTS periods');
+    // Recrée la table operations sans period_id
+    db.exec(`
+      CREATE TABLE operations (
+        id         TEXT PRIMARY KEY,
+        label      TEXT NOT NULL,
+        amount     REAL NOT NULL,
+        date       TEXT NOT NULL,
+        pointed    INTEGER NOT NULL DEFAULT 0,
+        bank_id    TEXT NOT NULL REFERENCES banks(id),
+        user_id    TEXT NOT NULL REFERENCES users(id),
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
   // Profile and role columns — idempotent: silently ignored if already exist
   for (const col of [
     "ALTER TABLE users ADD COLUMN role  TEXT NOT NULL DEFAULT 'user'",
@@ -102,6 +119,8 @@ function initSchema(db) {
     "ALTER TABLE password_reset_tokens ADD COLUMN type TEXT NOT NULL DEFAULT 'password_reset'",
     'ALTER TABLE password_reset_tokens ADD COLUMN pending_email TEXT',
     'ALTER TABLE password_reset_tokens ADD COLUMN old_password_hash TEXT',
+    // Solde courant des banques (saisi manuellement par l'utilisateur)
+    'ALTER TABLE banks ADD COLUMN current_balance REAL NOT NULL DEFAULT 0',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -129,14 +148,7 @@ const mapBank = (row) => row && {
   _id: row.id,
   label: row.label,
   userId: row.user_id,
-};
-
-const mapPeriod = (row) => row && {
-  _id: row.id,
-  month: row.month,
-  year: row.year,
-  userId: row.user_id,
-  balances: JSON.parse(row.balances || '{}'), // restitué en objet JS
+  currentBalance: row.current_balance ?? 0,
 };
 
 // mapOp est utilisé après un JOIN avec banks pour inclure { _id, label } dans bankId.
@@ -149,7 +161,6 @@ const mapOp = (row) => row && {
   date: row.date,
   pointed: row.pointed === 1,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
-  periodId: row.period_id,
   userId: row.user_id,
 };
 
@@ -289,18 +300,28 @@ module.exports = function createSQLiteRepos() {
     findByUser: (userId) =>
       db.prepare('SELECT * FROM banks WHERE user_id = ? ORDER BY label').all(uid(userId)).map(mapBank),
 
-    create({ label, userId }) {
+    create({ label, userId, currentBalance = 0 }) {
       const id = randomUUID();
-      db.prepare('INSERT INTO banks (id, label, user_id) VALUES (?, ?, ?)').run(id, label, uid(userId));
-      return { _id: id, label, userId: uid(userId) };
+      db.prepare('INSERT INTO banks (id, label, user_id, current_balance) VALUES (?, ?, ?, ?)')
+        .run(id, label, uid(userId), currentBalance);
+      return mapBank(db.prepare('SELECT * FROM banks WHERE id = ?').get(id));
     },
 
-    update(id, userId, { label }) {
-      const n = db.prepare(
-        "UPDATE banks SET label = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
-      ).run(label, id, uid(userId)).changes;
-      return n ? { _id: id, label, userId: uid(userId) } : null;
+    // Met à jour label et/ou currentBalance. On ne touche qu'aux champs fournis
+    // (les undefined laissent la valeur courante intacte).
+    update(id, userId, { label, currentBalance }) {
+      const cur = db.prepare('SELECT * FROM banks WHERE id = ? AND user_id = ?').get(id, uid(userId));
+      if (!cur) return null;
+      const newLabel = label !== undefined ? label : cur.label;
+      const newBalance = currentBalance !== undefined ? currentBalance : cur.current_balance;
+      db.prepare(
+        "UPDATE banks SET label = ?, current_balance = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+      ).run(newLabel, newBalance, id, uid(userId));
+      return mapBank(db.prepare('SELECT * FROM banks WHERE id = ?').get(id));
     },
+
+    findById: (id, userId) =>
+      mapBank(db.prepare('SELECT * FROM banks WHERE id = ? AND user_id = ?').get(id, uid(userId))),
 
     delete: (id, userId) =>
       db.prepare('DELETE FROM banks WHERE id = ? AND user_id = ?').run(id, uid(userId)),
@@ -311,30 +332,65 @@ module.exports = function createSQLiteRepos() {
 
   // ─────────────────────────────────────────────
   // OPERATIONS
-  // findByPeriod et create/update utilisent un JOIN avec banks pour retourner
-  // bankId sous forme d'objet { _id, label } (équivalent du .populate() Mongoose).
+  // findByMonth filtre les opérations dont la date tombe dans le mois/année
+  // demandé. Le filtre se fait par préfixe ISO 'YYYY-MM' (les dates sont
+  // stockées en ISO 8601, donc ce préfixe est lexicographique-équivalent
+  // à month=mm/year=yyyy).
   //
-  // findByPeriodMinimal retourne uniquement label/bankId/amount : utilisé par
-  // import-recurring pour construire le Set de déduplication sans charger les données complètes.
+  // findByMonthMinimal sert à la dédup CSV/récurrents : retourne uniquement
+  // label/bankId/amount/date sans le JOIN bank.
   //
-  // insertMany est encapsulé dans une transaction SQLite pour garantir l'atomicité :
-  // soit toutes les opérations sont insérées, soit aucune (en cas d'erreur).
+  // sumUnpointedByBank retourne un objet { [bankId]: somme } utilisé par
+  // routes/banks.js pour calculer le projectedBalance.
   // ─────────────────────────────────────────────
   const operations = {
-    findByPeriod: (periodId, userId) =>
-      db.prepare(`${OPS_WITH_BANK} WHERE o.period_id = ? AND o.user_id = ? ORDER BY o.date`)
-        .all(periodId, uid(userId)).map(mapOp),
+    findByMonth(month, year, userId) {
+      const prefix = `${year}-${String(month).padStart(2, '0')}`;
+      return db.prepare(
+        `${OPS_WITH_BANK} WHERE o.user_id = ? AND substr(o.date, 1, 7) = ? ORDER BY o.date DESC`,
+      ).all(uid(userId), prefix).map(mapOp);
+    },
 
-    findByPeriodMinimal: (periodId, userId) =>
-      db.prepare('SELECT label, bank_id AS bankId, amount FROM operations WHERE period_id = ? AND user_id = ?')
-        .all(periodId, uid(userId)),
+    findByMonthMinimal(month, year, userId) {
+      const prefix = `${year}-${String(month).padStart(2, '0')}`;
+      return db.prepare(
+        'SELECT label, bank_id AS bankId, amount, date FROM operations WHERE user_id = ? AND substr(date, 1, 7) = ?',
+      ).all(uid(userId), prefix);
+    },
 
-    create({ label, amount, date, pointed = false, bankId, periodId, userId }) {
+    // Toutes les opérations de l'utilisateur en projection minimale.
+    // Utilisée par l'import (CSV/QIF/OFX) pour deux choses :
+    //   - dédup globale (label, bankId, amount, date)
+    //   - réconciliation par montant + banque (besoin de _id et pointed pour
+    //     filtrer les candidats déjà rapprochés et éviter de consommer 2× la même).
+    findAllMinimal(userId) {
+      return db.prepare(
+        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed FROM operations WHERE user_id = ?',
+      ).all(uid(userId)).map((r) => ({
+        _id: r._id,
+        label: r.label,
+        bankId: r.bankId,
+        amount: r.amount,
+        date: r.date,
+        pointed: r.pointed === 1,
+      }));
+    },
+
+    sumUnpointedByBank(userId) {
+      const rows = db.prepare(
+        'SELECT bank_id, SUM(amount) AS total FROM operations WHERE user_id = ? AND pointed = 0 GROUP BY bank_id',
+      ).all(uid(userId));
+      const out = {};
+      for (const r of rows) out[r.bank_id] = r.total || 0;
+      return out;
+    },
+
+    create({ label, amount, date, pointed = false, bankId, userId }) {
       const id = randomUUID();
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, bank_id, period_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dateStr, pointed ? 1 : 0, uid(bankId), uid(periodId), uid(userId));
+        'INSERT INTO operations (id, label, amount, date, pointed, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dateStr, pointed ? 1 : 0, uid(bankId), uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -356,10 +412,6 @@ module.exports = function createSQLiteRepos() {
     delete: (id, userId) =>
       db.prepare('DELETE FROM operations WHERE id = ? AND user_id = ?').run(id, uid(userId)),
 
-    // Utilisé lors de la suppression d'une période (cascade manuelle)
-    deleteByPeriod: (periodId, userId) =>
-      db.prepare('DELETE FROM operations WHERE period_id = ? AND user_id = ?').run(periodId, uid(userId)),
-
     findById: (id, userId) =>
       mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ? AND o.user_id = ?`).get(id, uid(userId))),
 
@@ -375,68 +427,16 @@ module.exports = function createSQLiteRepos() {
     // Transaction : toutes les insertions réussissent ou aucune n'est commitée
     insertMany(items) {
       const stmt = db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, bank_id, period_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO operations (id, label, amount, date, pointed, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
       );
       db.transaction((ops) => {
         for (const op of ops) {
           const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
-            uid(op.bankId), uid(op.periodId), uid(op.userId));
+            uid(op.bankId), uid(op.userId));
         }
       })(items);
     },
-  };
-
-  // ─────────────────────────────────────────────
-  // PERIODS
-  // La contrainte UNIQUE(month, year, user_id) dans SQLite lève une erreur
-  // "UNIQUE constraint failed". On l'intercepte et on pose err.code = 11000
-  // pour rester compatible avec le handler de la route (qui gère ce code
-  // pour MongoDB comme pour SQLite).
-  //
-  // delete retourne la période supprimée pour permettre la cascade des opérations
-  // dans la route DELETE /periods/:id.
-  // ─────────────────────────────────────────────
-  const periods = {
-    findByUser: (userId) =>
-      db.prepare('SELECT * FROM periods WHERE user_id = ? ORDER BY year DESC, month DESC')
-        .all(uid(userId)).map(mapPeriod),
-
-    create({ month, year, userId }) {
-      const id = randomUUID();
-      try {
-        db.prepare('INSERT INTO periods (id, month, year, user_id) VALUES (?, ?, ?, ?)')
-          .run(id, month, year, uid(userId));
-        return { _id: id, month, year, userId: uid(userId), balances: {} };
-      } catch (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          const dup = new Error('Cette période existe déjà');
-          dup.code = 11000; // code conventionnel de duplication MongoDB, réutilisé ici
-          throw dup;
-        }
-        throw err;
-      }
-    },
-
-    findOne: (id, userId) =>
-      mapPeriod(db.prepare('SELECT * FROM periods WHERE id = ? AND user_id = ?').get(id, uid(userId))),
-
-    updateBalances(id, userId, balances) {
-      const n = db.prepare(
-        "UPDATE periods SET balances = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
-      ).run(JSON.stringify(balances), id, uid(userId)).changes;
-      return n ? mapPeriod(db.prepare('SELECT * FROM periods WHERE id = ?').get(id)) : null;
-    },
-
-    delete(id, userId) {
-      const row = db.prepare('SELECT * FROM periods WHERE id = ? AND user_id = ?').get(id, uid(userId));
-      if (!row) return null;
-      db.prepare('DELETE FROM periods WHERE id = ? AND user_id = ?').run(id, uid(userId));
-      return mapPeriod(row); // retourné pour déclencher la suppression des opérations associées
-    },
-
-    deleteByUser: (userId) =>
-      db.prepare('DELETE FROM periods WHERE user_id = ?').run(uid(userId)),
   };
 
   // ─────────────────────────────────────────────
@@ -520,5 +520,5 @@ module.exports = function createSQLiteRepos() {
     },
   };
 
-  return { users, banks, operations, periods, recurringOps, resetTokens };
+  return { users, banks, operations, recurringOps, resetTokens };
 };

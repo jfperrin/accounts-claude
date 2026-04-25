@@ -13,6 +13,13 @@ export default defineConfig({
       '/api':     { target: 'http://localhost:3001', changeOrigin: true },
       '/uploads': { target: 'http://localhost:3001', changeOrigin: true },
     },
+    // Le projet est dans un dossier OneDrive : les events fs natifs sont
+    // intermittents → on force le polling pour que HMR fonctionne de façon
+    // fiable. 100 ms = bon compromis réactivité/CPU sur Windows.
+    watch: {
+      usePolling: true,
+      interval: 100,
+    },
   },
   test: {
     environment: 'happy-dom',

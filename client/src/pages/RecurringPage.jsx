@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download } from 'lucide-react';
+import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import * as api from '@/api/recurringOperations';
 import * as banksApi from '@/api/banks';
+import * as operationsApi from '@/api/operations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +16,9 @@ import { cn, formatEur } from '@/lib/utils';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
+const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const CURRENT_YEAR = dayjs().year();
+const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '' });
 
 export default function RecurringPage() {
@@ -22,6 +27,10 @@ export default function RecurringPage() {
   const [modal, setModal] = useState(null); // null | { item? }
   const [form, setForm] = useState(empty());
   const [deleteTarget, setDeleteTarget] = useState(null);
+  // Boîte de dialogue de génération : on demande mois/année avant d'appeler le serveur.
+  const [genOpen, setGenOpen] = useState(false);
+  const [genMonth, setGenMonth] = useState(dayjs().month() + 1);
+  const [genYear, setGenYear] = useState(CURRENT_YEAR);
 
   const load = () => Promise.all([api.list(), banksApi.list()]).then(([ops, b]) => { setItems([...ops].sort((a, b) => a.dayOfMonth - b.dayOfMonth)); setBanks(b); });
   useEffect(() => { load(); }, []);
@@ -67,14 +76,31 @@ export default function RecurringPage() {
     }
   };
 
+  const onGenerate = async (e) => {
+    e.preventDefault();
+    try {
+      const { imported } = await operationsApi.generateRecurring({ month: genMonth, year: genYear });
+      toast.success(`${imported} opération(s) générée(s) pour ${MONTHS[genMonth - 1]} ${genYear}`);
+      setGenOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la génération');
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-extrabold text-foreground">Opérations récurrentes</h1>
-        <Button onClick={openAdd} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Ajouter
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setGenOpen(true)} className="gap-2">
+            <Download className="h-4 w-4" />
+            Générer pour un mois
+          </Button>
+          <Button onClick={openAdd} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Ajouter
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card shadow-xs">
@@ -163,6 +189,46 @@ export default function RecurringPage() {
         onConfirm={onDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      <Dialog open={genOpen} onOpenChange={(o) => !o && setGenOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Générer les récurrentes</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onGenerate} className="space-y-4 pt-1">
+            <p className="text-sm text-muted-foreground">
+              Crée les opérations correspondant aux récurrentes ci-dessus pour le mois choisi.
+              Les doublons (même libellé, banque, montant, date) sont ignorés.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Mois</Label>
+                <Select value={String(genMonth)} onValueChange={(v) => setGenMonth(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((label, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Année</Label>
+                <Select value={String(genYear)} onValueChange={(v) => setGenYear(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {YEARS.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setGenOpen(false)}>Annuler</Button>
+              <Button type="submit">Générer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

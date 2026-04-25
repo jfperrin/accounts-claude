@@ -5,6 +5,7 @@ import * as api from '@/api/banks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatEur } from '@/lib/utils';
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from '@/components/ui/table';
@@ -17,18 +18,27 @@ export default function BanksPage() {
   const [banks, setBanks] = useState([]);
   const [modal, setModal] = useState(null); // null | { bank? }
   const [label, setLabel] = useState('');
+  const [currentBalance, setCurrentBalance] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = () => api.list().then(setBanks);
   useEffect(() => { load(); }, []);
 
-  const openAdd = () => { setLabel(''); setModal({}); };
-  const openEdit = (bank) => { setLabel(bank.label); setModal({ bank }); };
+  const openAdd = () => { setLabel(''); setCurrentBalance(''); setModal({}); };
+  const openEdit = (bank) => {
+    setLabel(bank.label);
+    setCurrentBalance(String(bank.currentBalance ?? 0));
+    setModal({ bank });
+  };
 
   const onSave = async (e) => {
     e.preventDefault();
     try {
-      modal.bank ? await api.update(modal.bank._id, { label }) : await api.create({ label });
+      const payload = {
+        label,
+        currentBalance: currentBalance === '' ? 0 : parseFloat(currentBalance),
+      };
+      modal.bank ? await api.update(modal.bank._id, payload) : await api.create(payload);
       toast.success('Enregistré');
       setModal(null);
       load();
@@ -62,6 +72,7 @@ export default function BanksPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Libellé</TableHead>
+              <TableHead className="text-right">Solde actuel</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -69,6 +80,7 @@ export default function BanksPage() {
             {banks.map((bank) => (
               <TableRow key={bank._id}>
                 <TableCell className="font-medium">{bank.label}</TableCell>
+                <TableCell className="text-right text-muted-foreground">{formatEur(bank.currentBalance ?? 0)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(bank)}>
@@ -96,6 +108,18 @@ export default function BanksPage() {
             <div className="space-y-1.5">
               <Label htmlFor="bank-label">Libellé</Label>
               <Input id="bank-label" autoFocus value={label} onChange={(e) => setLabel(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bank-balance">Solde actuel (€)</Label>
+              <Input
+                id="bank-balance"
+                type="number"
+                step="0.01"
+                value={currentBalance}
+                onChange={(e) => setCurrentBalance(e.target.value)}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">Solde affiché par la banque, base du prévisionnel.</p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setModal(null)}>Annuler</Button>

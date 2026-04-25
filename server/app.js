@@ -74,7 +74,6 @@ module.exports = function createApp(db, mongoUri) {
   // Routes protégées : requireAuth renvoie 401 si la session est absente
   app.use('/api/banks', requireAuth, require('./routes/banks'));
   app.use('/api/recurring-operations', requireAuth, require('./routes/recurringOperations'));
-  app.use('/api/periods', requireAuth, require('./routes/periods'));
   app.use('/api/operations', requireAuth, require('./routes/operations'));
   app.use('/api/admin', requireAuth, requireAdmin, require('./routes/admin'));
 
@@ -90,7 +89,12 @@ module.exports = function createApp(db, mongoUri) {
   // Gestionnaire d'erreurs global : capte tout ce qui est passé à next(err)
   // (notamment via asyncHandler) et renvoie une réponse JSON propre.
   app.use((err, _req, res, _next) => {
-    if (err.name === 'MulterError' || err.message === 'Seules les images sont acceptées') {
+    // Erreurs d'upload (multer) ou validation métier déclenchée par un middleware
+    // (file filter, parser CSV qui pose err.status = 400, etc.).
+    if (err.name === 'MulterError'
+      || err.message === 'Seules les images sont acceptées'
+      || err.message === 'Seuls les fichiers .qif, .ofx ou .zip sont acceptés'
+      || err.status === 400) {
       return res.status(400).json({ message: err.message });
     }
     console.error(err);
