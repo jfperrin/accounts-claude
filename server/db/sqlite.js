@@ -71,6 +71,14 @@ function initSchema(db) {
       used       INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      id         TEXT PRIMARY KEY,
+      label      TEXT NOT NULL,
+      user_id    TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Migration: drop username column if it exists (schema change from username to email)
@@ -121,6 +129,9 @@ function initSchema(db) {
     'ALTER TABLE password_reset_tokens ADD COLUMN old_password_hash TEXT',
     // Solde courant des banques (saisi manuellement par l'utilisateur)
     'ALTER TABLE banks ADD COLUMN current_balance REAL NOT NULL DEFAULT 0',
+    // Catégorie sur les opérations et récurrentes
+    'ALTER TABLE operations ADD COLUMN category TEXT',
+    'ALTER TABLE recurring_operations ADD COLUMN category TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -160,6 +171,7 @@ const mapOp = (row) => row && {
   amount: row.amount,
   date: row.date,
   pointed: row.pointed === 1,
+  category: row.category ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
 };
@@ -169,7 +181,14 @@ const mapRecurring = (row) => row && {
   label: row.label,
   amount: row.amount,
   dayOfMonth: row.day_of_month,
+  category: row.category ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
+  userId: row.user_id,
+};
+
+const mapCategory = (row) => row && {
+  _id: row.id,
+  label: row.label,
   userId: row.user_id,
 };
 
@@ -365,7 +384,7 @@ module.exports = function createSQLiteRepos() {
     //     filtrer les candidats déjà rapprochés et éviter de consommer 2× la même).
     findAllMinimal(userId) {
       return db.prepare(
-        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed FROM operations WHERE user_id = ?',
+        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category FROM operations WHERE user_id = ?',
       ).all(uid(userId)).map((r) => ({
         _id: r._id,
         label: r.label,
@@ -373,6 +392,7 @@ module.exports = function createSQLiteRepos() {
         amount: r.amount,
         date: r.date,
         pointed: r.pointed === 1,
+        category: r.category ?? null,
       }));
     },
 
@@ -385,12 +405,12 @@ module.exports = function createSQLiteRepos() {
       return out;
     },
 
-    create({ label, amount, date, pointed = false, bankId, userId }) {
+    create({ label, amount, date, pointed = false, category = null, bankId, userId }) {
       const id = randomUUID();
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dateStr, pointed ? 1 : 0, uid(bankId), uid(userId));
+        'INSERT INTO operations (id, label, amount, date, pointed, category, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dateStr, pointed ? 1 : 0, category ?? null, uid(bankId), uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -400,12 +420,13 @@ module.exports = function createSQLiteRepos() {
       if (!cur) return null;
       const { label = cur.label, amount = cur.amount, date = cur.date, bankId = cur.bank_id } = body;
       const pointed = body.pointed !== undefined ? (body.pointed ? 1 : 0) : cur.pointed;
+      const category = body.category !== undefined ? (body.category ?? null) : (cur.category ?? null);
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(`
         UPDATE operations
-        SET label = ?, amount = ?, date = ?, pointed = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, date = ?, pointed = ?, category = ?, bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dateStr, pointed, uid(bankId), id, uid(userId));
+      `).run(label, amount, dateStr, pointed, category, uid(bankId), id, uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -427,13 +448,13 @@ module.exports = function createSQLiteRepos() {
     // Transaction : toutes les insertions réussissent ou aucune n'est commitée
     insertMany(items) {
       const stmt = db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO operations (id, label, amount, date, pointed, category, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       );
       db.transaction((ops) => {
         for (const op of ops) {
           const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
-            uid(op.bankId), uid(op.userId));
+            op.category ?? null, uid(op.bankId), uid(op.userId));
         }
       })(items);
     },
@@ -456,15 +477,16 @@ module.exports = function createSQLiteRepos() {
         label: r.label,
         amount: r.amount,
         dayOfMonth: r.day_of_month,
+        category: r.category ?? null,
         bankId: r.bank_id, // ID brut pour la déduplication
         userId: r.user_id,
       })),
 
-    create({ label, amount, dayOfMonth, bankId, userId }) {
+    create({ label, amount, dayOfMonth, category = null, bankId, userId }) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO recurring_operations (id, label, amount, day_of_month, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dayOfMonth, uid(bankId), uid(userId));
+        'INSERT INTO recurring_operations (id, label, amount, day_of_month, category, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dayOfMonth, category ?? null, uid(bankId), uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
@@ -472,11 +494,12 @@ module.exports = function createSQLiteRepos() {
       const cur = db.prepare('SELECT * FROM recurring_operations WHERE id = ? AND user_id = ?').get(id, uid(userId));
       if (!cur) return null;
       const { label = cur.label, amount = cur.amount, dayOfMonth = cur.day_of_month, bankId = cur.bank_id } = body;
+      const category = body.category !== undefined ? (body.category ?? null) : (cur.category ?? null);
       db.prepare(`
         UPDATE recurring_operations
-        SET label = ?, amount = ?, day_of_month = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, day_of_month = ?, category = ?, bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dayOfMonth, uid(bankId), id, uid(userId));
+      `).run(label, amount, dayOfMonth, category, uid(bankId), id, uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
@@ -520,5 +543,30 @@ module.exports = function createSQLiteRepos() {
     },
   };
 
-  return { users, banks, operations, recurringOps, resetTokens };
+  // ─────────────────────────────────────────────
+  // CATEGORIES
+  // ─────────────────────────────────────────────
+  const categories = {
+    findByUser: (userId) =>
+      db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY label').all(uid(userId)).map(mapCategory),
+
+    create({ label, userId }) {
+      const id = randomUUID();
+      db.prepare('INSERT INTO categories (id, label, user_id) VALUES (?, ?, ?)').run(id, label, uid(userId));
+      return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
+    },
+
+    update(id, userId, { label }) {
+      const cur = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(id, uid(userId));
+      if (!cur) return null;
+      db.prepare("UPDATE categories SET label = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?")
+        .run(label, id, uid(userId));
+      return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
+    },
+
+    delete: (id, userId) =>
+      db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(id, uid(userId)),
+  };
+
+  return { users, banks, operations, recurringOps, resetTokens, categories };
 };

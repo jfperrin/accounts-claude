@@ -11,6 +11,46 @@ const AdmZip = require('adm-zip');
 const wrap = require('../utils/asyncHandler');
 const { parseBankQif } = require('../utils/parseQif');
 const { parseBankOfx } = require('../utils/parseOfx');
+const { labelSimilarity } = require('../utils/labelSimilarity');
+
+// Seuil unique de similarité utilisé pour :
+//   - inférer la catégorie d'une op à partir d'opérations existantes au libellé proche
+//   - réconcilier une ligne d'import avec une opération existante de même montant
+//     dont le libellé est suffisamment proche
+const SIMILARITY_THRESHOLD = 0.7;
+
+// Cherche la catégorie d'une opération existante dont le libellé est similaire
+// à `label` à au moins SIMILARITY_THRESHOLD. Priorité à la correspondance exacte.
+function inferCategory(existing, label) {
+  let best = null;
+  let bestScore = SIMILARITY_THRESHOLD - Number.EPSILON;
+  for (const o of existing) {
+    if (!o.category) continue;
+    const score = labelSimilarity(o.label, label);
+    if (score > bestScore) {
+      bestScore = score;
+      best = o.category;
+      if (score === 1) break;
+    }
+  }
+  return best;
+}
+
+// Trouve parmi les candidats celui dont le libellé est le plus proche de `label`,
+// à condition que le score atteigne SIMILARITY_THRESHOLD. Retourne null sinon.
+function bestSimilarCandidate(candidates, label) {
+  let best = null;
+  let bestScore = SIMILARITY_THRESHOLD - Number.EPSILON;
+  for (const c of candidates) {
+    const score = labelSimilarity(c.label, label);
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+      if (score === 1) break;
+    }
+  }
+  return best;
+}
 
 // Multer mémoire pour l'import (1 Mo max).
 // Accepte .qif, .ofx ou .zip (qui doit contenir un de ces formats).
@@ -18,7 +58,7 @@ const { parseBankOfx } = require('../utils/parseOfx');
 // codes de champs fixes) et suffisent aux exports Fortuneo/BP.
 const importUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 1 * 1024 * 1024 },
+  limits: { fileSize: 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!/\.(qif|ofx|zip)$/i.test(file.originalname)) {
       return cb(new Error('Seuls les fichiers .qif, .ofx ou .zip sont acceptés'));
@@ -154,6 +194,7 @@ router.post('/generate-recurring', wrap(async (req, res) => {
       bankId: r.bankId,
       userId,
       pointed: false,
+      category: r.category ?? null,
     });
   }
 
@@ -190,13 +231,13 @@ const bankIdOf = (op) =>
 //
 //   - Si une ligne existe déjà à l'identique (label|bankId|amount|date)    → ignorée (doublon)
 //   - Si elle a déjà été réconciliée (suffixe "(label)" sur une op pointée)→ ignorée (doublon)
-//   - Sinon, on cherche les ops non pointées de la même banque + même montant :
-//       * 0 candidat   → l'opération est créée (pointée, label brut)
-//       * 1 candidat   → réconciliation auto (l'existant devient pointé,
+//   - Sinon, on cherche les ops non pointées de la même banque + même montant.
+//     Parmi ces candidats, on prend le meilleur match de libellé (similarité ≥
+//     SIMILARITY_THRESHOLD via labelSimilarity) :
+//       * Match trouvé → réconciliation auto (l'existant devient pointé,
 //                        son label est suffixé par " (labelFichier)")
-//       * N candidats  → ajoutée à `pendingMatches` pour résolution manuelle
-//                        (l'utilisateur choisit dans une modale côté client,
-//                        puis appelle POST /import/resolve)
+//       * Aucun match  → l'opération est créée (pointée, label brut, catégorie
+//                        inférée à partir d'opérations existantes au libellé proche)
 //
 // La banque cible doit appartenir à l'utilisateur ; l'algorithme reste scopé à userId.
 router.post('/import', (req, res, next) => {
@@ -259,39 +300,30 @@ router.post('/import', (req, res, next) => {
       duplicates++; continue;
     }
 
-    // 3. candidats à la réconciliation : non pointés, non encore consommés ce batch
+    // 3. Candidats à la réconciliation : non pointés, non encore consommés ce batch.
+    //    Parmi eux, on cherche le meilleur match par similarité de libellé.
+    //    - Si une op existante a le même montant ET un libellé suffisamment proche
+    //      (≥ SIMILARITY_THRESHOLD) → auto-réconciliation
+    //    - Sinon → insertion comme nouvelle opération (même s'il y a des candidats
+    //      au montant identique mais au libellé sans rapport)
     const candidates = sameAmount.filter(
       (o) => !o.pointed && !consumed.has(String(o._id)),
     );
+    const target = bestSimilarCandidate(candidates, r.label);
 
-    if (candidates.length === 0) {
-      // Aucun candidat → on crée la ligne telle quelle
-      toInsert.push({
-        label: r.label, amount: r.amount, date: r.date,
-        bankId, userId, pointed: true,
-      });
-      // Ajout à existingKeys pour éviter des doublons internes au batch
-      existingKeys.add(exactKey(r.label, String(bankId), amountKey(r.amount), r.date));
-    } else if (candidates.length === 1) {
-      // Auto-réconciliation
-      const target = candidates[0];
+    if (target) {
       consumed.add(String(target._id));
       toReconcile.push({
         id: String(target._id),
         newLabel: appendImportLabel(target.label, r.label),
       });
     } else {
-      // Conflit : à résoudre par l'utilisateur via une modale
-      pendingMatches.push({
-        importedRow: { label: r.label, amount: r.amount, date: r.date, bankId: String(bankId) },
-        candidates: candidates.map((c) => ({
-          _id: String(c._id),
-          label: c.label,
-          amount: c.amount,
-          date: c.date,
-          bankId: bankIdOf(c),
-        })),
+      toInsert.push({
+        label: r.label, amount: r.amount, date: r.date,
+        bankId, userId, pointed: true,
+        category: inferCategory(existing, r.label),
       });
+      existingKeys.add(exactKey(r.label, String(bankId), amountKey(r.amount), r.date));
     }
   }
 
@@ -356,6 +388,8 @@ router.post('/import/resolve', wrap(async (req, res) => {
   const { operations } = req.app.locals.db;
   const userId = req.user._id;
 
+  const existing = await operations.findAllMinimal(userId);
+
   const toInsert = [];
   let reconciled = 0;
 
@@ -374,6 +408,7 @@ router.post('/import/resolve', wrap(async (req, res) => {
         bankId: row.bankId,
         userId,
         pointed: true,
+        category: inferCategory(existing, row.label),
       });
     } else {
       for (const opId of ids) {
