@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { CalendarDays, Download, Plus, Upload } from 'lucide-react';
+import { CalendarDays, ChevronDown, Download, Plus, Upload } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import * as operationsApi from '@/api/operations';
@@ -9,6 +9,7 @@ import OperationsTable from '@/components/OperationsTable';
 import OperationForm from '@/components/OperationForm';
 import ImportResolveDialog from '@/components/ImportResolveDialog';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -165,14 +166,25 @@ export default function DashboardPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button variant="outline" onClick={handleGenerateRecurring} className="gap-2">
-          <Download className="h-4 w-4" />
-          Importer les opérations récurrentes
-        </Button>
-        <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
-          <Upload className="h-4 w-4" />
-          Importer
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Importer
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={handleGenerateRecurring}>
+              <Download className="h-4 w-4" />
+              Opérations récurrentes
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4" />
+              Un fichier d'opérations
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button onClick={() => { setEditOp(null); setFormOpen(true); }} className="gap-2">
           <Plus className="h-4 w-4" />
           Nouvelle opération

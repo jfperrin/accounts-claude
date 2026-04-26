@@ -67,7 +67,11 @@
       "Read(//c/Program Files/**)",
       "Read(//c/Users/jf/AppData/Roaming/**)",
       "Read(//c/Users/jf/scoop/apps/**)",
-      "Read(//c/Users/jf/AppData/Local/**)"
+      "Read(//c/Users/jf/AppData/Local/**)",
+      "Bash(npm install *)",
+      "Bash(powershell.exe -Command \"cd 'C:\\\\Users\\\\jf\\\\OneDrive\\\\Github\\\\accounts-claude\\\\client'; yarn add @radix-ui/react-dropdown-menu 2>&1 | Select-Object -Last 5\")",
+      "Bash(wsl --list --verbose)",
+      "Bash(wsl -l -v)"
     ]
   }
 }
