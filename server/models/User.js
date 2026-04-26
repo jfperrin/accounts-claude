@@ -11,6 +11,7 @@ const schema = new Schema({
   lastName:      { type: String, trim: true },
   nickname:      { type: String, trim: true },
   avatarUrl:     { type: String, trim: true },
+  acceptedToSAt: { type: Date, default: null },
 }, { timestamps: true });
 
 schema.index({ googleId: 1 }, { unique: true, sparse: true });

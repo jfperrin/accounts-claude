@@ -14,7 +14,7 @@ function parseDate(raw) {
     return isNaN(d.getTime()) ? null : d;
   }
   // FR DD/MM/YYYY ou DD-MM-YYYY (année 2 ou 4 chiffres)
-  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (m) {
     const year = m[3].length === 2 ? 2000 + +m[3] : +m[3];
     const d = new Date(Date.UTC(year, +m[2] - 1, +m[1]));

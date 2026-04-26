@@ -23,6 +23,7 @@ function serializeUser(u) {
     lastName:      u.lastName  ?? null,
     nickname:      u.nickname  ?? null,
     avatarUrl:     u.avatarUrl ?? null,
+    acceptedToSAt: u.acceptedToSAt ?? null,
   };
 }
 
@@ -45,13 +46,14 @@ const authLimiter = rateLimit({
 // Crée un compte local. Envoie un email de vérification.
 // Ne crée pas de session — l'utilisateur doit valider son email avant de se connecter.
 router.post('/register', authLimiter, wrap(async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, acceptedToS } = req.body;
   if (!email || !EMAIL_RE.test(email) || !password) return res.status(400).json({ message: 'Champs requis' });
+  if (!acceptedToS) return res.status(400).json({ message: 'Vous devez accepter les conditions générales d\'utilisation' });
   const normalizedEmail = email.trim().toLowerCase();
   const db = req.app.locals.db;
   if (await db.users.emailExists(normalizedEmail)) return res.status(409).json({ message: 'Email déjà utilisé' });
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await db.users.create({ email: normalizedEmail, passwordHash });
+  const user = await db.users.create({ email: normalizedEmail, passwordHash, acceptedToSAt: new Date() });
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
   await db.resetTokens.create(user._id, token, expiresAt, { type: 'email_verify' });

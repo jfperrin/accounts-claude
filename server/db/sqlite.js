@@ -132,6 +132,7 @@ function initSchema(db) {
     // Catégorie sur les opérations et récurrentes
     'ALTER TABLE operations ADD COLUMN category TEXT',
     'ALTER TABLE recurring_operations ADD COLUMN category TEXT',
+    'ALTER TABLE users ADD COLUMN accepted_tos_at TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -153,6 +154,7 @@ const mapUser = (row) => row && {
   lastName:     row.last_name ?? null,
   nickname:     row.nickname ?? null,
   avatarUrl:    row.avatar_url ?? null,
+  acceptedToSAt: row.accepted_tos_at ? new Date(row.accepted_tos_at) : null,
 };
 
 const mapBank = (row) => row && {
@@ -238,17 +240,18 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
 
-    create({ email, passwordHash, googleId, role, emailVerified: emailVerifiedParam }) {
+    create({ email, passwordHash, googleId, role, emailVerified: emailVerifiedParam, acceptedToSAt }) {
       const id = randomUUID();
       const emailVerified = emailVerifiedParam ? 1 : (googleId ? 1 : 0);
+      const tosAt = acceptedToSAt ? new Date(acceptedToSAt).toISOString() : null;
       db.prepare(
-        'INSERT INTO users (id, email, password_hash, google_id, role, email_verified) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, email, passwordHash ?? null, googleId ?? null, role ?? 'user', emailVerified);
+        'INSERT INTO users (id, email, password_hash, google_id, role, email_verified, accepted_tos_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, email, passwordHash ?? null, googleId ?? null, role ?? 'user', emailVerified, tosAt);
       return this.findById(id);
     },
 
@@ -276,7 +279,7 @@ module.exports = function createSQLiteRepos() {
 
     findAll() {
       return db.prepare(
-        'SELECT id, email, email_verified, role, title, first_name, last_name, nickname, avatar_url, created_at FROM users ORDER BY created_at DESC',
+        'SELECT id, email, email_verified, role, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, created_at FROM users ORDER BY created_at DESC',
       ).all().map(mapUser);
     },
 
@@ -306,6 +309,14 @@ module.exports = function createSQLiteRepos() {
       db.prepare(
         `UPDATE users SET email = ?, email_verified = 1, updated_at = datetime('now') WHERE id = ?`
       ).run(email, uid(id));
+      return this.findById(id);
+    },
+
+    acceptToS(id) {
+      const now = new Date().toISOString();
+      db.prepare(
+        `UPDATE users SET accepted_tos_at = ?, updated_at = datetime('now') WHERE id = ?`
+      ).run(now, uid(id));
       return this.findById(id);
     },
   };

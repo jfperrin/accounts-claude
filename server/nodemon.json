@@ -1,4 +1,7 @@
 {
   "legacyWatch": true,
-  "delay": 500
+  "delay": 500,
+  "events": {
+    "restart": "node -e \"const {execSync}=require('child_process');try{execSync('npx eslint . --quiet',{stdio:'inherit'})}catch(e){}\""
+  }
 }

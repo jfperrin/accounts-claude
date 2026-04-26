@@ -62,6 +62,9 @@ const users = {
 
   applyPendingEmail: (id, email) =>
     User.findByIdAndUpdate(id, { $set: { email, emailVerified: true } }, { new: true }).select('-passwordHash'),
+
+  acceptToS: (id) =>
+    User.findByIdAndUpdate(id, { $set: { acceptedToSAt: new Date() } }, { new: true }).select('-passwordHash'),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────
