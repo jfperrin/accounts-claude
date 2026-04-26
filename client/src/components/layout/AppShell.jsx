@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ export default function AppShell() {
     { key: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
+    { key: '/categories', icon: Tag, label: 'Catégories' },
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Administration' }] : []),
   ];
 
@@ -25,6 +26,7 @@ export default function AppShell() {
     { key: '/', icon: LayoutDashboard, label: 'Accueil' },
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
+    { key: '/categories', icon: Tag, label: 'Catégories' },
     { key: '/profile', icon: UserCircle, label: 'Profil' },
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Admin' }] : []),
   ];

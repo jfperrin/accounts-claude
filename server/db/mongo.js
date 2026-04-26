@@ -16,6 +16,7 @@ const User = require('../models/User');
 const Operation = require('../models/Operation');
 const RecurringOperation = require('../models/RecurringOperation');
 const PasswordResetToken = require('../models/PasswordResetToken');
+const Category = require('../models/Category');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -114,7 +115,7 @@ const operations = {
   // Utilisée par l'import (CSV/QIF/OFX) pour dédup globale + réconciliation
   // par montant : besoin de _id pour le tracking et pointed pour filtrer.
   findAllMinimal(userId) {
-    return Operation.find({ userId }).select('label bankId amount date pointed');
+    return Operation.find({ userId }).select('label bankId amount date pointed category');
   },
 
   async sumUnpointedByBank(userId) {
@@ -195,4 +196,16 @@ const resetTokens = {
     PasswordResetToken.deleteMany({ userId }),
 };
 
-module.exports = { users, banks, operations, recurringOps, resetTokens };
+// ─── CATEGORIES ──────────────────────────────────────────────────────────────
+const categories = {
+  findByUser: (userId) => Category.find({ userId }).sort('label'),
+
+  create: (data) => Category.create(data),
+
+  update: (id, userId, { label }) =>
+    Category.findOneAndUpdate({ _id: id, userId }, { $set: { label } }, { returnDocument: 'after' }),
+
+  delete: (id, userId) => Category.findOneAndDelete({ _id: id, userId }),
+};
+
+module.exports = { users, banks, operations, recurringOps, resetTokens, categories };

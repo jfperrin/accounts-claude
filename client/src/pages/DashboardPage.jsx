@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import * as operationsApi from '@/api/operations';
 import * as banksApi from '@/api/banks';
+import { useCategories } from '@/hooks/useCategories';
 import BankBalances from '@/components/BankBalances';
 import OperationsTable from '@/components/OperationsTable';
 import OperationForm from '@/components/OperationForm';
@@ -23,6 +24,7 @@ const CURRENT_YEAR = dayjs().year();
 const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 
 export default function DashboardPage() {
+  const { categories } = useCategories();
   const [banks, setBanks] = useState([]);
   const [operations, setOperations] = useState([]);
   const [formOpen, setFormOpen] = useState(false);
@@ -85,6 +87,11 @@ export default function DashboardPage() {
     await operationsApi.remove(id);
     loadOperations();
     loadBanks();
+  };
+
+  const handleCategoryChange = async (id, category) => {
+    await operationsApi.update(id, { category });
+    loadOperations();
   };
 
   const openEdit = (op) => { setEditOp(op); setFormOpen(true); };
@@ -211,9 +218,11 @@ export default function DashboardPage() {
           </div>
           <OperationsTable
             operations={operations}
+            categories={categories}
             onPoint={handlePoint}
             onEdit={openEdit}
             onDelete={handleDelete}
+            onCategoryChange={handleCategoryChange}
           />
         </div>
       )}
@@ -222,6 +231,7 @@ export default function DashboardPage() {
         open={formOpen}
         operation={editOp}
         banks={banks}
+        categories={categories}
         onFinish={handleFormFinish}
         onCancel={() => { setFormOpen(false); setEditOp(null); }}
       />

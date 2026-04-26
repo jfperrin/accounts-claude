@@ -75,6 +75,7 @@ module.exports = function createApp(db, mongoUri) {
   app.use('/api/banks', requireAuth, require('./routes/banks'));
   app.use('/api/recurring-operations', requireAuth, require('./routes/recurringOperations'));
   app.use('/api/operations', requireAuth, require('./routes/operations'));
+  app.use('/api/categories', requireAuth, require('./routes/categories'));
   app.use('/api/admin', requireAuth, requireAdmin, require('./routes/admin'));
 
   // Sert le build Vite en production (client/dist copié dans server/public).

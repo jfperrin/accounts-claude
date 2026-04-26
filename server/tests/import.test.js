@@ -1,5 +1,6 @@
-// Tests d'intégration de l'import (QIF) avec réconciliation par montant.
-// Couvre les 3 cas (0/1/N candidats), la dédup stricte, et la route /resolve.
+// Tests d'intégration de l'import (QIF) avec réconciliation par montant + similarité.
+// La réconciliation auto exige : même bankId + même montant + libellé similaire (≥ seuil).
+// Sinon → insertion comme nouvelle opération.
 // Endpoint : POST /api/operations/import (.qif, .ofx ou .zip).
 
 const request = require('supertest');
@@ -84,7 +85,8 @@ describe('POST /api/operations/import', () => {
     expect(ops[0].label).toBe('Loyer (PRLV LOYER MARS)');
   });
 
-  it('renvoie pendingMatches quand plusieurs candidats (N-match) — pas d\'insertion', async () => {
+  it('réconcilie le meilleur candidat parmi plusieurs au même montant', async () => {
+    // Deux ops au même montant : la similarité de libellé tranche en faveur de la 1ère.
     await agent.post('/api/operations').send({
       label: 'Loyer A', amount: -800, date: '2026-04-05T00:00:00.000Z', bankId,
     });
@@ -96,30 +98,45 @@ describe('POST /api/operations/import', () => {
     const res = await importFile(buf);
 
     expect(res.body.imported).toBe(0);
-    expect(res.body.autoReconciled).toBe(0);
-    expect(res.body.pendingMatches).toHaveLength(1);
-    expect(res.body.pendingMatches[0].candidates).toHaveLength(2);
-    expect(res.body.pendingMatches[0].importedRow).toEqual(expect.objectContaining({
-      label: 'PRLV LOYER',
-      amount: -800,
-    }));
+    expect(res.body.autoReconciled).toBe(1);
+    expect(res.body.pendingMatches).toEqual([]);
 
     const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
     expect(ops).toHaveLength(2);
+    // Une seule des deux est devenue pointée
+    expect(ops.filter((o) => o.pointed)).toHaveLength(1);
   });
 
-  it('ne consomme pas 2× la même cible quand 2 lignes du fichier ont le même montant', async () => {
+  it('insère plutôt que réconcilier quand le libellé est trop différent malgré le même montant', async () => {
+    // Op existante au même montant mais libellé sans rapport → ne doit pas être consommée.
     await agent.post('/api/operations').send({
-      label: 'Achat', amount: -50, date: '2026-04-05T00:00:00.000Z', bankId,
+      label: 'Achat librairie', amount: -50, date: '2026-04-05T00:00:00.000Z', bankId,
+    });
+
+    const buf = qifBuffer([{ label: 'COURSES SUPERMARCHE', amount: -50, date: '06/04/2026' }]);
+    const res = await importFile(buf);
+
+    expect(res.body.imported).toBe(1);
+    expect(res.body.autoReconciled).toBe(0);
+
+    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    expect(ops).toHaveLength(2);
+    // L'op existante reste non pointée
+    expect(ops.find((o) => o.label === 'Achat librairie').pointed).toBe(false);
+  });
+
+  it('ne consomme pas 2× la même cible quand 2 lignes du fichier matchent au même montant', async () => {
+    await agent.post('/api/operations').send({
+      label: 'CARTE PAIEMENT', amount: -50, date: '2026-04-05T00:00:00.000Z', bankId,
     });
 
     const buf = qifBuffer([
-      { label: 'CARTE A', amount: -50, date: '06/04/2026' },
-      { label: 'CARTE B', amount: -50, date: '07/04/2026' },
+      { label: 'CARTE PAIEMENT 001', amount: -50, date: '06/04/2026' },
+      { label: 'CARTE PAIEMENT 002', amount: -50, date: '07/04/2026' },
     ]);
     const res = await importFile(buf);
 
-    // 1ère ligne réconcilie → 2e voit 0 candidat → insertion
+    // 1ère ligne réconcilie → 2e voit 0 candidat (consommé) → insertion
     expect(res.body.autoReconciled).toBe(1);
     expect(res.body.imported).toBe(1);
 

@@ -14,12 +14,13 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn, formatEur } from '@/lib/utils';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import { useCategories } from '@/hooks/useCategories';
 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const CURRENT_YEAR = dayjs().year();
 const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
-const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '' });
+const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '', category: 'none' });
 
 export default function RecurringPage() {
   const [items, setItems] = useState([]);
@@ -32,6 +33,7 @@ export default function RecurringPage() {
   const [genMonth, setGenMonth] = useState(dayjs().month() + 1);
   const [genYear, setGenYear] = useState(CURRENT_YEAR);
 
+  const { categories } = useCategories();
   const load = () => Promise.all([api.list(), banksApi.list()]).then(([ops, b]) => { setItems([...ops].sort((a, b) => a.dayOfMonth - b.dayOfMonth)); setBanks(b); });
   useEffect(() => { load(); }, []);
 
@@ -42,6 +44,7 @@ export default function RecurringPage() {
       bankId: item.bankId?._id ?? item.bankId ?? '',
       dayOfMonth: String(item.dayOfMonth),
       amount: String(item.amount),
+      category: item.category ?? 'none',
     });
     setModal({ item });
   };
@@ -56,6 +59,7 @@ export default function RecurringPage() {
         bankId: form.bankId,
         dayOfMonth: Number(form.dayOfMonth),
         amount: parseFloat(form.amount),
+        category: (form.category && form.category !== 'none') ? form.category : null,
       };
       modal.item ? await api.update(modal.item._id, payload) : await api.create(payload);
       toast.success('Enregistré');
@@ -109,6 +113,7 @@ export default function RecurringPage() {
             <TableRow>
               <TableHead>Libellé</TableHead>
               <TableHead>Banque</TableHead>
+              <TableHead>Catégorie</TableHead>
               <TableHead className="text-center">Jour</TableHead>
               <TableHead className="text-right">Montant</TableHead>
               <TableHead />
@@ -119,6 +124,11 @@ export default function RecurringPage() {
               <TableRow key={item._id}>
                 <TableCell className="font-medium">{item.label}</TableCell>
                 <TableCell><Badge variant="secondary">{item.bankId?.label}</Badge></TableCell>
+                <TableCell>
+                  {item.category
+                    ? <Badge variant="outline">{item.category}</Badge>
+                    : <span className="text-xs text-muted-foreground">—</span>}
+                </TableCell>
                 <TableCell className="text-center text-muted-foreground">{item.dayOfMonth}</TableCell>
                 <TableCell className={cn('text-right font-semibold', item.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
                   {item.amount > 0 ? '+' : ''}{formatEur(item.amount)}
@@ -174,6 +184,18 @@ export default function RecurringPage() {
                 <Label htmlFor="rec-amount">Montant (€)</Label>
                 <Input id="rec-amount" type="number" step="0.01" value={form.amount} onChange={set('amount')} required />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Catégorie</Label>
+              <Select value={form.category || 'none'} onValueChange={(v) => setForm((f) => ({ ...f, category: v === 'none' ? '' : v }))}>
+                <SelectTrigger><SelectValue placeholder="Sans catégorie" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Sans catégorie</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c._id} value={c.label}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setModal(null)}>Annuler</Button>

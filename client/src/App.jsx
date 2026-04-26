@@ -8,6 +8,7 @@ import BanksPage from '@/pages/BanksPage';
 import RecurringPage from '@/pages/RecurringPage';
 import ProfilePage from '@/pages/ProfilePage';
 import AdminPage from '@/pages/AdminPage';
+import CategoriesPage from '@/pages/CategoriesPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import RequireAdmin from '@/components/RequireAdmin';
 
@@ -35,6 +36,7 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="banks" element={<BanksPage />} />
           <Route path="recurring" element={<RecurringPage />} />
+          <Route path="categories" element={<CategoriesPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
         </Route>

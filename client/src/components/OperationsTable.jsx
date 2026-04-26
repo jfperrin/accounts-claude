@@ -12,7 +12,7 @@ import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 const PAGE_SIZES = [20, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 50;
 
-export default function OperationsTable({ operations, onPoint, onEdit, onDelete }) {
+export default function OperationsTable({ operations, categories = [], onPoint, onEdit, onDelete, onCategoryChange }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
@@ -60,13 +60,33 @@ export default function OperationsTable({ operations, onPoint, onEdit, onDelete 
               className={cn(op.pointed && 'opacity-50', 'md:cursor-default cursor-pointer active:opacity-70')}
               onClick={(e) => {
                 // Sur mobile uniquement : clic sur la ligne pointe/dépointe
-                if (window.innerWidth < 768 && !e.target.closest('button, [role="switch"]')) {
+                if (window.innerWidth < 768 && !e.target.closest('button, [role="switch"], [role="combobox"]')) {
                   onPoint(op._id);
                 }
               }}
             >
               <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
-              <TableCell className="font-medium">{op.label}</TableCell>
+              <TableCell>
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium">{op.label}</span>
+                  {onCategoryChange && (
+                    <Select
+                      value={op.category ?? 'none'}
+                      onValueChange={(v) => onCategoryChange(op._id, v === 'none' ? null : v)}
+                    >
+                      <SelectTrigger className="h-6 w-36 border-dashed text-xs text-muted-foreground">
+                        <SelectValue placeholder="Catégorie…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Sans catégorie</SelectItem>
+                        {categories.map((c) => (
+                          <SelectItem key={c._id} value={c.label}>{c.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </TableCell>
               <TableCell>
                 <Badge variant="secondary">{op.bankId?.label}</Badge>
               </TableCell>
