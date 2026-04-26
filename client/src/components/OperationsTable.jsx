@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, formatEur } from '@/lib/utils';
+import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 const PAGE_SIZES = [20, 50, 100, 200];
@@ -69,9 +70,24 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
               <TableCell>
                 <div className="flex flex-col gap-1">
                   <span className="font-medium">{op.label}</span>
-                  {onCategoryChange && (
+                  {onCategoryChange && (op.category ? (() => {
+                    const cat = categories.find((c) => c.label === op.category);
+                    const col = cat?.color ?? DEFAULT_COLOR;
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onCategoryChange(op._id, null); }}
+                        className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-70"
+                        style={{ backgroundColor: `${col}20`, color: col }}
+                        title="Cliquer pour retirer la catégorie"
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: col }} />
+                        {op.category}
+                      </button>
+                    );
+                  })() : (
                     <Select
-                      value={op.category ?? 'none'}
+                      value="none"
                       onValueChange={(v) => onCategoryChange(op._id, v === 'none' ? null : v)}
                     >
                       <SelectTrigger className="h-6 w-36 border-dashed text-xs text-muted-foreground">
@@ -80,11 +96,16 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
                       <SelectContent>
                         <SelectItem value="none">— Sans catégorie</SelectItem>
                         {categories.map((c) => (
-                          <SelectItem key={c._id} value={c.label}>{c.label}</SelectItem>
+                          <SelectItem key={c._id} value={c.label}>
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
+                              {c.label}
+                            </span>
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  )}
+                  ))}
                 </div>
               </TableCell>
               <TableCell>
@@ -98,10 +119,10 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => onEdit(op)}>
+                  <Button variant="ghost" size="icon" aria-label="éditer" onClick={(e) => { e.stopPropagation(); onEdit(op); }}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon" aria-label="supprimer" onClick={() => setDeleteTarget(op._id)}
+                  <Button variant="ghost" size="icon" aria-label="supprimer" onClick={(e) => { e.stopPropagation(); setDeleteTarget(op._id); }}
                     className="text-rose-500 hover:text-rose-700 hover:bg-rose-50">
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>

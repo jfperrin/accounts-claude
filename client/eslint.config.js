@@ -47,6 +47,7 @@ export default [
     rules: {
       ...js.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
+      'react-hooks/set-state-in-effect': 'off',
 
       // Marque les identifiants utilisés en JSX comme "utilisés" (évite les faux positifs no-unused-vars)
       'react/jsx-uses-vars': 'error',

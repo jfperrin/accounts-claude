@@ -74,7 +74,9 @@
       "Bash(wsl -l -v)",
       "WebSearch",
       "WebFetch(domain:www.npmjs.com)",
-      "WebFetch(domain:cookieconsent.orestbida.com)"
+      "WebFetch(domain:cookieconsent.orestbida.com)",
+      "Read(//home/jeff/**)",
+      "Read(//home/**)"
     ]
   }
 }

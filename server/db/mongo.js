@@ -205,8 +205,8 @@ const categories = {
 
   create: (data) => Category.create(data),
 
-  update: (id, userId, { label }) =>
-    Category.findOneAndUpdate({ _id: id, userId }, { $set: { label } }, { returnDocument: 'after' }),
+  update: (id, userId, { label, color }) =>
+    Category.findOneAndUpdate({ _id: id, userId }, { $set: { label, color: color ?? null } }, { returnDocument: 'after' }),
 
   delete: (id, userId) => Category.findOneAndDelete({ _id: id, userId }),
 };

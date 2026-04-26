@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '@/api/categories';
 import { useCategories } from '@/hooks/useCategories';
+import { CATEGORY_COLORS, DEFAULT_COLOR } from '@/lib/categoryColors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,19 +19,20 @@ export default function CategoriesPage() {
   const { categories, reload } = useCategories();
   const [modal, setModal] = useState(null); // null | { cat? }
   const [label, setLabel] = useState('');
+  const [color, setColor] = useState(DEFAULT_COLOR);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const openAdd = () => { setLabel(''); setModal({}); };
-  const openEdit = (cat) => { setLabel(cat.label); setModal({ cat }); };
+  const openAdd = () => { setLabel(''); setColor(DEFAULT_COLOR); setModal({}); };
+  const openEdit = (cat) => { setLabel(cat.label); setColor(cat.color ?? DEFAULT_COLOR); setModal({ cat }); };
 
   const onSave = async (e) => {
     e.preventDefault();
     if (!label.trim()) return;
     try {
       if (modal.cat) {
-        await api.update(modal.cat._id, { label: label.trim() });
+        await api.update(modal.cat._id, { label: label.trim(), color });
       } else {
-        await api.create({ label: label.trim() });
+        await api.create({ label: label.trim(), color });
       }
       toast.success('Enregistré');
       setModal(null);
@@ -81,7 +83,15 @@ export default function CategoriesPage() {
             <TableBody>
               {categories.map((cat) => (
                 <TableRow key={cat._id}>
-                  <TableCell className="font-medium">{cat.label}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-2 font-medium">
+                      <span
+                        className="h-3 w-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: cat.color ?? DEFAULT_COLOR }}
+                      />
+                      {cat.label}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(cat)}>
@@ -120,6 +130,21 @@ export default function CategoriesPage() {
                 onChange={(e) => setLabel(e.target.value)}
                 required
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Couleur</Label>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORY_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className="h-7 w-7 rounded-full transition-transform hover:scale-110"
+                    style={{ backgroundColor: c, outline: color === c ? `2px solid ${c}` : 'none', outlineOffset: '2px' }}
+                    aria-label={c}
+                  />
+                ))}
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setModal(null)}>Annuler</Button>

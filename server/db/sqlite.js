@@ -133,6 +133,7 @@ function initSchema(db) {
     'ALTER TABLE operations ADD COLUMN category TEXT',
     'ALTER TABLE recurring_operations ADD COLUMN category TEXT',
     'ALTER TABLE users ADD COLUMN accepted_tos_at TEXT',
+    'ALTER TABLE categories ADD COLUMN color TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -191,6 +192,7 @@ const mapRecurring = (row) => row && {
 const mapCategory = (row) => row && {
   _id: row.id,
   label: row.label,
+  color: row.color ?? null,
   userId: row.user_id,
 };
 
@@ -561,17 +563,18 @@ module.exports = function createSQLiteRepos() {
     findByUser: (userId) =>
       db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY label').all(uid(userId)).map(mapCategory),
 
-    create({ label, userId }) {
+    create({ label, color = null, userId }) {
       const id = randomUUID();
-      db.prepare('INSERT INTO categories (id, label, user_id) VALUES (?, ?, ?)').run(id, label, uid(userId));
+      db.prepare('INSERT INTO categories (id, label, color, user_id) VALUES (?, ?, ?, ?)').run(id, label, color ?? null, uid(userId));
       return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
     },
 
-    update(id, userId, { label }) {
+    update(id, userId, { label, color }) {
       const cur = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(id, uid(userId));
       if (!cur) return null;
-      db.prepare("UPDATE categories SET label = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?")
-        .run(label, id, uid(userId));
+      const newColor = color !== undefined ? (color ?? null) : (cur.color ?? null);
+      db.prepare("UPDATE categories SET label = ?, color = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?")
+        .run(label, newColor, id, uid(userId));
       return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
     },
 

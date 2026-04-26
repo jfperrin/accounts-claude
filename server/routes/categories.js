@@ -17,19 +17,19 @@ router.get('/', wrap(async (req, res) => {
   res.json(cats);
 }));
 
-// POST /api/categories  { label }
+// POST /api/categories  { label, color? }
 router.post('/', wrap(async (req, res) => {
-  const { label } = req.body;
+  const { label, color } = req.body;
   if (!label?.trim()) return res.status(400).json({ message: 'label requis' });
-  const cat = await req.app.locals.db.categories.create({ label: label.trim(), userId: req.user._id });
+  const cat = await req.app.locals.db.categories.create({ label: label.trim(), color: color ?? null, userId: req.user._id });
   res.status(201).json(cat);
 }));
 
-// PUT /api/categories/:id  { label }
+// PUT /api/categories/:id  { label, color? }
 router.put('/:id', wrap(async (req, res) => {
-  const { label } = req.body;
+  const { label, color } = req.body;
   if (!label?.trim()) return res.status(400).json({ message: 'label requis' });
-  const cat = await req.app.locals.db.categories.update(req.params.id, req.user._id, { label: label.trim() });
+  const cat = await req.app.locals.db.categories.update(req.params.id, req.user._id, { label: label.trim(), color: color ?? null });
   if (!cat) return res.status(404).json({ message: 'Introuvable' });
   res.json(cat);
 }));

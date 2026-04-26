@@ -37,6 +37,8 @@ export default function DashboardPage() {
   const importFileRef = useRef(null);
   const newOpBtnRef = useRef(null);
   const [fabVisible, setFabVisible] = useState(false);
+  const bankBalancesRef = useRef(null);
+  const [totalBadgeVisible, setTotalBadgeVisible] = useState(false);
   // Modale de résolution des conflits d'import (N candidats pour un même montant).
   const [pendingMatches, setPendingMatches] = useState(null);
 
@@ -63,6 +65,18 @@ export default function DashboardPage() {
   useEffect(() => {
     operationsApi.list({ month, year }).then(setOperations);
   }, [month, year]);
+
+  // Badge total : visible dès que la section BankBalances sort du viewport
+  useEffect(() => {
+    const el = bankBalancesRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setTotalBadgeVisible(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [banks.length]);
 
   const handleSaveBalance = async (bankId, value) => {
     await banksApi.update(bankId, { currentBalance: value });
@@ -162,12 +176,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      {banks.length > 1 && (
-        <div className="sticky top-[5px] z-10 md:hidden">
-          <div className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 p-3 shadow-lg shadow-indigo-500/30 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
-            <span className="text-xl font-extrabold text-white">{formatEur(totalProjected)}</span>
-          </div>
+      {banks.length > 1 && totalBadgeVisible && (
+        <div className="animate-fly-to-corner fixed top-4 right-4 z-50 flex items-center gap-2 rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-2 shadow-lg shadow-indigo-500/30">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-200">Total</p>
+          <span className="text-sm font-extrabold text-white">{formatEur(totalProjected)}</span>
         </div>
       )}
 
@@ -216,7 +228,9 @@ export default function DashboardPage() {
 
       {banks.length > 0 && (
         <>
-          <BankBalances banks={banks} onSaveBalance={handleSaveBalance} />
+          <div ref={bankBalancesRef}>
+            <BankBalances banks={banks} onSaveBalance={handleSaveBalance} />
+          </div>
           <Separator />
         </>
       )}
@@ -302,7 +316,7 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => { setEditOp(null); setFormOpen(true); }}
-          className="fixed bottom-28 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 shadow-lg shadow-indigo-500/40 transition-transform hover:bg-indigo-700 hover:scale-105 active:scale-95 md:bottom-8 md:right-8"
+          className="animate-fly-to-corner fixed bottom-28 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 shadow-lg shadow-indigo-500/40 transition-transform hover:bg-indigo-700 hover:scale-105 active:scale-95 md:bottom-8 md:right-8"
           aria-label="Nouvelle opération"
           title="Nouvelle opération"
         >
