@@ -10,7 +10,9 @@ import ProfilePage from '@/pages/ProfilePage';
 import AdminPage from '@/pages/AdminPage';
 import CategoriesPage from '@/pages/CategoriesPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
+import ToSPage from '@/pages/ToSPage';
 import RequireAdmin from '@/components/RequireAdmin';
+import CookieConsentBanner from '@/components/CookieConsent';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -29,8 +31,10 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <CookieConsentBanner />
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/cgu" element={<ToSPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/" element={<PrivateRoute><AppShell /></PrivateRoute>}>
           <Route index element={<DashboardPage />} />

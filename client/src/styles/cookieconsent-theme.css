@@ -1,0 +1,27 @@
+/* Thème vanilla-cookieconsent — couleurs calées sur le design indigo/violet de l'app */
+
+:root {
+  --cc-bg: #ffffff;
+  --cc-primary-color: #6366f1;        /* indigo-500 */
+  --cc-btn-primary-bg: #6366f1;
+  --cc-btn-primary-color: #ffffff;
+  --cc-btn-primary-hover-bg: #4f46e5; /* indigo-600 */
+  --cc-btn-secondary-bg: #f1f5f9;
+  --cc-btn-secondary-color: #475569;
+  --cc-btn-secondary-hover-bg: #e2e8f0;
+  --cc-separator-border-color: #e2e8f0;
+  --cc-toggle-on-bg: #6366f1;
+  --cc-toggle-off-bg: #cbd5e1;
+  --cc-toggle-readonly-bg: #a5b4fc;
+  --cc-cookie-category-block-bg: #f8fafc;
+  --cc-cookie-category-block-border: #e2e8f0;
+  --cc-overlay-bg: rgba(15, 23, 42, 0.5);
+  --cc-modal-border-radius: 1rem;
+  --cc-btn-border-radius: 0.5rem;
+  --cc-z-index: 9999;
+}
+
+/* Ombre du bandeau */
+#cc-main .cm {
+  box-shadow: 0 20px 60px rgba(99, 102, 241, 0.15), 0 4px 16px rgba(0,0,0,0.08);
+}

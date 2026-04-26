@@ -6,6 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -27,9 +29,11 @@
     "react-dom": "latest",
     "react-router-dom": "latest",
     "sonner": "latest",
-    "tailwind-merge": "latest"
+    "tailwind-merge": "latest",
+    "vanilla-cookieconsent": "^3.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@tailwindcss/vite": "latest",
     "@testing-library/dom": "latest",
     "@testing-library/jest-dom": "latest",
@@ -37,9 +41,15 @@
     "@testing-library/user-event": "latest",
     "@vitejs/plugin-react": "latest",
     "@vitest/coverage-v8": "latest",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.4.0",
+    "globals": "^15.0.0",
     "happy-dom": "latest",
     "tailwindcss": "latest",
     "vite": "latest",
+    "vite-plugin-eslint2": "^4.0.0",
     "vitest": "latest"
   }
 }

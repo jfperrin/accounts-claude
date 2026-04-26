@@ -35,6 +35,8 @@ export default function DashboardPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importBankId, setImportBankId] = useState('');
   const importFileRef = useRef(null);
+  const newOpBtnRef = useRef(null);
+  const [fabVisible, setFabVisible] = useState(false);
   // Modale de résolution des conflits d'import (N candidats pour un même montant).
   const [pendingMatches, setPendingMatches] = useState(null);
 
@@ -45,8 +47,22 @@ export default function DashboardPage() {
   const loadOperations = () => operationsApi.list({ month, year }).then(setOperations);
   const loadBanks = () => banksApi.list().then(setBanks);
 
-  useEffect(() => { loadBanks(); }, []);
-  useEffect(() => { loadOperations(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [month, year]);
+  useEffect(() => { loadBanks(); }, []); // chargement initial uniquement
+
+  // FAB : visible dès que le bouton "Nouvelle opération" quitte le viewport
+  useEffect(() => {
+    const el = newOpBtnRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setFabVisible(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    operationsApi.list({ month, year }).then(setOperations);
+  }, [month, year]);
 
   const handleSaveBalance = async (bankId, value) => {
     await banksApi.update(bankId, { currentBalance: value });
@@ -192,7 +208,7 @@ export default function DashboardPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button onClick={() => { setEditOp(null); setFormOpen(true); }} className="gap-2">
+        <Button ref={newOpBtnRef} onClick={() => { setEditOp(null); setFormOpen(true); }} className="gap-2">
           <Plus className="h-4 w-4" />
           Nouvelle opération
         </Button>
@@ -281,6 +297,18 @@ export default function DashboardPage() {
           </form>
         </DialogContent>
       </Dialog>
+      {/* FAB — apparaît quand le bouton "Nouvelle opération" est hors du viewport */}
+      {fabVisible && (
+        <button
+          type="button"
+          onClick={() => { setEditOp(null); setFormOpen(true); }}
+          className="fixed bottom-28 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 shadow-lg shadow-indigo-500/40 transition-transform hover:bg-indigo-700 hover:scale-105 active:scale-95 md:bottom-8 md:right-8"
+          aria-label="Nouvelle opération"
+          title="Nouvelle opération"
+        >
+          <Plus className="h-6 w-6 text-white" strokeWidth={2.5} />
+        </button>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { AuthProvider } from '@/store/AuthContext';
 import App from '@/App';
 import './index.css';
+import './styles/cookieconsent-theme.css';
 
 dayjs.locale('fr');
 

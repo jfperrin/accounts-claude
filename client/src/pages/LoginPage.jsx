@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Wallet, Globe, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import Footer from '@/components/layout/Footer';
 
 export default function LoginPage() {
   const [tab, setTab] = useState('login');
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [form, setForm] = useState({ email: '', password: '' });
+  const [acceptedToS, setAcceptedToS] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState(null);
   const { login, register } = useAuth();
@@ -36,7 +38,12 @@ export default function LoginPage() {
       if (tab === 'login') {
         await login(form);
       } else {
-        await register(form);
+        if (!acceptedToS) {
+          toast.error('Vous devez accepter les conditions générales d\'utilisation');
+          setLoading(false);
+          return;
+        }
+        await register({ ...form, acceptedToS });
         setRegistered(true);
       }
     } catch (err) {
@@ -74,9 +81,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-slate-900">
       <div className="pointer-events-none absolute -right-20 -top-40 h-[700px] w-[700px] rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18)_0%,transparent_65%)]" />
       <div className="pointer-events-none absolute -bottom-40 -left-20 h-[600px] w-[600px] rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.12)_0%,transparent_65%)]" />
+      <div className="flex flex-1 items-center justify-center px-4">
 
       <div className="relative z-10 w-[420px] rounded-2xl bg-white p-12 shadow-2xl">
         <div className="mb-9 text-center">
@@ -148,7 +156,7 @@ export default function LoginPage() {
             <button
               type="button"
               key={key}
-              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); }}
+              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setAcceptedToS(false); }}
               className={cn(
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                 tab === key
@@ -183,15 +191,34 @@ export default function LoginPage() {
               className="h-11"
             />
           </div>
+          {tab === 'register' && (
+            <div className="flex items-start gap-3 pt-1">
+              <input
+                id="tos"
+                type="checkbox"
+                checked={acceptedToS}
+                onChange={(e) => setAcceptedToS(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-indigo-600"
+              />
+              <label htmlFor="tos" className="text-sm text-slate-600 leading-snug cursor-pointer">
+                J'ai lu et j'accepte les{' '}
+                <Link to="/cgu" target="_blank" className="text-indigo-600 hover:underline font-medium">
+                  Conditions Générales d'Utilisation
+                </Link>
+              </label>
+            </div>
+          )}
           <Button
             type="submit"
             className="mt-2 h-11 w-full text-base shadow-md shadow-indigo-500/30"
-            disabled={loading}
+            disabled={loading || (tab === 'register' && !acceptedToS)}
           >
             {loading ? 'Chargement…' : tab === 'login' ? 'Se connecter' : "S'inscrire"}
           </Button>
         </form>
       </div>
+      </div>
+      <Footer className="relative z-10 border-white/10 bg-transparent text-slate-500" />
     </div>
   );
 }

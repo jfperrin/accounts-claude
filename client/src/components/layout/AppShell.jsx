@@ -5,6 +5,7 @@ import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import Footer from '@/components/layout/Footer';
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
@@ -137,6 +138,8 @@ export default function AppShell() {
         <main className="flex-1 p-4 pb-24 md:p-6 md:pb-6">
           <Outlet />
         </main>
+
+        <Footer className="hidden md:block" />
       </div>
 
       {/* ── Bottom navigation mobile uniquement ── */}
