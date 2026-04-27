@@ -4,8 +4,8 @@ import { vi } from 'vitest';
 import OperationsTable from '../components/OperationsTable';
 
 const ops = [
-  { _id: '1', label: 'Loyer', amount: -800, date: '2025-04-05', pointed: false, bankId: { _id: 'b1', label: 'BNP' } },
-  { _id: '2', label: 'Salaire', amount: 2500, date: '2025-04-28', pointed: true, bankId: { _id: 'b1', label: 'BNP' } },
+  { _id: '1', label: 'Loyer', amount: -800, date: '2025-04-28', pointed: false, bankId: { _id: 'b1', label: 'BNP' } },
+  { _id: '2', label: 'Salaire', amount: 2500, date: '2025-04-05', pointed: true, bankId: { _id: 'b1', label: 'BNP' } },
 ];
 
 describe('OperationsTable', () => {

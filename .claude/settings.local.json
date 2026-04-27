@@ -89,7 +89,13 @@
       "Bash(npx yarn *)",
       "Bash(node_modules/.bin/eslint src *)",
       "Bash(\"./node_modules/.bin/eslint\" src *)",
-      "Bash(wslpath -u \"C:\\\\\\\\Users\\\\\\\\jf\\\\\\\\OneDrive\\\\\\\\Github\\\\\\\\accounts-claude\")"
+      "Bash(wslpath -u \"C:\\\\\\\\Users\\\\\\\\jf\\\\\\\\OneDrive\\\\\\\\Github\\\\\\\\accounts-claude\")",
+      "Bash(node_modules/.bin/jest --testPathPatterns=\"auth|operations|categories|recurringOperations\" --forceExit)",
+      "Bash(node_modules/.bin/vitest run *)",
+      "Bash(npx --prefix server vitest run)",
+      "Bash(where yarn *)",
+      "Bash(npm --version)",
+      "Bash(npm --prefix /c/Users/jf/OneDrive/Github/accounts-claude/server test)"
     ]
   }
 }

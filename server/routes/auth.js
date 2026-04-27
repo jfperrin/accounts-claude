@@ -216,7 +216,7 @@ router.post('/resend-verification', authLimiter, wrap(async (req, res) => {
   if (req.isAuthenticated()) {
     user = req.user;
   } else {
-    const { email } = req.body;
+    const { email } = req.body ?? {};
     if (!email) return res.json(neutral);
     user = await db.users.findByEmail(email.trim().toLowerCase());
   }

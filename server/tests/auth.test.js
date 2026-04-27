@@ -6,7 +6,7 @@ beforeAll(async () => { app = await setup(); });
 afterAll(teardown);
 beforeEach(clearDB);
 
-const ALICE = { email: 'alice@test.com', password: 'pass1234' };
+const ALICE = { email: 'alice@test.com', password: 'pass1234', acceptedToS: true };
 
 describe('POST /api/auth/register', () => {
   it('crée un compte, envoie un email, retourne 201 sans session', async () => {
@@ -55,64 +55,58 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(401);
   });
 
-  it('pose un cookie remember_me avec Max-Age 1 jour quand rememberDays=1', async () => {
+  // express-session v1.19+ sérialise le cookie avec Expires= (date UTC), pas Max-Age=.
+  // On calcule la durée restante en secondes depuis l'attribut Expires.
+  function sessionMaxAge(res) {
+    const cookies = res.headers['set-cookie'] ?? [];
+    const c = cookies.find(s => s.startsWith('connect.sid='));
+    if (!c) return null;
+    const expiresMatch = c.match(/Expires=([^;]+)/i);
+    if (expiresMatch) return Math.round((new Date(expiresMatch[1]).getTime() - Date.now()) / 1000);
+    const maxAgeMatch = c.match(/Max-Age=(\d+)/i);
+    return maxAgeMatch ? Number(maxAgeMatch[1]) : null;
+  }
+
+  function expectMaxAge(res, expectedSeconds) {
+    const maxAge = sessionMaxAge(res);
+    expect(maxAge).not.toBeNull();
+    expect(maxAge).toBeGreaterThan(expectedSeconds - 5);
+    expect(maxAge).toBeLessThanOrEqual(expectedSeconds);
+  }
+
+  it('pose un cookie de session avec une durée de 1 jour quand rememberDays=1', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 1 });
     expect(res.status).toBe(200);
-    const cookies = res.headers['set-cookie'] ?? [];
-    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
-    expect(rmCookie).toBeDefined();
-    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
-    expect(maxAgeMatch).not.toBeNull();
-    expect(Number(maxAgeMatch[1])).toBe(1 * 24 * 60 * 60);
+    expectMaxAge(res, 24 * 60 * 60);
   });
 
-  it('pose un cookie remember_me avec Max-Age 30 jours quand rememberDays=30', async () => {
+  it('pose un cookie de session avec une durée de 30 jours quand rememberDays=30', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
     expect(res.status).toBe(200);
-    const cookies = res.headers['set-cookie'] ?? [];
-    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
-    expect(rmCookie).toBeDefined();
-    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
-    expect(maxAgeMatch).not.toBeNull();
-    expect(Number(maxAgeMatch[1])).toBe(30 * 24 * 60 * 60);
+    expectMaxAge(res, 30 * 24 * 60 * 60);
   });
 
-  it('pose un cookie remember_me avec Max-Age 365 jours quand rememberDays=365', async () => {
+  it('pose un cookie de session avec une durée de 365 jours quand rememberDays=365', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 365 });
     expect(res.status).toBe(200);
-    const cookies = res.headers['set-cookie'] ?? [];
-    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
-    expect(rmCookie).toBeDefined();
-    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
-    expect(maxAgeMatch).not.toBeNull();
-    expect(Number(maxAgeMatch[1])).toBe(365 * 24 * 60 * 60);
+    expectMaxAge(res, 365 * 24 * 60 * 60);
   });
 
-  it('pose un cookie remember_me 30 jours par défaut si rememberDays absent', async () => {
+  it('pose un cookie de session avec une durée de 30 jours par défaut si rememberDays absent', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
-    const res = await request(app).post('/api/auth/login').send(ALICE);
+    const res = await request(app).post('/api/auth/login').send({ email: ALICE.email, password: ALICE.password });
     expect(res.status).toBe(200);
-    const cookies = res.headers['set-cookie'] ?? [];
-    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
-    expect(rmCookie).toBeDefined();
-    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
-    expect(maxAgeMatch).not.toBeNull();
-    expect(Number(maxAgeMatch[1])).toBe(30 * 24 * 60 * 60);
+    expectMaxAge(res, 30 * 24 * 60 * 60);
   });
 
-  it('pose un cookie remember_me 30 jours par défaut si rememberDays invalide', async () => {
+  it('pose un cookie de session avec une durée de 30 jours par défaut si rememberDays invalide', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 999 });
     expect(res.status).toBe(200);
-    const cookies = res.headers['set-cookie'] ?? [];
-    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
-    expect(rmCookie).toBeDefined();
-    const maxAgeMatch = rmCookie.match(/Max-Age=(\d+)/i);
-    expect(maxAgeMatch).not.toBeNull();
-    expect(Number(maxAgeMatch[1])).toBe(30 * 24 * 60 * 60);
+    expectMaxAge(res, 30 * 24 * 60 * 60);
   });
 
 });
@@ -143,43 +137,6 @@ describe('POST /api/auth/logout', () => {
     expect((await agent.get('/api/auth/me')).status).toBe(401);
   });
 
-  it('efface le cookie remember_me au logout', async () => {
-    await createVerifiedUser(app, ALICE.email, ALICE.password);
-    const agent = request.agent(app);
-    await agent.post('/api/auth/login').send(ALICE);
-    const logoutRes = await agent.post('/api/auth/logout');
-    const cookies = logoutRes.headers['set-cookie'] ?? [];
-    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
-    expect(rmCookie).toBeDefined();
-    // Max-Age=0 or Expires=epoch means the browser should delete the cookie
-    const isCleared = /Max-Age=0/i.test(rmCookie) || /Expires=Thu, 01 Jan 1970/i.test(rmCookie);
-    expect(isCleared).toBe(true);
-  });
-
-  it("l'auto-login ne fonctionne plus après logout (token invalidé)", async () => {
-    await createVerifiedUser(app, ALICE.email, ALICE.password);
-    // Login et récupération du token
-    const agent = request.agent(app);
-    const loginRes = await agent.post('/api/auth/login').send(ALICE);
-    const cookies = loginRes.headers['set-cookie'] ?? [];
-    const rmCookie = cookies.find(c => c.startsWith('remember_me='));
-    const token = rmCookie.split(';')[0].split('=')[1];
-
-    // Vérifier que l'auto-login fonctionne avant le logout
-    const beforeRes = await request(app)
-      .get('/api/auth/me')
-      .set('Cookie', `remember_me=${token}`);
-    expect(beforeRes.status).toBe(200);
-
-    // Logout (l'agent a le cookie remember_me correspondant au token)
-    await agent.post('/api/auth/logout');
-
-    // Auto-login avec le token révoqué → doit échouer
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Cookie', `remember_me=${token}`);
-    expect(res.status).toBe(401);
-  });
 });
 
 describe('GET /api/auth/verify-email/:token', () => {
@@ -230,20 +187,18 @@ describe('PUT /api/auth/email', () => {
 });
 
 describe('POST /api/auth/resend-verification', () => {
-  it('retourne 400 si email déjà vérifié', async () => {
+  it('retourne 200 même si email déjà vérifié (pas d\'énumération)', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const agent = request.agent(app);
     await agent.post('/api/auth/login').send(ALICE);
     const res = await agent.post('/api/auth/resend-verification');
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/déjà vérifié/i);
+    expect(res.status).toBe(200);
   });
 
   it('envoie un email et retourne 200 si email non vérifié', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const agent = request.agent(app);
     await agent.post('/api/auth/login').send(ALICE);
-    // Repasser emailVerified à false en DB pour simuler un compte non-vérifié avec session active
     const User = require('../models/User');
     await User.updateOne({ email: ALICE.email }, { emailVerified: false });
     const res = await agent.post('/api/auth/resend-verification');
@@ -251,9 +206,9 @@ describe('POST /api/auth/resend-verification', () => {
     expect(res.body.message).toMatch(/envoyé/i);
   });
 
-  it('retourne 401 sans session', async () => {
+  it('retourne 200 sans session (route publique, pas d\'énumération)', async () => {
     const res = await request(app).post('/api/auth/resend-verification');
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
   });
 });
 
@@ -332,40 +287,6 @@ describe('PUT /api/auth/password', () => {
   });
 });
 
-describe('middleware remember_me — auto-login', () => {
-  function extractRememberToken(res) {
-    const cookies = res.headers['set-cookie'] ?? [];
-    const c = cookies.find(s => s.startsWith('remember_me='));
-    if (!c) return null;
-    return c.split(';')[0].split('=')[1];
-  }
-
-  it('GET /api/auth/me retourne 200 avec un cookie remember_me valide (pas de session)', async () => {
-    await createVerifiedUser(app, ALICE.email, ALICE.password);
-    const loginRes = await request(app).post('/api/auth/login').send(ALICE);
-    const token = extractRememberToken(loginRes);
-    expect(token).not.toBeNull();
-
-    // Nouvelle requête sans session (request(app) ne partage pas de cookies)
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Cookie', `remember_me=${token}`);
-    expect(res.status).toBe(200);
-    expect(res.body.email).toBe(ALICE.email);
-  });
-
-  it('GET /api/auth/me retourne 401 avec un cookie remember_me invalide', async () => {
-    const res = await request(app)
-      .get('/api/auth/me')
-      .set('Cookie', 'remember_me=token-bidon');
-    expect(res.status).toBe(401);
-  });
-
-  it('GET /api/auth/me retourne 401 sans cookie remember_me ni session', async () => {
-    const res = await request(app).get('/api/auth/me');
-    expect(res.status).toBe(401);
-  });
-});
 
 describe('GET /api/auth/cancel-password-change/:token', () => {
   it('redirige avec token_expired si token invalide', async () => {

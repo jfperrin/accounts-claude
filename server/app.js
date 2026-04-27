@@ -51,8 +51,7 @@ module.exports = function createApp(db, mongoUri) {
   app.use(session({
     secret: process.env.SESSION_SECRET || 'dev_secret',
     resave: false,
-    saveUninitialized: false, // ne crée pas de session pour les visiteurs non connectés
-    rolling: true,            // prolonge le cookie à chaque requête (reset du maxAge)
+    saveUninitialized: false,
     store,
     cookie: {
       httpOnly: true,
