@@ -14,6 +14,7 @@ import OperationForm from '@/components/OperationForm';
 import ImportDialog from '@/components/ImportDialog';
 import MakeRecurringDialog from '@/components/MakeRecurringDialog';
 import ImportResolveDialog from '@/components/ImportResolveDialog';
+import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
@@ -50,8 +51,8 @@ export default function DashboardPage() {
   const updateCustomEnd = (v) => { setCustomEnd(v); setCookiePref({ mode: rangeMode, start: customStart, end: v }); };
 
   const { startDate, endDate } = useMemo(() => {
-    if (rangeMode === '30d') return { startDate: dayjs().subtract(29, 'day').format('YYYY-MM-DD'), endDate: dayjs().format('YYYY-MM-DD') };
-    if (rangeMode === '90d') return { startDate: dayjs().subtract(89, 'day').format('YYYY-MM-DD'), endDate: dayjs().format('YYYY-MM-DD') };
+    if (rangeMode === '30d') return { startDate: dayjs().subtract(29, 'day').format('YYYY-MM-DD'), endDate: '2099-12-31' };
+    if (rangeMode === '90d') return { startDate: dayjs().subtract(89, 'day').format('YYYY-MM-DD'), endDate: '2099-12-31' };
     return { startDate: customStart, endDate: customEnd };
   }, [rangeMode, customStart, customEnd]);
 
@@ -89,11 +90,15 @@ export default function DashboardPage() {
     reloadBanks();
   };
 
-  const handleGenerateRecurring = async () => {
-    const today = dayjs();
+  const [generateRecurringOpen, setGenerateRecurringOpen] = useState(false);
+
+  const handleGenerateRecurring = () => setGenerateRecurringOpen(true);
+
+  const handleConfirmGenerateRecurring = async ({ month, year }) => {
     try {
-      const { imported } = await operationsApi.generateRecurring({ month: today.month() + 1, year: today.year() });
+      const { imported } = await operationsApi.generateRecurring({ month, year });
       toast.success(`${imported} opération(s) générée(s)`);
+      setGenerateRecurringOpen(false);
       reloadOperations();
       reloadBanks();
     } catch (err) {
@@ -336,6 +341,12 @@ export default function DashboardPage() {
         pendingMatches={pendingMatches || []}
         onResolve={handleResolveMatches}
         onCancel={() => setPendingMatches(null)}
+      />
+
+      <GenerateRecurringDialog
+        open={generateRecurringOpen}
+        onConfirm={handleConfirmGenerateRecurring}
+        onCancel={() => setGenerateRecurringOpen(false)}
       />
 
       {fabVisible && (

@@ -28,7 +28,6 @@ function serializeUser(u) {
 }
 
 const ALLOWED_DAYS = [1, 30, 365];
-const parseCookies = require('cookie').parse;
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // URL de base pour les liens dans les emails : cible le serveur directement.
@@ -86,20 +85,9 @@ router.post('/login', authLimiter, (req, res, next) => {
     const days = ALLOWED_DAYS.includes(Number(req.body.rememberDays))
       ? Number(req.body.rememberDays)
       : 30;
-    req.login(user, async (err) => {
+    req.login(user, (err) => {
       if (err) return next(err);
-      try {
-        const db = req.app.locals.db;
-        const rememberToken = randomUUID();
-        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-        await db.resetTokens.create(user._id ?? user.id, rememberToken, expiresAt, { type: 'remember_me' });
-        res.cookie('remember_me', rememberToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: days * 24 * 60 * 60 * 1000,
-        });
-      } catch (_) { /* ne pas bloquer la connexion si la création du token échoue */ }
+      req.session.cookie.maxAge = days * 24 * 60 * 60 * 1000;
       res.json(serializeUser(user));
     });
   })(req, res, next);
@@ -126,21 +114,9 @@ router.get('/google/callback',
 );
 
 // POST /api/auth/logout
-// Invalide le token remember_me en base, efface le cookie, détruit la session.
-router.post('/logout', wrap(async (req, res) => {
-  const token = parseCookies(req.headers.cookie || '').remember_me;
-  if (token) {
-    try { await req.app.locals.db.resetTokens.markUsed(token); } catch (e) {
-      console.error('[logout] failed to invalidate remember_me token:', e.message);
-    }
-  }
-  res.clearCookie('remember_me', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-  });
+router.post('/logout', (req, res) => {
   req.logout(() => res.json({ message: 'Déconnecté' }));
-}));
+});
 
 // GET /api/auth/me
 // Utilisé par AuthContext au montage du client pour savoir si une session existe.

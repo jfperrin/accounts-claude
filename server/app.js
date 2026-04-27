@@ -50,20 +50,20 @@ module.exports = function createApp(db, mongoUri) {
 
   app.use(session({
     secret: process.env.SESSION_SECRET || 'dev_secret',
-    resave: false,           // ne re-sauvegarde pas si la session n'a pas changé
+    resave: false,
     saveUninitialized: false, // ne crée pas de session pour les visiteurs non connectés
+    rolling: true,            // prolonge le cookie à chaque requête (reset du maxAge)
     store,
     cookie: {
       httpOnly: true,
       secure: isProd,        // HTTPS uniquement en production
       sameSite: 'strict',    // protection CSRF
-      // pas de maxAge → cookie de session (disparaît à la fermeture du navigateur)
+      // maxAge fixé par le handler login selon le choix de l'utilisateur (1j / 30j / 365j)
     },
   }));
 
   app.use(passport.initialize());
   app.use(passport.session()); // restaure req.user depuis la session à chaque requête
-  app.use(require('./middleware/remember')(db));
 
   // Les repos (users, banks, operations, periods, recurringOps) sont attachés à
   // app.locals.db pour être accessibles dans toutes les routes via req.app.locals.db.
