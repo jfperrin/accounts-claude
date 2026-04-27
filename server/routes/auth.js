@@ -27,6 +27,9 @@ function serializeUser(u) {
   };
 }
 
+const ALLOWED_DAYS = [1, 30, 365];
+const parseCookies = require('cookie').parse;
+
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // URL de base pour les liens dans les emails : cible le serveur directement.
 // En prod sur le même domaine : identique à CLIENT_URL. Si l'API est sur un sous-domaine,
@@ -65,14 +68,38 @@ router.post('/register', authLimiter, wrap(async (req, res) => {
 // POST /api/auth/login
 // Délègue à Passport LocalStrategy. Bloque les comptes locaux non-vérifiés.
 router.post('/login', authLimiter, (req, res, next) => {
-  passport.authenticate('local', (err, user, info) => {
+  passport.authenticate('local', async (err, user, info) => {
     if (err) return next(err);
     if (!user) return res.status(401).json({ message: info?.message || 'Échec de connexion' });
     if (!user.googleId && !user.emailVerified) {
-      return res.status(403).json({ message: 'Email non vérifié. Consultez votre boîte mail.' });
+      // Renvoie automatiquement un email de vérification à chaque tentative de connexion bloquée
+      try {
+        const db = req.app.locals.db;
+        const token = randomUUID();
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await db.resetTokens.create(user._id ?? user.id, token, expiresAt, { type: 'email_verify' });
+        const verifyUrl = `${SERVER_URL}/api/auth/verify-email/${token}`;
+        await mailer.sendVerificationEmail(user.email, verifyUrl);
+      } catch (_) { /* ne pas bloquer la réponse 403 si l'envoi échoue */ }
+      return res.status(403).json({ message: 'Email non vérifié. Un lien de vérification vous a été envoyé.' });
     }
-    req.login(user, (err) => {
+    const days = ALLOWED_DAYS.includes(Number(req.body.rememberDays))
+      ? Number(req.body.rememberDays)
+      : 30;
+    req.login(user, async (err) => {
       if (err) return next(err);
+      try {
+        const db = req.app.locals.db;
+        const rememberToken = randomUUID();
+        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        await db.resetTokens.create(user._id ?? user.id, rememberToken, expiresAt, { type: 'remember_me' });
+        res.cookie('remember_me', rememberToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: days * 24 * 60 * 60 * 1000,
+        });
+      } catch (_) { /* ne pas bloquer la connexion si la création du token échoue */ }
       res.json(serializeUser(user));
     });
   })(req, res, next);
@@ -99,10 +126,21 @@ router.get('/google/callback',
 );
 
 // POST /api/auth/logout
-// req.logout() (Passport) détruit la session côté serveur.
-router.post('/logout', (req, res) => {
+// Invalide le token remember_me en base, efface le cookie, détruit la session.
+router.post('/logout', wrap(async (req, res) => {
+  const token = parseCookies(req.headers.cookie || '').remember_me;
+  if (token) {
+    try { await req.app.locals.db.resetTokens.markUsed(token); } catch (e) {
+      console.error('[logout] failed to invalidate remember_me token:', e.message);
+    }
+  }
+  res.clearCookie('remember_me', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
   req.logout(() => res.json({ message: 'Déconnecté' }));
-});
+}));
 
 // GET /api/auth/me
 // Utilisé par AuthContext au montage du client pour savoir si une session existe.
@@ -191,16 +229,30 @@ router.get('/verify-email/:token', wrap(async (req, res) => {
 }));
 
 // POST /api/auth/resend-verification
-// Renvoie un email de vérification à l'utilisateur connecté non-vérifié.
-router.post('/resend-verification', requireAuth, authLimiter, wrap(async (req, res) => {
-  if (req.user.emailVerified) return res.status(400).json({ message: 'Email déjà vérifié' });
+// Accessible sans session (utilisateur bloqué au login faute de vérification).
+// Authentifié → utilise req.user. Non authentifié → attend { email } dans le body.
+// Répond toujours 200 pour éviter l'énumération d'adresses.
+router.post('/resend-verification', authLimiter, wrap(async (req, res) => {
+  const neutral = { message: 'Email de vérification envoyé' };
   const db = req.app.locals.db;
+
+  let user;
+  if (req.isAuthenticated()) {
+    user = req.user;
+  } else {
+    const { email } = req.body;
+    if (!email) return res.json(neutral);
+    user = await db.users.findByEmail(email.trim().toLowerCase());
+  }
+
+  if (!user || user.emailVerified || user.googleId) return res.json(neutral);
+
   const token = randomUUID();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  await db.resetTokens.create(req.user._id ?? req.user.id, token, expiresAt, { type: 'email_verify' });
+  await db.resetTokens.create(user._id ?? user.id, token, expiresAt, { type: 'email_verify' });
   const verifyUrl = `${SERVER_URL}/api/auth/verify-email/${token}`;
-  await mailer.sendVerificationEmail(req.user.email, verifyUrl);
-  res.json({ message: 'Email de vérification envoyé' });
+  await mailer.sendVerificationEmail(user.email, verifyUrl);
+  res.json(neutral);
 }));
 
 // GET /api/auth/reset-password/:token — vérifie la validité du token

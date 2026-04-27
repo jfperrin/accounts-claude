@@ -3,21 +3,30 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { Wallet, Globe, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
-import { config as fetchConfig } from '@/api/auth';
+import { config as fetchConfig, resendVerification } from '@/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import Footer from '@/components/layout/Footer';
 
+const REMEMBER_OPTIONS = [
+  { label: '1 jour', value: 1 },
+  { label: '1 mois', value: 30 },
+  { label: '1 an', value: 365 },
+];
+
 export default function LoginPage() {
   const [tab, setTab] = useState('login');
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [form, setForm] = useState({ email: '', password: '' });
+  const [rememberDays, setRememberDays] = useState(30);
   const [acceptedToS, setAcceptedToS] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
   const { login, register } = useAuth();
   const [searchParams] = useSearchParams();
   const googleError = searchParams.get('error') === 'google';
@@ -34,9 +43,10 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setUnverifiedEmail(null);
+    setResendDone(false);
     try {
       if (tab === 'login') {
-        await login(form);
+        await login({ ...form, rememberDays });
       } else {
         if (!acceptedToS) {
           toast.error('Vous devez accepter les conditions générales d\'utilisation');
@@ -127,7 +137,24 @@ export default function LoginPage() {
 
         {unverifiedEmail && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            Email non vérifié. Consultez votre boîte mail pour le lien d'activation.
+            <p>Email non vérifié. Un nouveau lien d'activation vient de vous être envoyé.</p>
+            {resendDone ? (
+              <p className="mt-2 font-medium">Email renvoyé !</p>
+            ) : (
+              <button
+                type="button"
+                disabled={resendLoading}
+                className="mt-2 font-medium underline disabled:opacity-50"
+                onClick={async () => {
+                  setResendLoading(true);
+                  try { await resendVerification(unverifiedEmail); setResendDone(true); }
+                  catch { toast.error('Erreur lors du renvoi'); }
+                  finally { setResendLoading(false); }
+                }}
+              >
+                {resendLoading ? 'Envoi…' : "Renvoyer l'email de vérification"}
+              </button>
+            )}
           </div>
         )}
 
@@ -156,7 +183,7 @@ export default function LoginPage() {
             <button
               type="button"
               key={key}
-              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setAcceptedToS(false); }}
+              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setRememberDays(30); }}
               className={cn(
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                 tab === key
@@ -191,21 +218,31 @@ export default function LoginPage() {
               className="h-11"
             />
           </div>
-          {tab === 'register' && (
-            <div className="flex items-start gap-3 pt-1">
-              <input
-                id="tos"
-                type="checkbox"
-                checked={acceptedToS}
-                onChange={(e) => setAcceptedToS(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-indigo-600"
-              />
-              <label htmlFor="tos" className="text-sm text-slate-600 leading-snug cursor-pointer">
-                J'ai lu et j'accepte les{' '}
-                <Link to="/cgu" target="_blank" className="text-indigo-600 hover:underline font-medium">
-                  Conditions Générales d'Utilisation
-                </Link>
-              </label>
+          {tab === 'login' && (
+            <div className="space-y-1.5">
+              <Label id="remember-label">Rester connecté</Label>
+              <div
+                className="flex gap-1 rounded-xl bg-slate-100 p-1"
+                role="group"
+                aria-labelledby="remember-label"
+              >
+                {REMEMBER_OPTIONS.map(({ label, value }) => (
+                  <button
+                    type="button"
+                    key={value}
+                    onClick={() => setRememberDays(value)}
+                    aria-pressed={rememberDays === value}
+                    className={cn(
+                      'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
+                      rememberDays === value
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <Button

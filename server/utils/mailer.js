@@ -1,7 +1,7 @@
 const { Resend } = require('resend');
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const FROM = 'jf@perrin.at';
+const FROM = process.env.RESEND_FROM || 'onboarding@resend.dev';
 
 async function send({ to, subject, html }) {
   if (!resend) {

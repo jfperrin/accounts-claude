@@ -28,6 +28,7 @@
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "latest",
+    "recharts": "^3.8.1",
     "sonner": "latest",
     "tailwind-merge": "latest",
     "vanilla-cookieconsent": "^3.1.0"
