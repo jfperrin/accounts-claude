@@ -83,7 +83,12 @@
       "Bash(cmd /c \"cd C:\\\\Users\\\\jf\\\\OneDrive\\\\Github\\\\accounts-claude\\\\client && npx eslint src/pages/DashboardPage.jsx 2>&1\")",
       "mcp__mcp-registry__search_mcp_registry",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(cmd /c \"yarn --cwd client lint 2>&1\")",
+      "Bash(cmd.exe /c \"yarn --cwd client lint\")",
+      "Bash(npx yarn *)",
+      "Bash(node_modules/.bin/eslint src *)",
+      "Bash(\"./node_modules/.bin/eslint\" src *)"
     ]
   }
 }

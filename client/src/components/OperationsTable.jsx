@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, formatEur } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
+import CategoryBadge from '@/components/CategoryBadge';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 const PAGE_SIZES = [20, 50, 100, 200];
@@ -70,22 +71,13 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
               <TableCell>
                 <div className="flex flex-col gap-1">
                   <span className="font-medium">{op.label}</span>
-                  {onCategoryChange && (op.category ? (() => {
-                    const cat = categories.find((c) => c.label === op.category);
-                    const col = cat?.color ?? DEFAULT_COLOR;
-                    return (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); onCategoryChange(op._id, null); }}
-                        className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-70"
-                        style={{ backgroundColor: `${col}20`, color: col }}
-                        title="Cliquer pour retirer la catégorie"
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: col }} />
-                        {op.category}
-                      </button>
-                    );
-                  })() : (
+                  {onCategoryChange && (op.category ? (
+                    <CategoryBadge
+                      category={op.category}
+                      categories={categories}
+                      onRemove={() => onCategoryChange(op._id, null)}
+                    />
+                  ) : (
                     <Select
                       value="none"
                       onValueChange={(v) => onCategoryChange(op._id, v === 'none' ? null : v)}

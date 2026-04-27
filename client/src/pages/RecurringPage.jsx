@@ -14,6 +14,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn, formatEur } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
+import CategoryBadge from '@/components/CategoryBadge';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import { useCategories } from '@/hooks/useCategories';
 
@@ -126,19 +127,9 @@ export default function RecurringPage() {
                 <TableCell className="font-medium">{item.label}</TableCell>
                 <TableCell><Badge variant="secondary">{item.bankId?.label}</Badge></TableCell>
                 <TableCell>
-                  {item.category ? (() => {
-                    const cat = categories.find((c) => c.label === item.category);
-                    const col = cat?.color ?? DEFAULT_COLOR;
-                    return (
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
-                        style={{ backgroundColor: `${col}20`, color: col }}
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: col }} />
-                        {item.category}
-                      </span>
-                    );
-                  })() : <span className="text-xs text-muted-foreground">—</span>}
+                  {item.category
+                    ? <CategoryBadge category={item.category} categories={categories} />
+                    : <span className="text-xs text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center text-muted-foreground">{item.dayOfMonth}</TableCell>
                 <TableCell className={cn('text-right font-semibold', item.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>

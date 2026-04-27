@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { CalendarDays, ChevronDown, Download, Plus, Upload } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -6,20 +6,18 @@ import * as operationsApi from '@/api/operations';
 import * as banksApi from '@/api/banks';
 import * as recurringApi from '@/api/recurringOperations';
 import { useCategories } from '@/hooks/useCategories';
+import { useBanks } from '@/hooks/useBanks';
+import { useOperations } from '@/hooks/useOperations';
 import BankBalances from '@/components/BankBalances';
 import OperationsTable from '@/components/OperationsTable';
 import OperationForm from '@/components/OperationForm';
+import ImportDialog from '@/components/ImportDialog';
+import MakeRecurringDialog from '@/components/MakeRecurringDialog';
 import ImportResolveDialog from '@/components/ImportResolveDialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { formatEur } from '@/lib/utils';
-import { DEFAULT_COLOR } from '@/lib/categoryColors';
 
 const COOKIE_NAME = 'dash_date_range';
 const RANGE_MODES = [
@@ -41,28 +39,15 @@ function setCookiePref(val) {
 
 export default function DashboardPage() {
   const { categories } = useCategories();
-  const [banks, setBanks] = useState([]);
-  const [operations, setOperations] = useState([]);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editOp, setEditOp] = useState(null);
+  const { banks, reload: reloadBanks } = useBanks();
 
-  // Sélecteur de plage de dates — persisté dans un cookie
   const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref()?.mode ?? '30d');
   const [customStart, setCustomStart] = useState(() => getCookiePref()?.start ?? dayjs().subtract(29, 'day').format('YYYY-MM-DD'));
   const [customEnd, setCustomEnd] = useState(() => getCookiePref()?.end ?? dayjs().format('YYYY-MM-DD'));
 
-  const setRangeMode = (mode) => {
-    setRangeModeRaw(mode);
-    setCookiePref({ mode, start: customStart, end: customEnd });
-  };
-  const updateCustomStart = (v) => {
-    setCustomStart(v);
-    setCookiePref({ mode: rangeMode, start: v, end: customEnd });
-  };
-  const updateCustomEnd = (v) => {
-    setCustomEnd(v);
-    setCookiePref({ mode: rangeMode, start: customStart, end: v });
-  };
+  const setRangeMode = (mode) => { setRangeModeRaw(mode); setCookiePref({ mode, start: customStart, end: customEnd }); };
+  const updateCustomStart = (v) => { setCustomStart(v); setCookiePref({ mode: rangeMode, start: v, end: customEnd }); };
+  const updateCustomEnd = (v) => { setCustomEnd(v); setCookiePref({ mode: rangeMode, start: customStart, end: v }); };
 
   const { startDate, endDate } = useMemo(() => {
     if (rangeMode === '30d') return { startDate: dayjs().subtract(29, 'day').format('YYYY-MM-DD'), endDate: dayjs().format('YYYY-MM-DD') };
@@ -70,54 +55,38 @@ export default function DashboardPage() {
     return { startDate: customStart, endDate: customEnd };
   }, [rangeMode, customStart, customEnd]);
 
-  // État de la modale d'import (QIF / OFX / ZIP)
+  const { operations, reload: reloadOperations } = useOperations({ startDate, endDate });
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editOp, setEditOp] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importBankId, setImportBankId] = useState('');
-  const importFileRef = useRef(null);
-  const newOpBtnRef = useRef(null);
-  const [fabVisible, setFabVisible] = useState(false);
-  const bankBalancesRef = useRef(null);
-  const [totalBadgeVisible, setTotalBadgeVisible] = useState(false);
-  // Modale de résolution des conflits d'import (N candidats pour un même montant).
   const [pendingMatches, setPendingMatches] = useState(null);
-  // Conversion d'une opération en récurrente
-  const [recurringForm, setRecurringForm] = useState(null); // null = fermé
+  const [recurringForm, setRecurringForm] = useState(null);
 
-  const loadOperations = () => operationsApi.list({ startDate, endDate }).then(setOperations);
-  const loadBanks = () => banksApi.list().then(setBanks);
+  const newOpBtnRef = useRef(null);
+  const bankBalancesRef = useRef(null);
+  const [fabVisible, setFabVisible] = useState(false);
+  const [totalBadgeVisible, setTotalBadgeVisible] = useState(false);
 
-  useEffect(() => { loadBanks(); }, []); // chargement initial uniquement
-
-  // FAB : visible dès que le bouton "Nouvelle opération" quitte le viewport
   useEffect(() => {
     const el = newOpBtnRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setFabVisible(!entry.isIntersecting),
-      { threshold: 0 },
-    );
+    const observer = new IntersectionObserver(([entry]) => setFabVisible(!entry.isIntersecting), { threshold: 0 });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
-    if (startDate && endDate) operationsApi.list({ startDate, endDate }).then(setOperations);
-  }, [startDate, endDate]);
 
-  // Badge total : visible dès que la section BankBalances sort du viewport
   useEffect(() => {
     const el = bankBalancesRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setTotalBadgeVisible(!entry.isIntersecting),
-      { threshold: 0 },
-    );
+    const observer = new IntersectionObserver(([entry]) => setTotalBadgeVisible(!entry.isIntersecting), { threshold: 0 });
     observer.observe(el);
     return () => observer.disconnect();
   }, [banks.length]);
 
   const handleSaveBalance = async (bankId, value) => {
     await banksApi.update(bankId, { currentBalance: value });
-    loadBanks();
+    reloadBanks();
   };
 
   const handleGenerateRecurring = async () => {
@@ -125,10 +94,10 @@ export default function DashboardPage() {
     try {
       const { imported } = await operationsApi.generateRecurring({ month: today.month() + 1, year: today.year() });
       toast.success(`${imported} opération(s) générée(s)`);
-      loadOperations();
-      loadBanks();
+      reloadOperations();
+      reloadBanks();
     } catch (err) {
-      toast.error(err.message || "Erreur lors de la génération");
+      toast.error(err.message || 'Erreur lors de la génération');
     }
   };
 
@@ -138,8 +107,8 @@ export default function DashboardPage() {
       else await operationsApi.create(values);
       setFormOpen(false);
       setEditOp(null);
-      loadOperations();
-      loadBanks();
+      reloadOperations();
+      reloadBanks();
     } catch (err) {
       toast.error(err.message || "Erreur lors de l'enregistrement");
     }
@@ -147,22 +116,55 @@ export default function DashboardPage() {
 
   const handlePoint = async (id) => {
     await operationsApi.point(id);
-    loadOperations();
-    loadBanks(); // pointer/dépointer change le projectedBalance
+    reloadOperations();
+    reloadBanks();
   };
 
   const handleDelete = async (id) => {
     await operationsApi.remove(id);
-    loadOperations();
-    loadBanks();
+    reloadOperations();
+    reloadBanks();
   };
 
   const handleCategoryChange = async (id, category) => {
     await operationsApi.update(id, { category });
-    loadOperations();
+    reloadOperations();
   };
 
-  const openEdit = (op) => { setEditOp(op); setFormOpen(true); };
+  const handleImportSubmit = async (file, bankId) => {
+    try {
+      const result = await operationsApi.importFile(file, { bankId });
+      const parts = [];
+      if (result.imported) parts.push(`${result.imported} ajoutée(s)`);
+      if (result.autoReconciled) parts.push(`${result.autoReconciled} pointée(s) auto`);
+      if (result.duplicates) parts.push(`${result.duplicates} doublon(s)`);
+      if (result.invalid) parts.push(`${result.invalid} invalide(s)`);
+      toast.success(parts.join(' · ') || 'Aucune opération à importer');
+      setImportOpen(false);
+      reloadOperations();
+      reloadBanks();
+      if (Array.isArray(result.pendingMatches) && result.pendingMatches.length > 0) {
+        setPendingMatches(result.pendingMatches);
+      }
+    } catch (err) {
+      toast.error(err.message || "Erreur lors de l'import", { duration: 10000 });
+    }
+  };
+
+  const handleResolveMatches = async (resolutions) => {
+    try {
+      const result = await operationsApi.resolveImport(resolutions);
+      const parts = [];
+      if (result.reconciled) parts.push(`${result.reconciled} pointée(s)`);
+      if (result.imported) parts.push(`${result.imported} ajoutée(s)`);
+      toast.success(parts.join(' · ') || 'Aucun changement');
+      setPendingMatches(null);
+      reloadOperations();
+      reloadBanks();
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la résolution', { duration: 10000 });
+    }
+  };
 
   const openMakeRecurring = (op) => {
     setRecurringForm({
@@ -188,49 +190,6 @@ export default function DashboardPage() {
       setRecurringForm(null);
     } catch (err) {
       toast.error(err.message || 'Erreur lors de la création');
-    }
-  };
-
-  const handleImportSubmit = async (e) => {
-    e.preventDefault();
-    const file = importFileRef.current?.files?.[0];
-    if (!file || !importBankId) return;
-    try {
-      const result = await operationsApi.importFile(file, { bankId: importBankId });
-      const parts = [];
-      if (result.imported) parts.push(`${result.imported} ajoutée(s)`);
-      if (result.autoReconciled) parts.push(`${result.autoReconciled} pointée(s) auto`);
-      if (result.duplicates) parts.push(`${result.duplicates} doublon(s)`);
-      if (result.invalid) parts.push(`${result.invalid} invalide(s)`);
-      toast.success(parts.join(' · ') || 'Aucune opération à importer');
-      setImportOpen(false);
-      setImportBankId('');
-      if (importFileRef.current) importFileRef.current.value = '';
-      loadOperations();
-      loadBanks();
-      // Conflits N-match : ouvre la modale de résolution.
-      if (Array.isArray(result.pendingMatches) && result.pendingMatches.length > 0) {
-        setPendingMatches(result.pendingMatches);
-      }
-    } catch (err) {
-      // 10 s : le message d'erreur peut être détaillé (en-têtes du fichier),
-      // on laisse le temps de lire avant fermeture.
-      toast.error(err.message || 'Erreur lors de l\'import', { duration: 10000 });
-    }
-  };
-
-  const handleResolveMatches = async (resolutions) => {
-    try {
-      const result = await operationsApi.resolveImport(resolutions);
-      const parts = [];
-      if (result.reconciled) parts.push(`${result.reconciled} pointée(s)`);
-      if (result.imported) parts.push(`${result.imported} ajoutée(s)`);
-      toast.success(parts.join(' · ') || 'Aucun changement');
-      setPendingMatches(null);
-      loadOperations();
-      loadBanks();
-    } catch (err) {
-      toast.error(err.message || 'Erreur lors de la résolution', { duration: 10000 });
     }
   };
 
@@ -338,7 +297,7 @@ export default function DashboardPage() {
             operations={operations}
             categories={categories}
             onPoint={handlePoint}
-            onEdit={openEdit}
+            onEdit={(op) => { setEditOp(op); setFormOpen(true); }}
             onDelete={handleDelete}
             onCategoryChange={handleCategoryChange}
             onMakeRecurring={openMakeRecurring}
@@ -355,6 +314,23 @@ export default function DashboardPage() {
         onCancel={() => { setFormOpen(false); setEditOp(null); }}
       />
 
+      <ImportDialog
+        open={importOpen}
+        banks={banks}
+        onSubmit={handleImportSubmit}
+        onCancel={() => setImportOpen(false)}
+      />
+
+      <MakeRecurringDialog
+        open={!!recurringForm}
+        form={recurringForm}
+        banks={banks}
+        categories={categories}
+        onChange={(key, value) => setRecurringForm((f) => ({ ...f, [key]: value }))}
+        onSubmit={handleRecurringSave}
+        onCancel={() => setRecurringForm(null)}
+      />
+
       <ImportResolveDialog
         open={!!pendingMatches}
         pendingMatches={pendingMatches || []}
@@ -362,122 +338,6 @@ export default function DashboardPage() {
         onCancel={() => setPendingMatches(null)}
       />
 
-      <Dialog open={importOpen} onOpenChange={(o) => !o && setImportOpen(false)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Importer un relevé</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleImportSubmit} className="space-y-4 pt-1">
-            <div className="space-y-1.5">
-              <Label>Banque</Label>
-              <Select value={importBankId} onValueChange={setImportBankId}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                <SelectContent>
-                  {banks.map((b) => <SelectItem key={b._id} value={b._id}>{b.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="import-file">Fichier QIF, OFX ou ZIP</Label>
-              <input
-                id="import-file"
-                ref={importFileRef}
-                type="file"
-                accept=".qif,.ofx,.zip,application/zip"
-                required
-                className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-white hover:file:bg-indigo-700"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              QIF ou OFX direct, ou ZIP contenant un de ces formats.
-              Toutes les opérations du fichier sont importées (toutes dates),
-              les doublons et lignes invalides sont ignorés.
-            </p>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>Annuler</Button>
-              <Button type="submit" disabled={!importBankId}>Importer</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!recurringForm} onOpenChange={(o) => !o && setRecurringForm(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Créer une opération récurrente</DialogTitle>
-          </DialogHeader>
-          {recurringForm && (
-            <form onSubmit={handleRecurringSave} className="space-y-4 pt-1">
-              <div className="space-y-1.5">
-                <Label htmlFor="rec-label">Libellé</Label>
-                <input
-                  id="rec-label"
-                  value={recurringForm.label}
-                  onChange={(e) => setRecurringForm((f) => ({ ...f, label: e.target.value }))}
-                  required
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Jour du mois</Label>
-                  <Select value={recurringForm.dayOfMonth} onValueChange={(v) => setRecurringForm((f) => ({ ...f, dayOfMonth: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 31 }, (_, i) => String(i + 1)).map((d) => (
-                        <SelectItem key={d} value={d}>{d}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="rec-amount">Montant (€)</Label>
-                  <input
-                    id="rec-amount"
-                    type="number"
-                    step="0.01"
-                    value={recurringForm.amount}
-                    onChange={(e) => setRecurringForm((f) => ({ ...f, amount: e.target.value }))}
-                    required
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Banque</Label>
-                <Select value={recurringForm.bankId} onValueChange={(v) => setRecurringForm((f) => ({ ...f, bankId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                  <SelectContent>
-                    {banks.map((b) => <SelectItem key={b._id} value={b._id}>{b.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Catégorie</Label>
-                <Select value={recurringForm.category} onValueChange={(v) => setRecurringForm((f) => ({ ...f, category: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Sans catégorie" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Sans catégorie</SelectItem>
-                    {categories.map((c) => (
-                      <SelectItem key={c._id} value={c.label}>
-                        <span className="inline-flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
-                          {c.label}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setRecurringForm(null)}>Annuler</Button>
-                <Button type="submit" disabled={!recurringForm.bankId}>Créer la récurrente</Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* FAB — apparaît quand le bouton "Nouvelle opération" est hors du viewport */}
       {fabVisible && (
         <button
           type="button"
