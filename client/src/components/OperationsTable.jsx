@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
@@ -13,7 +13,7 @@ import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 const PAGE_SIZES = [20, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 50;
 
-export default function OperationsTable({ operations, categories = [], onPoint, onEdit, onDelete, onCategoryChange }) {
+export default function OperationsTable({ operations, categories = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
@@ -119,6 +119,14 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
+                  {onMakeRecurring && (
+                    <Button variant="ghost" size="icon" aria-label="convertir en récurrente"
+                      className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
+                      onClick={(e) => { e.stopPropagation(); onMakeRecurring(op); }}
+                      title="Convertir en récurrente">
+                      <Repeat2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                   <Button variant="ghost" size="icon" aria-label="éditer" onClick={(e) => { e.stopPropagation(); onEdit(op); }}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>

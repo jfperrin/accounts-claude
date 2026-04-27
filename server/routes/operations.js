@@ -104,25 +104,39 @@ function extractImportPayload(file) {
   throw err;
 }
 
-// Parse + valide les query params month/year.
-// Renvoie le mois courant si absents. Lève une erreur 400 si mal formés.
-function parseMonthYear(query) {
-  const now = new Date();
-  const month = query.month != null ? Number(query.month) : now.getUTCMonth() + 1;
-  const year = query.year != null ? Number(query.year) : now.getUTCFullYear();
-  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
-    const err = new Error('month/year invalides');
+// Parse + valide les query params startDate/endDate (format YYYY-MM-DD).
+// Par défaut : les 30 derniers jours. Lève 400 si les dates sont invalides.
+function parseDateRange(query) {
+  const { startDate, endDate } = query;
+  if (!startDate && !endDate) {
+    const end = new Date();
+    end.setUTCHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - 29);
+    start.setUTCHours(0, 0, 0, 0);
+    return { start, end: new Date(end.getTime() + 1) };
+  }
+  if (!startDate || !endDate) {
+    const err = new Error('startDate et endDate sont tous les deux requis');
     err.status = 400;
     throw err;
   }
-  return { month, year };
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + 1); // borne exclusive
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start >= end) {
+    const err = new Error('Dates invalides');
+    err.status = 400;
+    throw err;
+  }
+  return { start, end };
 }
 
-// GET /api/operations?month=M&year=YYYY
-// Liste les opérations du mois donné, triées par date. Sans param → mois courant.
+// GET /api/operations?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+// Liste les opérations dans la plage donnée. Sans param → 30 derniers jours.
 router.get('/', wrap(async (req, res) => {
-  const { month, year } = parseMonthYear(req.query);
-  res.json(await req.app.locals.db.operations.findByMonth(month, year, req.user._id));
+  const { start, end } = parseDateRange(req.query);
+  res.json(await req.app.locals.db.operations.findByDateRange(start, end, req.user._id));
 }));
 
 // POST /api/operations → crée une opération (body sans periodId).

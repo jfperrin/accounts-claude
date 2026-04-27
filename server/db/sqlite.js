@@ -383,6 +383,12 @@ module.exports = function createSQLiteRepos() {
       ).all(uid(userId), prefix).map(mapOp);
     },
 
+    findByDateRange(start, end, userId) {
+      return db.prepare(
+        `${OPS_WITH_BANK} WHERE o.user_id = ? AND o.date >= ? AND o.date < ? ORDER BY o.date DESC`,
+      ).all(uid(userId), start.toISOString(), end.toISOString()).map(mapOp);
+    },
+
     findByMonthMinimal(month, year, userId) {
       const prefix = `${year}-${String(month).padStart(2, '0')}`;
       return db.prepare(

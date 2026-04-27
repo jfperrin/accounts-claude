@@ -76,7 +76,14 @@
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:cookieconsent.orestbida.com)",
       "Read(//home/jeff/**)",
-      "Read(//home/**)"
+      "Read(//home/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,v\\) for k,v in {**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}.items\\(\\)]\")",
+      "Read(//mnt/c/Users/jf/OneDrive/Github/**)",
+      "Bash(npx --prefix client eslint client/src/pages/DashboardPage.jsx)",
+      "Bash(cmd /c \"cd C:\\\\Users\\\\jf\\\\OneDrive\\\\Github\\\\accounts-claude\\\\client && npx eslint src/pages/DashboardPage.jsx 2>&1\")",
+      "mcp__mcp-registry__search_mcp_registry",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

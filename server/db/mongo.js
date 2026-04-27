@@ -107,6 +107,11 @@ const operations = {
       .populate('bankId', 'label').sort('-date');
   },
 
+  findByDateRange(start, end, userId) {
+    return Operation.find({ userId, date: { $gte: start, $lt: end } })
+      .populate('bankId', 'label').sort('-date');
+  },
+
   findByMonthMinimal(month, year, userId) {
     const start = new Date(Date.UTC(year, month - 1, 1));
     const end = new Date(Date.UTC(year, month, 1));

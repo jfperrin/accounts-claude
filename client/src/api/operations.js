@@ -1,8 +1,8 @@
 import client from './client';
 
-// Sans paramètre, le serveur renvoie le mois courant.
-export const list = ({ month, year } = {}) =>
-  client.get('/operations', { params: { month, year } });
+// Sans paramètre, le serveur renvoie les 30 derniers jours.
+export const list = ({ startDate, endDate } = {}) =>
+  client.get('/operations', { params: { startDate, endDate } });
 export const create = (data) => client.post('/operations', data);
 export const update = (id, data) => client.put(`/operations/${id}`, data);
 export const remove = (id) => client.delete(`/operations/${id}`);
