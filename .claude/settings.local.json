@@ -88,7 +88,8 @@
       "Bash(cmd.exe /c \"yarn --cwd client lint\")",
       "Bash(npx yarn *)",
       "Bash(node_modules/.bin/eslint src *)",
-      "Bash(\"./node_modules/.bin/eslint\" src *)"
+      "Bash(\"./node_modules/.bin/eslint\" src *)",
+      "Bash(wslpath -u \"C:\\\\\\\\Users\\\\\\\\jf\\\\\\\\OneDrive\\\\\\\\Github\\\\\\\\accounts-claude\")"
     ]
   }
 }
