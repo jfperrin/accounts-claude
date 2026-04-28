@@ -2,9 +2,17 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { CalendarDays, ChevronDown, Download, Plus, Upload } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
-import * as operationsApi from '@/api/operations';
-import * as banksApi from '@/api/banks';
-import * as recurringApi from '@/api/recurringOperations';
+import {
+  create as createOp,
+  update as updateOp,
+  remove as removeOp,
+  point,
+  generateRecurring,
+  importFile,
+  resolveImport,
+} from '@/api/operations';
+import { update as updateBank } from '@/api/banks';
+import { create as createRecurring } from '@/api/recurringOperations';
 import { useCategories } from '@/hooks/useCategories';
 import { useBanks } from '@/hooks/useBanks';
 import { useOperations } from '@/hooks/useOperations';
@@ -86,7 +94,7 @@ export default function DashboardPage() {
   }, [banks.length]);
 
   const handleSaveBalance = async (bankId, value) => {
-    await banksApi.update(bankId, { currentBalance: value });
+    await updateBank(bankId, { currentBalance: value });
     reloadBanks();
   };
 
@@ -96,7 +104,7 @@ export default function DashboardPage() {
 
   const handleConfirmGenerateRecurring = async ({ month, year }) => {
     try {
-      const { imported } = await operationsApi.generateRecurring({ month, year });
+      const { imported } = await generateRecurring({ month, year });
       toast.success(`${imported} opération(s) générée(s)`);
       setGenerateRecurringOpen(false);
       reloadOperations();
@@ -108,8 +116,8 @@ export default function DashboardPage() {
 
   const handleFormFinish = async (values) => {
     try {
-      if (editOp) await operationsApi.update(editOp._id, values);
-      else await operationsApi.create(values);
+      if (editOp) await updateOp(editOp._id, values);
+      else await createOp(values);
       setFormOpen(false);
       setEditOp(null);
       reloadOperations();
@@ -120,25 +128,25 @@ export default function DashboardPage() {
   };
 
   const handlePoint = async (id) => {
-    await operationsApi.point(id);
+    await point(id);
     reloadOperations();
     reloadBanks();
   };
 
   const handleDelete = async (id) => {
-    await operationsApi.remove(id);
+    await removeOp(id);
     reloadOperations();
     reloadBanks();
   };
 
   const handleCategoryChange = async (id, category) => {
-    await operationsApi.update(id, { category });
+    await updateOp(id, { category });
     reloadOperations();
   };
 
   const handleImportSubmit = async (file, bankId) => {
     try {
-      const result = await operationsApi.importFile(file, { bankId });
+      const result = await importFile(file, { bankId });
       const parts = [];
       if (result.imported) parts.push(`${result.imported} ajoutée(s)`);
       if (result.autoReconciled) parts.push(`${result.autoReconciled} pointée(s) auto`);
@@ -158,7 +166,7 @@ export default function DashboardPage() {
 
   const handleResolveMatches = async (resolutions) => {
     try {
-      const result = await operationsApi.resolveImport(resolutions);
+      const result = await resolveImport(resolutions);
       const parts = [];
       if (result.reconciled) parts.push(`${result.reconciled} pointée(s)`);
       if (result.imported) parts.push(`${result.imported} ajoutée(s)`);
@@ -184,7 +192,7 @@ export default function DashboardPage() {
   const handleRecurringSave = async (e) => {
     e.preventDefault();
     try {
-      await recurringApi.create({
+      await createRecurring({
         label: recurringForm.label,
         amount: parseFloat(recurringForm.amount),
         dayOfMonth: Number(recurringForm.dayOfMonth),

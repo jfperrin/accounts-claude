@@ -1,5 +1,9 @@
 // Tests d'intégration de l'import (QIF) avec réconciliation par montant + similarité.
-// La réconciliation auto exige : même bankId + même montant + libellé similaire (≥ seuil).
+// Réconciliation auto exige :
+//   - même bankId
+//   - montant dans la tolérance (±10 %, même signe)
+//   - date dans la fenêtre (±15 jours)
+//   - libellé similaire (≥ SIMILARITY_THRESHOLD = 0.7)
 // Sinon → insertion comme nouvelle opération.
 // Endpoint : POST /api/operations/import (.qif, .ofx ou .zip).
 
@@ -57,7 +61,7 @@ describe('POST /api/operations/import', () => {
     expect(res.body.autoReconciled).toBe(0);
     expect(res.body.pendingMatches).toEqual([]);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops).toHaveLength(1);
     expect(ops[0].label).toBe('LOYER');
     expect(ops[0].pointed).toBe(true);
@@ -78,7 +82,7 @@ describe('POST /api/operations/import', () => {
     expect(res.body.autoReconciled).toBe(1);
     expect(res.body.pendingMatches).toEqual([]);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops).toHaveLength(1);
     expect(ops[0]._id).toBe(forecast._id);
     expect(ops[0].pointed).toBe(true);
@@ -101,7 +105,7 @@ describe('POST /api/operations/import', () => {
     expect(res.body.autoReconciled).toBe(1);
     expect(res.body.pendingMatches).toEqual([]);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops).toHaveLength(2);
     // Une seule des deux est devenue pointée
     expect(ops.filter((o) => o.pointed)).toHaveLength(1);
@@ -119,7 +123,7 @@ describe('POST /api/operations/import', () => {
     expect(res.body.imported).toBe(1);
     expect(res.body.autoReconciled).toBe(0);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops).toHaveLength(2);
     // L'op existante reste non pointée
     expect(ops.find((o) => o.label === 'Achat librairie').pointed).toBe(false);
@@ -140,7 +144,7 @@ describe('POST /api/operations/import', () => {
     expect(res.body.autoReconciled).toBe(1);
     expect(res.body.imported).toBe(1);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops).toHaveLength(2);
   });
 
@@ -166,7 +170,7 @@ describe('POST /api/operations/import', () => {
     expect(res.body.autoReconciled).toBe(0);
     expect(res.body.duplicates).toBe(1);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops).toHaveLength(1);
   });
 
@@ -182,6 +186,114 @@ describe('POST /api/operations/import', () => {
     // Op pointée → ignorée → 0 candidat → insertion
     expect(res.body.imported).toBe(1);
     expect(res.body.autoReconciled).toBe(0);
+  });
+
+  describe('fenêtre temporelle (±15 jours)', () => {
+    it('ne réconcilie pas avec une op hors fenêtre (mois précédent)', async () => {
+      // Op de janvier (>15j), même montant, libellé similaire → ne doit PAS matcher.
+      await agent.post('/api/operations').send({
+        label: 'Loyer', amount: -800, date: '2026-01-05T00:00:00.000Z', bankId,
+      });
+
+      const buf = qifBuffer([{ label: 'PRLV LOYER', amount: -800, date: '04/04/2026' }]);
+      const res = await importFile(buf);
+
+      expect(res.body.imported).toBe(1);
+      expect(res.body.autoReconciled).toBe(0);
+    });
+
+    it('réconcilie aux bornes de la fenêtre (~15 jours)', async () => {
+      // Op au jour 15, ligne au jour 30 → 15 jours d'écart → DOIT matcher.
+      await agent.post('/api/operations').send({
+        label: 'Loyer', amount: -800, date: '2026-04-15T00:00:00.000Z', bankId,
+      });
+
+      const buf = qifBuffer([{ label: 'PRLV LOYER', amount: -800, date: '30/04/2026' }]);
+      const res = await importFile(buf);
+
+      expect(res.body.autoReconciled).toBe(1);
+      expect(res.body.imported).toBe(0);
+    });
+  });
+
+  describe('tolérance montant (±10 %)', () => {
+    it('réconcilie quand le montant du fichier est dans la tolérance', async () => {
+      // Op pré-saisie à -800, ligne du fichier à -805 (−0,625 %) → match.
+      await agent.post('/api/operations').send({
+        label: 'Loyer', amount: -800, date: '2026-04-05T00:00:00.000Z', bankId,
+      });
+
+      const buf = qifBuffer([{ label: 'PRLV LOYER', amount: -805, date: '04/04/2026' }]);
+      const res = await importFile(buf);
+
+      expect(res.body.autoReconciled).toBe(1);
+      expect(res.body.imported).toBe(0);
+    });
+
+    it("n'accepte pas un écart hors tolérance (≥10 %)", async () => {
+      // Op à -800, ligne à -900 (12,5 %) → trop d'écart → insertion séparée.
+      await agent.post('/api/operations').send({
+        label: 'Loyer', amount: -800, date: '2026-04-05T00:00:00.000Z', bankId,
+      });
+
+      const buf = qifBuffer([{ label: 'PRLV LOYER', amount: -900, date: '04/04/2026' }]);
+      const res = await importFile(buf);
+
+      expect(res.body.autoReconciled).toBe(0);
+      expect(res.body.imported).toBe(1);
+    });
+
+    it('refuse de matcher des opérations de signe opposé (débit vs crédit)', async () => {
+      // Op débit -800, ligne crédit +800 → jamais de match malgré valeur absolue identique.
+      await agent.post('/api/operations').send({
+        label: 'Loyer', amount: -800, date: '2026-04-05T00:00:00.000Z', bankId,
+      });
+
+      const buf = qifBuffer([{ label: 'PRLV LOYER', amount: 800, date: '04/04/2026' }]);
+      const res = await importFile(buf);
+
+      expect(res.body.autoReconciled).toBe(0);
+      expect(res.body.imported).toBe(1);
+    });
+  });
+
+  describe('écrasement du montant à la réconciliation', () => {
+    it('remplace le montant pré-saisi par celui du fichier', async () => {
+      // Op pré-saisie à -800, ligne réelle à -805 → après réconciliation,
+      // l'op doit afficher -805 (le fichier fait foi).
+      const { body: forecast } = await agent.post('/api/operations').send({
+        label: 'Loyer', amount: -800, date: '2026-04-05T00:00:00.000Z', bankId,
+      });
+
+      const buf = qifBuffer([{ label: 'PRLV LOYER', amount: -805, date: '04/04/2026' }]);
+      await importFile(buf);
+
+      const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
+      const updated = ops.find((o) => o._id === forecast._id);
+      expect(updated).toBeDefined();
+      expect(updated.amount).toBe(-805);
+      expect(updated.pointed).toBe(true);
+    });
+  });
+
+  describe('inférence de catégorie via category_hints', () => {
+    it('hérite de la catégorie d\'une op pré-existante au libellé similaire', async () => {
+      // Op manuelle catégorisée → on importe une nouvelle ligne au libellé proche
+      // → la nouvelle op doit récupérer la même catégorie.
+      await agent.post('/api/operations').send({
+        label: 'CARREFOUR PARIS', amount: -45.10,
+        date: '2026-04-02T00:00:00.000Z', bankId,
+        category: 'Courses',
+      });
+
+      const buf = qifBuffer([{ label: 'CARREFOUR LYON', amount: -32.50, date: '20/04/2026' }]);
+      await importFile(buf);
+
+      const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
+      const inserted = ops.find((o) => o.label === 'CARREFOUR LYON');
+      expect(inserted).toBeDefined();
+      expect(inserted.category).toBe('Courses');
+    });
   });
 });
 
@@ -211,7 +323,7 @@ describe('POST /api/operations/import/resolve', () => {
     expect(res.body.reconciled).toBe(1);
     expect(res.body.imported).toBe(0);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     const a = ops.find((o) => o._id === opAId);
     const b = ops.find((o) => o._id === opBId);
     expect(a.pointed).toBe(true);
@@ -234,7 +346,7 @@ describe('POST /api/operations/import/resolve', () => {
     expect(res.body.imported).toBe(1);
     expect(res.body.reconciled).toBe(0);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops).toHaveLength(3);
     const inserted = ops.find((o) => o.label === 'AUTRE');
     expect(inserted).toBeDefined();
@@ -254,7 +366,7 @@ describe('POST /api/operations/import/resolve', () => {
 
     expect(res.body.reconciled).toBe(2);
 
-    const ops = (await agent.get('/api/operations').query({ month: 4, year: 2026 })).body;
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
     expect(ops.find((o) => o._id === opAId).label).toBe('Loyer A (PRLV LOYER)');
     expect(ops.find((o) => o._id === opBId).label).toBe('Loyer B (PRLV LOYER)');
     expect(ops.every((o) => o.pointed)).toBe(true);
@@ -265,5 +377,22 @@ describe('POST /api/operations/import/resolve', () => {
       resolutions: [{ selectedOpIds: [opAId] }],
     });
     expect(res.status).toBe(400);
+  });
+
+  it('écrase le montant pré-saisi par celui de la ligne importée', async () => {
+    const importedRow = {
+      label: 'PRLV LOYER',
+      amount: -805,
+      date: '2026-04-04T00:00:00.000Z',
+      bankId,
+    };
+    await agent.post('/api/operations/import/resolve').send({
+      resolutions: [{ importedRow, selectedOpIds: [opAId] }],
+    });
+
+    const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
+    const a = ops.find((o) => o._id === opAId);
+    expect(a.amount).toBe(-805);
+    expect(a.pointed).toBe(true);
   });
 });

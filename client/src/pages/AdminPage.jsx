@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, KeyRound, ShieldCheck, MailCheck, CheckCircle2, XCircle } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
-import * as adminApi from '@/api/admin';
+import { getUsers, createUser, updateUser, deleteUser, sendReset, verifyEmail } from '@/api/admin';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -23,7 +23,7 @@ export default function AdminPage() {
   const load = async () => {
     setLoading(true);
     try {
-      setUsers(await adminApi.getUsers());
+      setUsers(await getUsers());
     } catch {
       toast.error('Impossible de charger les utilisateurs.');
     } finally {
@@ -34,20 +34,20 @@ export default function AdminPage() {
   useEffect(() => { load(); }, []);
 
   const handleCreate = async (data) => {
-    const created = await adminApi.createUser(data);
+    const created = await createUser(data);
     setUsers(prev => [created, ...prev]);
     toast.success(`Utilisateur "${created.email}" créé.`);
   };
 
   const handleEdit = async (data) => {
-    const updated = await adminApi.updateUser(editing._id, data);
+    const updated = await updateUser(editing._id, data);
     setUsers(prev => prev.map(u => u._id === updated._id ? updated : u));
     toast.success('Utilisateur mis à jour.');
   };
 
   const handleDelete = async () => {
     try {
-      await adminApi.deleteUser(deleteTarget._id);
+      await deleteUser(deleteTarget._id);
       setUsers(prev => prev.filter(u => u._id !== deleteTarget._id));
       toast.success(`Utilisateur "${deleteTarget.email}" supprimé.`);
     } catch (err) {
@@ -59,7 +59,7 @@ export default function AdminPage() {
 
   const handleReset = async (u) => {
     try {
-      await adminApi.sendReset(u._id);
+      await sendReset(u._id);
       toast.success(`Email de réinitialisation envoyé à ${u.email}.`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur lors de l\'envoi.');
@@ -68,7 +68,7 @@ export default function AdminPage() {
 
   const handleVerify = async (u) => {
     try {
-      const updated = await adminApi.verifyEmail(u._id);
+      const updated = await verifyEmail(u._id);
       setUsers(prev => prev.map(x => x._id === updated._id ? updated : x));
       toast.success(`Email de ${u.email} vérifié.`);
     } catch (err) {

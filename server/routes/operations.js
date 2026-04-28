@@ -60,14 +60,30 @@ router.get('/', wrap(async (req, res) => {
 
 // POST /api/operations → crée une opération (body sans periodId).
 router.post('/', wrap(async (req, res) => {
+  const { categoryHints } = req.app.locals.db;
   const op = await req.app.locals.db.operations.create({ ...req.body, userId: req.user._id });
+  // Synchronise le cache hints : nouvelle op catégorisée → upsert
+  if (op && op.category) {
+    await categoryHints.upsert(req.user._id, op.label, op.category);
+  }
   res.status(201).json(op);
 }));
 
 // PUT /api/operations/:id → met à jour label, montant, date, banque ou pointed
 router.put('/:id', wrap(async (req, res) => {
-  const op = await req.app.locals.db.operations.update(req.params.id, req.user._id, req.body);
+  const { operations, categoryHints } = req.app.locals.db;
+  const op = await operations.update(req.params.id, req.user._id, req.body);
   if (!op) return res.status(404).json({ message: 'Introuvable' });
+  // Synchronise le cache hints sur changement de catégorie :
+  //  - catégorie posée → upsert (label, category)
+  //  - catégorie effacée → delete (label)
+  if (req.body.category !== undefined) {
+    if (req.body.category) {
+      await categoryHints.upsert(req.user._id, op.label, req.body.category);
+    } else {
+      await categoryHints.deleteHint(req.user._id, op.label);
+    }
+  }
   res.json(op);
 }));
 

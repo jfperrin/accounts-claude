@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import LoginPage from '../pages/LoginPage';
-import * as authApi from '../api/auth';
+import { config } from '../api/auth';
 
 vi.mock('../api/auth', () => ({
   config: vi.fn().mockResolvedValue({ googleEnabled: false }),
@@ -53,12 +53,12 @@ describe('LoginPage', () => {
 
   it("n'affiche pas le bouton Google si googleEnabled est false", async () => {
     render(<LoginPage />, { wrapper: Wrapper });
-    await waitFor(() => expect(authApi.config).toHaveBeenCalled());
+    await waitFor(() => expect(config).toHaveBeenCalled());
     expect(screen.queryByText('Continuer avec Google')).not.toBeInTheDocument();
   });
 
   it('affiche le bouton Google si googleEnabled est true', async () => {
-    authApi.config.mockResolvedValue({ googleEnabled: true });
+    config.mockResolvedValue({ googleEnabled: true });
     render(<LoginPage />, { wrapper: Wrapper });
     await waitFor(() =>
       expect(screen.getByText('Continuer avec Google')).toBeInTheDocument()

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -37,6 +39,23 @@
   --destructive-foreground: oklch(0.984 0.003 247.858);
   --sidebar: oklch(0.141 0.005 285.823);
   --radius: 0.5rem;
+}
+
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.18 0.006 285.823);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.28 0.006 285.823);
+  --input: oklch(0.28 0.006 285.823);
+  --ring: oklch(0.623 0.214 277.014);
+  --primary: oklch(0.623 0.214 277.014);
+  --primary-foreground: oklch(0.141 0.005 285.823);
+  --muted: oklch(0.22 0.006 285.823);
+  --muted-foreground: oklch(0.65 0.005 285.823);
+  --destructive: oklch(0.65 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --sidebar: oklch(0.10 0.005 285.823);
 }
 
 * {

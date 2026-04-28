@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import * as operationsApi from '@/api/operations';
+import { list } from '@/api/operations';
 
 export function useOperations({ startDate, endDate }) {
   const [operations, setOperations] = useState([]);
 
-  const load = () => operationsApi.list({ startDate, endDate }).then(setOperations);
+  const load = () => list({ startDate, endDate }).then(setOperations);
 
   useEffect(() => {
     if (startDate && endDate) load();

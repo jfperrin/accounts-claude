@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import * as categoriesApi from '@/api/categories';
+import { list } from '@/api/categories';
 
 export function useCategories() {
   const [categories, setCategories] = useState([]);
 
-  const load = () => categoriesApi.list().then(setCategories);
+  const load = () => list().then(setCategories);
 
   useEffect(() => { load(); }, []);
 

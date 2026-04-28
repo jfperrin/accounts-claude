@@ -6,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import Footer from '@/components/layout/Footer';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
@@ -106,6 +107,8 @@ export default function AppShell() {
           </div>
 
           <div className="flex-1" />
+
+          <ThemeToggle />
 
           {/* Avatar + surnom (cliquable → /profile) */}
           <button

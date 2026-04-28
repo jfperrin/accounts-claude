@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
-import * as profileApi from '@/api/profile';
+import { updateProfile, updateEmail, uploadAvatar, changePassword } from '@/api/profile';
 import { resendVerification } from '@/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import AvatarCropDialog from '@/components/AvatarCropDialog';
 
 const TITLES = ['M.', 'Mme', 'Dr', 'Pr'];
 
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   const [resending, setResending] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [savingPassword, setSavingPassword] = useState(false);
+  const [cropFile, setCropFile] = useState(null);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target?.value ?? e }));
 
@@ -35,7 +37,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const updated = await profileApi.updateProfile({
+      const updated = await updateProfile({
         ...form,
         title: form.title === 'none' ? null : form.title,
       });
@@ -52,7 +54,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setSavingEmail(true);
     try {
-      const data = await profileApi.updateEmail(email);
+      const data = await updateEmail(email);
       toast.success(data.message || 'Un lien de confirmation a été envoyé');
     } catch (err) {
       if (err.response?.status === 409) {
@@ -89,7 +91,7 @@ export default function ProfilePage() {
     }
     setSavingPassword(true);
     try {
-      await profileApi.changePassword(passwordForm.current, passwordForm.next);
+      await changePassword(passwordForm.current, passwordForm.next);
       toast.success('Mot de passe mis à jour. Un email de confirmation vous a été envoyé.');
       setPasswordForm({ current: '', next: '', confirm: '' });
     } catch (err) {
@@ -103,19 +105,24 @@ export default function ProfilePage() {
     }
   };
 
-  const onAvatarChange = async (e) => {
+  const onAvatarChange = (e) => {
     const file = e.target.files?.[0];
+    e.target.value = ''; // reset pour permettre de re-sélectionner le même fichier
     if (!file) return;
+    setCropFile(file);
+  };
+
+  const onCropConfirm = async (cropped) => {
+    setCropFile(null);
     setUploading(true);
     try {
-      const updated = await profileApi.uploadAvatar(file);
+      const updated = await uploadAvatar(cropped);
       updateUser(updated);
       toast.success('Avatar mis à jour');
     } catch (err) {
       toast.error(err.message || "Erreur lors de l'upload");
     } finally {
       setUploading(false);
-      e.target.value = '';
     }
   };
 
@@ -259,6 +266,13 @@ export default function ProfilePage() {
       >
         Déconnexion
       </button>
+
+      <AvatarCropDialog
+        open={!!cropFile}
+        file={cropFile}
+        onConfirm={onCropConfirm}
+        onCancel={() => setCropFile(null)}
+      />
     </div>
   );
 }

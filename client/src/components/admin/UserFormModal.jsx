@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const EMPTY = { email: '', password: '', role: 'user' };
+const EMPTY = { email: '', password: '', role: 'user', emailVerified: false };
 
 export default function UserFormModal({ open, onClose, onSubmit, initial }) {
   const isEdit = !!initial;
@@ -16,7 +16,12 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
   useEffect(() => {
     if (open) {
       setForm(initial
-        ? { email: initial.email ?? '', password: '', role: initial.role }
+        ? {
+            email: initial.email ?? '',
+            password: '',
+            role: initial.role,
+            emailVerified: !!initial.emailVerified,
+          }
         : EMPTY
       );
       setError('');
@@ -37,8 +42,8 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
     setSaving(true);
     try {
       const payload = isEdit
-        ? { email: form.email, role: form.role }
-        : { email: form.email, password: form.password, role: form.role };
+        ? { email: form.email, role: form.role, emailVerified: form.emailVerified }
+        : { email: form.email, password: form.password, role: form.role, emailVerified: form.emailVerified };
       await onSubmit(payload);
       onClose();
     } catch (err) {
@@ -77,6 +82,15 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
               </SelectContent>
             </Select>
           </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.emailVerified}
+              onChange={(e) => setForm((f) => ({ ...f, emailVerified: e.target.checked }))}
+              className="h-4 w-4 rounded border-input text-indigo-600 focus:ring-indigo-500"
+            />
+            <span>Email vérifié</span>
+          </label>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>

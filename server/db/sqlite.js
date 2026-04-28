@@ -79,6 +79,16 @@ function initSchema(db) {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS category_hints (
+      id         TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL REFERENCES users(id),
+      label      TEXT NOT NULL,
+      category   TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, label)
+    );
+    CREATE INDEX IF NOT EXISTS idx_category_hints_user ON category_hints(user_id);
   `);
 
   // Migration: drop username column if it exists (schema change from username to email)
@@ -196,6 +206,13 @@ const mapCategory = (row) => row && {
   userId: row.user_id,
 };
 
+const mapHint = (row) => row && {
+  _id: row.id,
+  label: row.label,
+  category: row.category,
+  userId: row.user_id,
+};
+
 const mapResetToken = (row) => row && {
   _id:             row.id,
   token:           row.token,
@@ -285,10 +302,13 @@ module.exports = function createSQLiteRepos() {
       ).all().map(mapUser);
     },
 
-    updateByAdmin(id, { email, role }) {
+    updateByAdmin(id, { email, role, emailVerified }) {
+      const cur = db.prepare('SELECT email_verified FROM users WHERE id = ?').get(uid(id));
+      if (!cur) return null;
+      const verified = emailVerified !== undefined ? (emailVerified ? 1 : 0) : cur.email_verified;
       db.prepare(
-        `UPDATE users SET email=?, role=?, updated_at=datetime('now') WHERE id=?`,
-      ).run(email ?? null, role ?? 'user', uid(id));
+        `UPDATE users SET email=?, role=?, email_verified=?, updated_at=datetime('now') WHERE id=?`,
+      ).run(email ?? null, role ?? 'user', verified, uid(id));
       return this.findById(id);
     },
 
@@ -588,5 +608,83 @@ module.exports = function createSQLiteRepos() {
       db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(id, uid(userId)),
   };
 
-  return { users, banks, operations, recurringOps, resetTokens, categories };
+  // ─────────────────────────────────────────────
+  // CATEGORY HINTS — cache label → catégorie pour l'auto-affectation à l'import.
+  // Une entrée par couple (user_id, label) unique. Beaucoup plus petit que la
+  // table operations : on évite de scanner toutes les ops à chaque import.
+  // rebuildFromOperations() reconstruit depuis l'historique en JS (pour la parité
+  // avec MongoDB) : groupe par label, prend la catégorie majoritaire, à égalité
+  // la plus récente.
+  // ─────────────────────────────────────────────
+  const categoryHints = {
+    findByUser: (userId) =>
+      db.prepare('SELECT * FROM category_hints WHERE user_id = ?').all(uid(userId)).map(mapHint),
+
+    upsert(userId, label, category) {
+      // INSERT … ON CONFLICT DO UPDATE — atomique (SQLite 3.24+)
+      const id = randomUUID();
+      db.prepare(`
+        INSERT INTO category_hints (id, user_id, label, category)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, label) DO UPDATE SET
+          category = excluded.category,
+          updated_at = datetime('now')
+      `).run(id, uid(userId), label, category);
+    },
+
+    deleteHint(userId, label) {
+      db.prepare('DELETE FROM category_hints WHERE user_id = ? AND label = ?')
+        .run(uid(userId), label);
+    },
+
+    deleteAll(userId) {
+      db.prepare('DELETE FROM category_hints WHERE user_id = ?').run(uid(userId));
+    },
+
+    rebuildFromOperations(userId) {
+      const rows = db.prepare(
+        'SELECT label, category, updated_at FROM operations WHERE user_id = ? AND category IS NOT NULL'
+      ).all(uid(userId));
+
+      // Group by label : on retient le compteur par catégorie + la dernière vue
+      const byLabel = new Map();
+      for (const r of rows) {
+        let entry = byLabel.get(r.label);
+        if (!entry) {
+          entry = { byCat: new Map(), latestCat: null, latestUpdated: '' };
+          byLabel.set(r.label, entry);
+        }
+        entry.byCat.set(r.category, (entry.byCat.get(r.category) || 0) + 1);
+        if (r.updated_at > entry.latestUpdated) {
+          entry.latestUpdated = r.updated_at;
+          entry.latestCat = r.category;
+        }
+      }
+
+      // Atomique : reset + insertions dans une transaction
+      const insert = db.prepare(
+        'INSERT INTO category_hints (id, user_id, label, category) VALUES (?, ?, ?, ?)',
+      );
+      const wipe = db.prepare('DELETE FROM category_hints WHERE user_id = ?');
+      const tx = db.transaction(() => {
+        wipe.run(uid(userId));
+        for (const [label, entry] of byLabel) {
+          // Catégorie majoritaire ; à égalité, la plus récente l'emporte
+          let winner = null;
+          let max = 0;
+          for (const [cat, count] of entry.byCat) {
+            if (count > max || (count === max && cat === entry.latestCat)) {
+              max = count;
+              winner = cat;
+            }
+          }
+          if (winner) insert.run(randomUUID(), uid(userId), label, winner);
+        }
+      });
+      tx();
+      return byLabel.size;
+    },
+  };
+
+  return { users, banks, operations, recurringOps, resetTokens, categories, categoryHints };
 };

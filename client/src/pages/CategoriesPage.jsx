@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import { toast } from 'sonner';
-import * as api from '@/api/categories';
+import { create, update, remove } from '@/api/categories';
 import { useCategories } from '@/hooks/useCategories';
 import { CATEGORY_COLORS, DEFAULT_COLOR } from '@/lib/categoryColors';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import CategoryColorPicker from '@/components/CategoryColorPicker';
 
 export default function CategoriesPage() {
   const { categories, reload } = useCategories();
@@ -30,9 +31,9 @@ export default function CategoriesPage() {
     if (!label.trim()) return;
     try {
       if (modal.cat) {
-        await api.update(modal.cat._id, { label: label.trim(), color });
+        await update(modal.cat._id, { label: label.trim(), color });
       } else {
-        await api.create({ label: label.trim(), color });
+        await create({ label: label.trim(), color });
       }
       toast.success('Enregistré');
       setModal(null);
@@ -44,11 +45,20 @@ export default function CategoriesPage() {
 
   const onDelete = async () => {
     try {
-      await api.remove(deleteTarget);
+      await remove(deleteTarget);
       setDeleteTarget(null);
       reload();
     } catch (err) {
       toast.error(err.message || 'Erreur lors de la suppression');
+    }
+  };
+
+  const onColorChange = async (cat, newColor) => {
+    try {
+      await update(cat._id, { label: cat.label, color: newColor });
+      reload();
+    } catch (err) {
+      toast.error(err.message || 'Erreur');
     }
   };
 
@@ -85,9 +95,9 @@ export default function CategoriesPage() {
                 <TableRow key={cat._id}>
                   <TableCell>
                     <span className="inline-flex items-center gap-2 font-medium">
-                      <span
-                        className="h-3 w-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: cat.color ?? DEFAULT_COLOR }}
+                      <CategoryColorPicker
+                        color={cat.color}
+                        onChange={(c) => onColorChange(cat, c)}
                       />
                       {cat.label}
                     </span>
@@ -133,17 +143,29 @@ export default function CategoriesPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Couleur</Label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {CATEGORY_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"
                     onClick={() => setColor(c)}
                     className="h-7 w-7 rounded-full transition-transform hover:scale-110"
-                    style={{ backgroundColor: c, outline: color === c ? `2px solid ${c}` : 'none', outlineOffset: '2px' }}
+                    style={{ backgroundColor: c, outline: color.toLowerCase() === c.toLowerCase() ? `2px solid ${c}` : 'none', outlineOffset: '2px' }}
                     aria-label={c}
                   />
                 ))}
+                <label
+                  className="ml-1 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+                  title="Couleur personnalisée"
+                >
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="sr-only"
+                  />
+                  <span className="text-xs">+</span>
+                </label>
               </div>
             </div>
             <DialogFooter>

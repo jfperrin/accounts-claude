@@ -25,3 +25,15 @@
 #cc-main .cm {
   box-shadow: 0 20px 60px rgba(99, 102, 241, 0.15), 0 4px 16px rgba(0,0,0,0.08);
 }
+
+/* Mode sombre */
+.dark #cc-main {
+  --cc-bg: #1a1827;
+  --cc-btn-secondary-bg: #2a2740;
+  --cc-btn-secondary-color: #c4c2d4;
+  --cc-btn-secondary-hover-bg: #34314f;
+  --cc-separator-border-color: #3a3756;
+  --cc-cookie-category-block-bg: #22202f;
+  --cc-cookie-category-block-border: #3a3756;
+  --cc-overlay-bg: rgba(0, 0, 0, 0.65);
+}

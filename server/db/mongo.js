@@ -17,6 +17,7 @@ const Operation = require('../models/Operation');
 const RecurringOperation = require('../models/RecurringOperation');
 const PasswordResetToken = require('../models/PasswordResetToken');
 const Category = require('../models/Category');
+const CategoryHint = require('../models/CategoryHint');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -45,10 +46,10 @@ const users = {
   findAll: () =>
     User.find({}).select('-passwordHash').sort({ createdAt: -1 }),
 
-  updateByAdmin: (id, { email, role }) =>
+  updateByAdmin: (id, { email, role, emailVerified }) =>
     User.findByIdAndUpdate(
       id,
-      { $set: { email, role } },
+      { $set: { email, role, ...(emailVerified !== undefined && { emailVerified }) } },
       { new: true },
     ).select('-passwordHash'),
 
@@ -216,4 +217,61 @@ const categories = {
   delete: (id, userId) => Category.findOneAndDelete({ _id: id, userId }),
 };
 
-module.exports = { users, banks, operations, recurringOps, resetTokens, categories };
+// ─── CATEGORY HINTS ──────────────────────────────────────────────────────────
+// Cache label → catégorie. Une entrée par couple (userId, label) unique.
+// rebuildFromOperations agrège en JS (parité avec SQLite) : on récupère les ops
+// catégorisées, on groupe par label, on prend la catégorie majoritaire (à égalité,
+// la plus récente). Truncate + insertMany dans la foulée.
+const categoryHints = {
+  findByUser: (userId) => CategoryHint.find({ userId }),
+
+  upsert: (userId, label, category) =>
+    CategoryHint.updateOne(
+      { userId, label },
+      { $set: { category } },
+      { upsert: true },
+    ),
+
+  deleteHint: (userId, label) => CategoryHint.deleteOne({ userId, label }),
+
+  deleteAll: (userId) => CategoryHint.deleteMany({ userId }),
+
+  async rebuildFromOperations(userId) {
+    const rows = await Operation.find({ userId, category: { $ne: null } })
+      .select('label category updatedAt');
+
+    const byLabel = new Map();
+    for (const r of rows) {
+      let entry = byLabel.get(r.label);
+      if (!entry) {
+        entry = { byCat: new Map(), latestCat: null, latestUpdated: 0 };
+        byLabel.set(r.label, entry);
+      }
+      entry.byCat.set(r.category, (entry.byCat.get(r.category) || 0) + 1);
+      const t = r.updatedAt ? r.updatedAt.getTime() : 0;
+      if (t > entry.latestUpdated) {
+        entry.latestUpdated = t;
+        entry.latestCat = r.category;
+      }
+    }
+
+    const docs = [];
+    for (const [label, entry] of byLabel) {
+      let winner = null;
+      let max = 0;
+      for (const [cat, count] of entry.byCat) {
+        if (count > max || (count === max && cat === entry.latestCat)) {
+          max = count;
+          winner = cat;
+        }
+      }
+      if (winner) docs.push({ userId, label, category: winner });
+    }
+
+    await CategoryHint.deleteMany({ userId });
+    if (docs.length) await CategoryHint.insertMany(docs);
+    return byLabel.size;
+  },
+};
+
+module.exports = { users, banks, operations, recurringOps, resetTokens, categories, categoryHints };

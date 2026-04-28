@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import * as api from '@/api/banks';
+import { list, create, update, remove } from '@/api/banks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,7 @@ export default function BanksPage() {
   const [currentBalance, setCurrentBalance] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const load = () => api.list().then(setBanks);
+  const load = () => list().then(setBanks);
   useEffect(() => { load(); }, []);
 
   const openAdd = () => { setLabel(''); setCurrentBalance(''); setModal({}); };
@@ -38,7 +38,7 @@ export default function BanksPage() {
         label,
         currentBalance: currentBalance === '' ? 0 : parseFloat(currentBalance),
       };
-      modal.bank ? await api.update(modal.bank._id, payload) : await api.create(payload);
+      modal.bank ? await update(modal.bank._id, payload) : await create(payload);
       toast.success('Enregistré');
       setModal(null);
       load();
@@ -49,7 +49,7 @@ export default function BanksPage() {
 
   const onDelete = async () => {
     try {
-      await api.remove(deleteTarget);
+      await remove(deleteTarget);
       setDeleteTarget(null);
       load();
     } catch (err) {

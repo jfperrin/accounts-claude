@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Wallet, Globe, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
@@ -163,7 +163,7 @@ export default function LoginPage() {
             <Button
               type="button"
               variant="outline"
-              className="mb-4 w-full gap-2"
+              className="mb-4 w-full gap-2 bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
               size="lg"
               onClick={() => { window.location.href = '/api/auth/google'; }}
             >
@@ -198,29 +198,50 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Adresse email</Label>
+            <Label htmlFor="email" className="text-slate-700">Adresse email</Label>
             <Input
               id="email"
               type="email"
               autoFocus
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              className="h-11"
+              className="h-11 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="password">Mot de passe</Label>
+            <Label htmlFor="password" className="text-slate-700">Mot de passe</Label>
             <Input
               id="password"
               type="password"
               value={form.password}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              className="h-11"
+              className="h-11 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
             />
           </div>
+          {tab === 'register' && (
+            <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={acceptedToS}
+                onChange={(e) => setAcceptedToS(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>
+                J'accepte les{' '}
+                <a
+                  href="/cgu"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-indigo-600 hover:underline"
+                >
+                  conditions générales d'utilisation
+                </a>
+              </span>
+            </label>
+          )}
           {tab === 'login' && (
             <div className="space-y-1.5">
-              <Label id="remember-label">Rester connecté</Label>
+              <Label id="remember-label" className="text-slate-700">Rester connecté</Label>
               <div
                 className="flex gap-1 rounded-xl bg-slate-100 p-1"
                 role="group"

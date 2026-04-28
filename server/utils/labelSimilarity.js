@@ -90,4 +90,11 @@ function labelSimilarity(a, b) {
   return Math.max(tokenOverlapSim(na, nb), trigramSim(na, nb));
 }
 
-module.exports = { labelSimilarity };
+// Tokens significatifs d'un libellé brut (combine normalize + significantTokens).
+// Exposé pour permettre la construction d'index inversés (cf. utils/tokenIndex.js).
+function tokenize(label) {
+  if (!label) return [];
+  return significantTokens(normalize(label));
+}
+
+module.exports = { labelSimilarity, tokenize };

@@ -2,9 +2,14 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Download } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
-import * as api from '@/api/recurringOperations';
-import * as banksApi from '@/api/banks';
-import * as operationsApi from '@/api/operations';
+import {
+  list as listRecurring,
+  create as createRecurring,
+  update as updateRecurring,
+  remove as removeRecurring,
+} from '@/api/recurringOperations';
+import { list as listBanks } from '@/api/banks';
+import { generateRecurring } from '@/api/operations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,7 +41,7 @@ export default function RecurringPage() {
   const [genYear, setGenYear] = useState(CURRENT_YEAR);
 
   const { categories } = useCategories();
-  const load = () => Promise.all([api.list(), banksApi.list()]).then(([ops, b]) => { setItems([...ops].sort((a, b) => a.dayOfMonth - b.dayOfMonth)); setBanks(b); });
+  const load = () => Promise.all([listRecurring(), listBanks()]).then(([ops, b]) => { setItems([...ops].sort((a, b) => a.dayOfMonth - b.dayOfMonth)); setBanks(b); });
   useEffect(() => { load(); }, []);
 
   const openAdd = () => { setForm(empty()); setModal({}); };
@@ -63,7 +68,7 @@ export default function RecurringPage() {
         amount: parseFloat(form.amount),
         category: (form.category && form.category !== 'none') ? form.category : null,
       };
-      modal.item ? await api.update(modal.item._id, payload) : await api.create(payload);
+      modal.item ? await updateRecurring(modal.item._id, payload) : await createRecurring(payload);
       toast.success('Enregistré');
       setModal(null);
       load();
@@ -74,7 +79,7 @@ export default function RecurringPage() {
 
   const onDelete = async () => {
     try {
-      await api.remove(deleteTarget);
+      await removeRecurring(deleteTarget);
       setDeleteTarget(null);
       load();
     } catch (err) {
@@ -85,7 +90,7 @@ export default function RecurringPage() {
   const onGenerate = async (e) => {
     e.preventDefault();
     try {
-      const { imported } = await operationsApi.generateRecurring({ month: genMonth, year: genYear });
+      const { imported } = await generateRecurring({ month: genMonth, year: genYear });
       toast.success(`${imported} opération(s) générée(s) pour ${MONTHS[genMonth - 1]} ${genYear}`);
       setGenOpen(false);
     } catch (err) {

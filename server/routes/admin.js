@@ -35,7 +35,7 @@ router.get('/users', wrap(async (req, res) => {
 
 // POST /api/admin/users — crée un utilisateur
 router.post('/users', wrap(async (req, res) => {
-  const { email, password, role } = req.body;
+  const { email, password, role, emailVerified } = req.body;
   if (!email || !EMAIL_RE.test(email) || !password) {
     return res.status(400).json({ message: 'email et password sont requis' });
   }
@@ -51,13 +51,18 @@ router.post('/users', wrap(async (req, res) => {
     return res.status(400).json({ message: 'Le mot de passe doit faire au moins 8 caractères' });
   }
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await db.users.create({ email, passwordHash, role: effectiveRole });
+  const user = await db.users.create({
+    email,
+    passwordHash,
+    role: effectiveRole,
+    emailVerified: !!emailVerified,
+  });
   res.status(201).json(serializeAdminUser(user));
 }));
 
-// PUT /api/admin/users/:id — modifie email, role
+// PUT /api/admin/users/:id — modifie email, role, emailVerified
 router.put('/users/:id', wrap(async (req, res) => {
-  const { email, role } = req.body;
+  const { email, role, emailVerified } = req.body;
   if (!email) {
     return res.status(400).json({ message: 'email est requis' });
   }
@@ -72,7 +77,11 @@ router.put('/users/:id', wrap(async (req, res) => {
   }
   const db = req.app.locals.db;
   try {
-    const updated = await db.users.updateByAdmin(req.params.id, { email, role: effectiveRole });
+    const updated = await db.users.updateByAdmin(req.params.id, {
+      email,
+      role: effectiveRole,
+      ...(emailVerified !== undefined && { emailVerified: !!emailVerified }),
+    });
     if (!updated) return res.status(404).json({ message: 'Utilisateur introuvable' });
     res.json(serializeAdminUser(updated));
   } catch (err) {

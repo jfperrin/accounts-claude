@@ -85,3 +85,79 @@ describe('POST /api/admin/users/:id/verify-email', () => {
     expect(res.body.emailVerified).toBe(true);
   });
 });
+
+describe('POST /api/admin/users — création avec emailVerified', () => {
+  let adminAgent;
+  beforeEach(async () => {
+    await createAdminUser(app, ADMIN.email, ADMIN.password);
+    adminAgent = request.agent(app);
+    await adminAgent.post('/api/auth/login').send(ADMIN);
+  });
+
+  it('crée un utilisateur déjà vérifié quand emailVerified=true', async () => {
+    const res = await adminAgent.post('/api/admin/users').send({
+      email: BOB.email,
+      password: BOB.password,
+      role: 'user',
+      emailVerified: true,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.emailVerified).toBe(true);
+  });
+
+  it('crée un utilisateur non vérifié par défaut', async () => {
+    const res = await adminAgent.post('/api/admin/users').send({
+      email: BOB.email,
+      password: BOB.password,
+      role: 'user',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.emailVerified).toBe(false);
+  });
+});
+
+describe('PUT /api/admin/users/:id — mise à jour de emailVerified', () => {
+  let adminAgent;
+  let bobId;
+  beforeEach(async () => {
+    await createAdminUser(app, ADMIN.email, ADMIN.password);
+    adminAgent = request.agent(app);
+    await adminAgent.post('/api/auth/login').send(ADMIN);
+    const passwordHash = await bcrypt.hash(BOB.password, 12);
+    const bob = await app.locals.db.users.create({
+      email: BOB.email, passwordHash, emailVerified: false,
+    });
+    bobId = String(bob._id);
+  });
+
+  it('marque comme vérifié via emailVerified=true', async () => {
+    const res = await adminAgent.put(`/api/admin/users/${bobId}`).send({
+      email: BOB.email, role: 'user', emailVerified: true,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.emailVerified).toBe(true);
+  });
+
+  it('marque comme non vérifié via emailVerified=false', async () => {
+    // D'abord vérifier
+    await adminAgent.post(`/api/admin/users/${bobId}/verify-email`);
+    // Puis dévérifier via PUT
+    const res = await adminAgent.put(`/api/admin/users/${bobId}`).send({
+      email: BOB.email, role: 'user', emailVerified: false,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.emailVerified).toBe(false);
+  });
+
+  it("préserve l'état emailVerified si non fourni", async () => {
+    // Vérifier d'abord
+    await adminAgent.post(`/api/admin/users/${bobId}/verify-email`);
+    // PUT sans emailVerified → ne doit pas dévérifier
+    const res = await adminAgent.put(`/api/admin/users/${bobId}`).send({
+      email: BOB.email, role: 'admin',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.emailVerified).toBe(true);
+    expect(res.body.role).toBe('admin');
+  });
+});
