@@ -4,6 +4,16 @@ Guide pour Claude Code (claude.ai/code) sur ce dépôt. Voir aussi
 [`server/CLAUDE.md`](server/CLAUDE.md) et [`client/CLAUDE.md`](client/CLAUDE.md)
 pour les détails spécifiques.
 
+## Style des réponses
+
+- Concis. Un diff parle de lui-même — ne pas le re-décrire en prose.
+- Pas de "I'll start by…", "Let me…", récap d'intention avant action.
+- Pas d'emoji dans le code, les commits, les docs (sauf demande explicite).
+- Listes plutôt que paragraphes ; phrases courtes.
+- Fin de tâche : 1-2 phrases max sur ce qui a changé. Pas de "next steps" non demandés.
+- Code : pas de commentaire qui décrit le QUOI (le code le fait). Commenter le POURQUOI quand non-évident.
+- Ne pas écrire de fichiers `.md` (plans, notes, résumés) sauf demande explicite — travailler dans la conversation.
+
 ## Commands
 
 ```bash

@@ -1,4 +1,14 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/filter-verbose-bash.js" }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Read(~/.claude/**)",
