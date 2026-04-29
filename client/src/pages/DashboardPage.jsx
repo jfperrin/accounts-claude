@@ -30,9 +30,9 @@ import { formatEur } from '@/lib/utils';
 
 const COOKIE_NAME = 'dash_date_range';
 const RANGE_MODES = [
-  { value: '30d', label: '30 jours' },
-  { value: '90d', label: '90 jours' },
-  { value: 'custom', label: 'Personnalisé' },
+  { value: '30d', label: '30j' },
+  { value: '90d', label: '90j' },
+  { value: 'custom', label: 'Perso' },
 ];
 
 function getCookiePref() {
@@ -220,8 +220,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-xs">
-        <CalendarDays className="h-5 w-5 text-indigo-600" />
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">
+        <CalendarDays className="h-5 w-5 text-indigo-600 shrink-0" />
         <div className="flex rounded-lg border border-border overflow-hidden">
           {RANGE_MODES.map((m) => (
             <button
@@ -259,7 +259,24 @@ export default function DashboardPage() {
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" size="icon" className="sm:hidden" aria-label="Importer">
+              <Upload className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={handleGenerateRecurring}>
+              <Download className="h-4 w-4" />
+              Opérations récurrentes
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4" />
+              Un fichier d'opérations
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="hidden sm:inline-flex gap-2">
               <Upload className="h-4 w-4" />
               Importer
               <ChevronDown className="h-4 w-4" />
@@ -276,7 +293,7 @@ export default function DashboardPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button ref={newOpBtnRef} onClick={() => { setEditOp(null); setFormOpen(true); }} className="gap-2">
+        <Button ref={newOpBtnRef} onClick={() => { setEditOp(null); setFormOpen(true); }} className="hidden md:inline-flex gap-2">
           <Plus className="h-4 w-4" />
           Nouvelle opération
         </Button>
@@ -297,7 +314,7 @@ export default function DashboardPage() {
           <p className="text-sm">Aucune opération sur cette période</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+        <div className="sm:rounded-xl sm:border sm:border-border sm:bg-card sm:p-4 sm:shadow-xs">
           <div className="mb-3 flex items-center justify-between">
             <span className="font-semibold text-foreground">
               {rangeMode === '30d' && '30 derniers jours'}
@@ -357,17 +374,15 @@ export default function DashboardPage() {
         onCancel={() => setGenerateRecurringOpen(false)}
       />
 
-      {fabVisible && (
-        <button
-          type="button"
-          onClick={() => { setEditOp(null); setFormOpen(true); }}
-          className="animate-fly-to-corner fixed bottom-28 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 shadow-lg shadow-indigo-500/40 transition-transform hover:bg-indigo-700 hover:scale-105 active:scale-95 md:bottom-8 md:right-8"
-          aria-label="Nouvelle opération"
-          title="Nouvelle opération"
-        >
-          <Plus className="h-6 w-6 text-white" strokeWidth={2.5} />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => { setEditOp(null); setFormOpen(true); }}
+        className={`animate-fly-to-corner fixed bottom-28 right-6 z-50 h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-indigo-600 shadow-lg shadow-indigo-500/40 transition-transform hover:bg-indigo-700 hover:scale-105 active:scale-95 md:bottom-8 md:right-8 flex ${fabVisible ? 'md:flex' : 'md:hidden'}`}
+        aria-label="Nouvelle opération"
+        title="Nouvelle opération"
+      >
+        <Plus className="h-6 w-6 text-white" strokeWidth={2.5} />
+      </button>
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag } from 'lucide-react';
+import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import Footer from '@/components/layout/Footer';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -26,12 +27,15 @@ export default function AppShell() {
 
   const BOTTOM_TABS = [
     { key: '/', icon: LayoutDashboard, label: 'Accueil' },
-    { key: '/banks', icon: Building2, label: 'Banques' },
-    { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
-    { key: '/categories', icon: Tag, label: 'Catégories' },
     { key: '/profile', icon: UserCircle, label: 'Profil' },
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Admin' }] : []),
   ];
+  const BOTTOM_MORE = [
+    { key: '/banks', icon: Building2, label: 'Banques' },
+    { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
+    { key: '/categories', icon: Tag, label: 'Catégories' },
+  ];
+  const moreActive = BOTTOM_MORE.some((t) => t.key === pathname);
 
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ');
   const displayName = user?.nickname || fullName || user?.email;
@@ -138,7 +142,7 @@ export default function AppShell() {
         </header>
 
         {/* Contenu — padding bas extra sur mobile pour éviter la bottom nav */}
-        <main className="flex-1 p-4 pb-24 md:p-6 md:pb-6">
+        <main className="flex-1 p-2 pb-24 sm:p-4 md:p-6 md:pb-6">
           <Outlet />
         </main>
 
@@ -147,7 +151,7 @@ export default function AppShell() {
 
       {/* ── Bottom navigation mobile uniquement ── */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden border-t border-border bg-card">
-        {BOTTOM_TABS.map(({ key, icon: Icon, label }) => {
+        {BOTTOM_TABS.slice(0, 1).map(({ key, icon: Icon, label }) => {
           const active = pathname === key;
           return (
             <button
@@ -155,7 +159,47 @@ export default function AppShell() {
               key={key}
               onClick={() => navigate(key)}
               className={cn(
-                'flex flex-1 flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
+                'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
+                active ? 'text-indigo-600' : 'text-slate-400'
+              )}
+            >
+              <Icon className={cn('h-5 w-5', active && 'stroke-[2.5]')} />
+              {label}
+            </button>
+          );
+        })}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
+                moreActive ? 'text-indigo-600' : 'text-slate-400'
+              )}
+            >
+              <MoreHorizontal className={cn('h-5 w-5', moreActive && 'stroke-[2.5]')} />
+              Plus
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="center" sideOffset={8} className="min-w-[10rem]">
+            {BOTTOM_MORE.map(({ key, icon: Icon, label }) => (
+              <DropdownMenuItem key={key} onClick={() => navigate(key)}>
+                <Icon className="h-4 w-4" /> {label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {BOTTOM_TABS.slice(1).map(({ key, icon: Icon, label }) => {
+          const active = pathname === key;
+          return (
+            <button
+              type="button"
+              key={key}
+              onClick={() => navigate(key)}
+              className={cn(
+                'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
                 active ? 'text-indigo-600' : 'text-slate-400'
               )}
             >

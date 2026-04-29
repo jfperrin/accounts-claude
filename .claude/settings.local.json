@@ -104,7 +104,8 @@
       "Bash(/c/Users/jf/OneDrive/Github/accounts-claude/client/node_modules/.bin/eslint src/store/ThemeContext.jsx src/components/ThemeToggle.jsx src/main.jsx src/components/layout/AppShell.jsx)",
       "Bash(cmd /c \"where claude\")",
       "Bash(cmd /c \"claude mcp list\")",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(npx eslint *)"
     ]
   }
 }
