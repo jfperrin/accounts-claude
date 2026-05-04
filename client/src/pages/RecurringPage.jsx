@@ -152,6 +152,15 @@ export default function RecurringPage() {
     }
   };
 
+  const onCategoryChange = async (id, categoryId) => {
+    try {
+      await updateRecurring(id, { categoryId });
+      load();
+    } catch (err) {
+      toast.error(err.message || 'Erreur');
+    }
+  };
+
   const onDelete = async () => {
     try {
       await removeRecurring(deleteTarget);
@@ -219,9 +228,33 @@ export default function RecurringPage() {
                 <TableCell className="font-medium">{item.label}</TableCell>
                 <TableCell><Badge variant="secondary">{item.bankId?.label}</Badge></TableCell>
                 <TableCell>
-                  {item.categoryId
-                    ? <CategoryBadge categoryId={item.categoryId} categories={categories} />
-                    : <span className="text-xs text-muted-foreground">—</span>}
+                  {item.categoryId ? (
+                    <CategoryBadge
+                      categoryId={item.categoryId}
+                      categories={categories}
+                      onRemove={() => onCategoryChange(item._id, null)}
+                    />
+                  ) : (
+                    <Select
+                      value="none"
+                      onValueChange={(v) => onCategoryChange(item._id, v === 'none' ? null : v)}
+                    >
+                      <SelectTrigger className="h-6 w-36 border-dashed text-xs text-muted-foreground">
+                        <SelectValue placeholder="Catégorie…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Sans catégorie</SelectItem>
+                        {categories.map((c) => (
+                          <SelectItem key={c._id} value={c._id}>
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
+                              {c.label}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </TableCell>
                 <TableCell className="text-center text-muted-foreground">{item.dayOfMonth}</TableCell>
                 <TableCell className={cn('text-right font-semibold', item.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
