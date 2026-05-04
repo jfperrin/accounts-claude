@@ -156,6 +156,16 @@ export default function RecurringPage() {
     try {
       await updateRecurring(id, { categoryId });
       load();
+      if (!categoryId) return;
+      const item = items.find((i) => i._id === id);
+      const bankId = item?.bankId?._id ?? item?.bankId;
+      if (!item || !bankId) return;
+      try {
+        const candidates = await findSimilarUncategorized({ label: item.label, bankId });
+        if (candidates.length > 0) setBulkCat({ categoryId, candidates });
+      } catch {
+        /* silencieux : la récurrente est déjà catégorisée */
+      }
     } catch (err) {
       toast.error(err.message || 'Erreur');
     }
