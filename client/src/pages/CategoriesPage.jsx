@@ -1,9 +1,14 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Pencil, Trash2, Tag, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+} from 'recharts';
 import { create, update, remove } from '@/api/categories';
 import { useCategories } from '@/hooks/useCategories';
+import { useRecurringOperations } from '@/hooks/useRecurringOperations';
 import { CATEGORY_COLORS, DEFAULT_COLOR } from '@/lib/categoryColors';
+import { cn, formatEur } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,22 +23,45 @@ import CategoryColorPicker from '@/components/CategoryColorPicker';
 
 export default function CategoriesPage() {
   const { categories, reload } = useCategories();
+  const { recurring } = useRecurringOperations();
+
   const [modal, setModal] = useState(null); // null | { cat? }
   const [label, setLabel] = useState('');
   const [color, setColor] = useState(DEFAULT_COLOR);
+  const [maxAmount, setMaxAmount] = useState('');
+  const [kind, setKind] = useState('debit');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const openAdd = () => { setLabel(''); setColor(DEFAULT_COLOR); setModal({}); };
-  const openEdit = (cat) => { setLabel(cat.label); setColor(cat.color ?? DEFAULT_COLOR); setModal({ cat }); };
+  const openAdd = () => {
+    setLabel(''); setColor(DEFAULT_COLOR); setMaxAmount(''); setKind('debit');
+    setModal({});
+  };
+  const openEdit = (cat) => {
+    setLabel(cat.label);
+    setColor(cat.color ?? DEFAULT_COLOR);
+    setMaxAmount(cat.maxAmount != null ? String(cat.maxAmount) : '');
+    setKind(cat.kind ?? 'debit');
+    setModal({ cat });
+  };
 
   const onSave = async (e) => {
     e.preventDefault();
     if (!label.trim()) return;
+    const payload = {
+      label: label.trim(),
+      color,
+      kind,
+      maxAmount: maxAmount.trim() === '' ? null : Number(maxAmount.replace(',', '.')),
+    };
+    if (payload.maxAmount !== null && (!Number.isFinite(payload.maxAmount) || payload.maxAmount < 0)) {
+      toast.error('Montant max invalide');
+      return;
+    }
     try {
       if (modal.cat) {
-        await update(modal.cat._id, { label: label.trim(), color });
+        await update(modal.cat._id, payload);
       } else {
-        await create({ label: label.trim(), color });
+        await create(payload);
       }
       toast.success('Enregistré');
       setModal(null);
@@ -55,12 +83,67 @@ export default function CategoriesPage() {
 
   const onColorChange = async (cat, newColor) => {
     try {
-      await update(cat._id, { label: cat.label, color: newColor });
+      await update(cat._id, {
+        label: cat.label,
+        color: newColor,
+        maxAmount: cat.maxAmount,
+        kind: cat.kind,
+      });
       reload();
     } catch (err) {
       toast.error(err.message || 'Erreur');
     }
   };
+
+  // Récurrentes par catégorie (kind-aware) : somme des montants positifs pour
+  // une catégorie credit, valeur absolue des négatifs pour une debit.
+  const directional = (sum, kind) =>
+    (kind === 'credit' ? Math.max(0, sum) : Math.max(0, -sum));
+
+  const recurringByCategory = useMemo(() => {
+    const m = new Map();
+    for (const r of recurring) {
+      if (!r.category) continue;
+      m.set(r.category, (m.get(r.category) ?? 0) + r.amount);
+    }
+    return m;
+  }, [recurring]);
+
+  // Pour chaque catégorie : récurrentes + complément (maxAmount) + total.
+  // C'est ce total qui sert de budget mensuel pour le chart.
+  const budgets = useMemo(() => categories.map((c) => {
+    const recurringAmount = directional(recurringByCategory.get(c.label) ?? 0, c.kind);
+    const extra = c.maxAmount ?? 0;
+    return { recurringAmount, extra, total: recurringAmount + extra };
+  }), [categories, recurringByCategory]);
+
+  // Chart : agrégat global des budgets définis (récurrentes + complément).
+  // Deux barres empilées — Dépenses vs Revenus — chaque segment représentant
+  // une catégorie. Les opérations réelles ne participent pas à ce graphe.
+  const { chartData, chartCategories, totals } = useMemo(() => {
+    const debitRow = { name: 'Dépenses' };
+    const creditRow = { name: 'Revenus' };
+    const used = [];
+    let totalDebit = 0;
+    let totalCredit = 0;
+    categories.forEach((c, i) => {
+      const total = budgets[i].total;
+      if (total <= 0) return;
+      used.push({ label: c.label, color: c.color || DEFAULT_COLOR });
+      if (c.kind === 'credit') {
+        creditRow[c.label] = total;
+        totalCredit += total;
+      } else {
+        debitRow[c.label] = total;
+        totalDebit += total;
+      }
+    });
+    return {
+      chartData: [debitRow, creditRow],
+      chartCategories: used,
+      totals: { debit: totalDebit, credit: totalCredit, balance: totalCredit - totalDebit },
+    };
+  }, [categories, budgets]);
 
   return (
     <div className="space-y-4">
@@ -73,7 +156,7 @@ export default function CategoriesPage() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Les catégories permettent de classer vos opérations. Elles sont assignables depuis la liste des opérations et les récurrentes.
+        Définissez un type (dépense ou revenu) et un budget mensuel : la somme des opérations récurrentes assignées à la catégorie est cumulée à un complément optionnel pour donner le total.
       </p>
 
       <div className="rounded-xl border border-border bg-card shadow-xs">
@@ -87,43 +170,64 @@ export default function CategoriesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Libellé</TableHead>
+                <TableHead className="hidden sm:table-cell">Type</TableHead>
+                <TableHead className="text-right hidden md:table-cell">Récurrentes</TableHead>
+                <TableHead className="text-right hidden md:table-cell">Complément</TableHead>
+                <TableHead className="text-right">Total / mois</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {categories.map((cat) => (
-                <TableRow key={cat._id}>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-2 font-medium">
-                      <CategoryColorPicker
-                        color={cat.color}
-                        onChange={(c) => onColorChange(cat, c)}
-                      />
-                      {cat.label}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(cat)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="supprimer"
-                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                        onClick={() => setDeleteTarget(cat._id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {categories.map((cat, i) => {
+                const b = budgets[i];
+                return (
+                  <TableRow key={cat._id}>
+                    <TableCell>
+                      <span className="inline-flex items-center gap-2 font-medium">
+                        <CategoryColorPicker
+                          color={cat.color}
+                          onChange={(c) => onColorChange(cat, c)}
+                        />
+                        {cat.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <KindBadge kind={cat.kind ?? 'debit'} />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums hidden md:table-cell text-muted-foreground">
+                      {b.recurringAmount > 0 ? formatEur(b.recurringAmount) : <span>—</span>}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums hidden md:table-cell text-muted-foreground">
+                      {cat.maxAmount != null ? formatEur(cat.maxAmount) : <span>—</span>}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {b.total > 0 ? formatEur(b.total) : <span className="text-muted-foreground font-normal">—</span>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(cat)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="supprimer"
+                          className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                          onClick={() => setDeleteTarget(cat._id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
       </div>
+
+      <BudgetChart data={chartData} chartCategories={chartCategories} totals={totals} />
 
       <Dialog open={!!modal} onOpenChange={(o) => !o && setModal(null)}>
         <DialogContent className="max-w-sm">
@@ -141,6 +245,23 @@ export default function CategoriesPage() {
                 required
               />
             </div>
+
+            <div className="space-y-1.5">
+              <Label>Type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <KindButton active={kind === 'debit'} onClick={() => setKind('debit')} kind="debit" />
+                <KindButton active={kind === 'credit'} onClick={() => setKind('credit')} kind="credit" />
+              </div>
+            </div>
+
+            <BudgetField
+              maxAmount={maxAmount}
+              setMaxAmount={setMaxAmount}
+              kind={kind}
+              recurringSum={directional(recurringByCategory.get(label) ?? 0, kind)}
+            />
+
+
             <div className="space-y-1.5">
               <Label>Couleur</Label>
               <div className="flex flex-wrap items-center gap-2">
@@ -182,6 +303,182 @@ export default function CategoriesPage() {
         onConfirm={onDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  );
+}
+
+function BudgetField({ maxAmount, setMaxAmount, kind, recurringSum }) {
+  const extra = maxAmount.trim() === '' ? 0 : Number(maxAmount.replace(',', '.'));
+  const total = recurringSum + (Number.isFinite(extra) && extra > 0 ? extra : 0);
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="cat-max">Budget mensuel</Label>
+      <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Récurrentes</span>
+          <span className="tabular-nums">{recurringSum > 0 ? formatEur(recurringSum) : '—'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="cat-max" className="flex-1 text-sm text-muted-foreground font-normal">
+            Complément ({kind === 'credit' ? 'revenu' : 'dépense'})
+          </Label>
+          <Input
+            id="cat-max"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="0"
+            value={maxAmount}
+            onChange={(e) => setMaxAmount(e.target.value)}
+            className="h-8 w-28 text-right tabular-nums"
+          />
+        </div>
+        <div className="flex items-center justify-between border-t border-border/60 pt-2 text-sm font-medium">
+          <span>Total</span>
+          <span className="tabular-nums">{total > 0 ? formatEur(total) : '—'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KindBadge({ kind }) {
+  const isCredit = kind === 'credit';
+  const Icon = isCredit ? ArrowUpCircle : ArrowDownCircle;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+        isCredit ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                 : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {isCredit ? 'Revenu' : 'Dépense'}
+    </span>
+  );
+}
+
+function KindButton({ active, onClick, kind }) {
+  const isCredit = kind === 'credit';
+  const Icon = isCredit ? ArrowUpCircle : ArrowDownCircle;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+        active
+          ? isCredit
+            ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+            : 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+          : 'border-border bg-card text-muted-foreground hover:text-foreground',
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {isCredit ? 'Revenu' : 'Dépense'}
+    </button>
+  );
+}
+
+function BudgetChart({ data, chartCategories, totals }) {
+  if (!chartCategories.length) return null;
+
+  const balancePositive = totals.balance >= 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-semibold">Budget mensuel</h2>
+        <p className="text-xs text-muted-foreground">Dépenses / Revenus</p>
+      </div>
+      <ResponsiveContainer width="100%" height={170}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
+          barCategoryGap="35%"
+        >
+          <CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" />
+          <XAxis
+            type="number"
+            tickFormatter={(v) => formatEur(v)}
+            stroke="var(--muted-foreground)"
+            fontSize={11}
+          />
+          <YAxis
+            dataKey="name"
+            type="category"
+            stroke="var(--muted-foreground)"
+            fontSize={12}
+            width={80}
+          />
+          <Tooltip content={<BudgetTooltip />} cursor={{ fill: 'var(--muted)', opacity: 0.3 }} />
+          {chartCategories.map((c, i) => (
+            <Bar
+              key={c.label}
+              dataKey={c.label}
+              stackId="a"
+              fill={c.color}
+              radius={
+                i === 0
+                  ? [4, 0, 0, 4]
+                  : i === chartCategories.length - 1 ? [0, 4, 4, 0] : 0
+              }
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-sm">
+        <SummaryCell label="Dépenses" value={totals.debit} tone="debit" />
+        <SummaryCell label="Revenus" value={totals.credit} tone="credit" />
+        <SummaryCell
+          label="Solde"
+          value={totals.balance}
+          tone={balancePositive ? 'credit' : 'debit'}
+          showSign
+        />
+      </div>
+    </div>
+  );
+}
+
+function SummaryCell({ label, value, tone, showSign }) {
+  const text = showSign && value > 0 ? `+${formatEur(value)}` : formatEur(value);
+  return (
+    <div className="flex flex-col">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className={cn(
+        'tabular-nums font-semibold',
+        tone === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+      )}>
+        {text}
+      </span>
+    </div>
+  );
+}
+
+function BudgetTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const items = payload.filter((p) => p.value > 0);
+  if (!items.length) return null;
+  const total = items.reduce((s, p) => s + p.value, 0);
+  return (
+    <div className="rounded-md border border-border bg-popover px-3 py-2 text-xs shadow-md space-y-1">
+      <p className="font-semibold">{label}</p>
+      {items.map((p) => (
+        <div key={p.dataKey} className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+          <span className="flex-1">{p.dataKey}</span>
+          <span className="tabular-nums">{formatEur(p.value)}</span>
+        </div>
+      ))}
+      <div className="flex justify-between border-t border-border/60 pt-1 font-medium">
+        <span>Total</span>
+        <span className="tabular-nums">{formatEur(total)}</span>
+      </div>
     </div>
   );
 }

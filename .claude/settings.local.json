@@ -105,7 +105,12 @@
       "Bash(cmd /c \"where claude\")",
       "Bash(cmd /c \"claude mcp list\")",
       "Bash(xargs grep *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(mv src *)",
+      "Bash(mv App.tsx App.tsx.old)",
+      "Bash(mv index.js index.js.old)",
+      "Read(//c/c/Users/jf/OneDrive/Github/accounts-claude/**)",
+      "Bash(npx --yes -p eslint@9 eslint client/src/pages/CategoriesPage.jsx)"
     ]
   }
 }

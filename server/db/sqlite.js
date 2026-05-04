@@ -144,6 +144,9 @@ function initSchema(db) {
     'ALTER TABLE recurring_operations ADD COLUMN category TEXT',
     'ALTER TABLE users ADD COLUMN accepted_tos_at TEXT',
     'ALTER TABLE categories ADD COLUMN color TEXT',
+    // Budget par catégorie + qualification (debit = dépense, credit = revenu)
+    'ALTER TABLE categories ADD COLUMN max_amount REAL',
+    "ALTER TABLE categories ADD COLUMN kind TEXT NOT NULL DEFAULT 'debit'",
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -203,6 +206,8 @@ const mapCategory = (row) => row && {
   _id: row.id,
   label: row.label,
   color: row.color ?? null,
+  maxAmount: row.max_amount ?? null,
+  kind: row.kind ?? 'debit',
   userId: row.user_id,
 };
 
@@ -589,18 +594,23 @@ module.exports = function createSQLiteRepos() {
     findByUser: (userId) =>
       db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY label').all(uid(userId)).map(mapCategory),
 
-    create({ label, color = null, userId }) {
+    create({ label, color = null, maxAmount = null, kind = 'debit', userId }) {
       const id = randomUUID();
-      db.prepare('INSERT INTO categories (id, label, color, user_id) VALUES (?, ?, ?, ?)').run(id, label, color ?? null, uid(userId));
+      db.prepare(
+        'INSERT INTO categories (id, label, color, max_amount, kind, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, label, color ?? null, maxAmount ?? null, kind, uid(userId));
       return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
     },
 
-    update(id, userId, { label, color }) {
+    update(id, userId, { label, color, maxAmount, kind }) {
       const cur = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(id, uid(userId));
       if (!cur) return null;
       const newColor = color !== undefined ? (color ?? null) : (cur.color ?? null);
-      db.prepare("UPDATE categories SET label = ?, color = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?")
-        .run(label, newColor, id, uid(userId));
+      const newMax = maxAmount !== undefined ? (maxAmount ?? null) : (cur.max_amount ?? null);
+      const newKind = kind !== undefined ? kind : (cur.kind ?? 'debit');
+      db.prepare(
+        "UPDATE categories SET label = ?, color = ?, max_amount = ?, kind = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+      ).run(label, newColor, newMax, newKind, id, uid(userId));
       return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
     },
 
