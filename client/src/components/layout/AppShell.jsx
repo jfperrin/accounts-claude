@@ -53,6 +53,7 @@ export default function AppShell() {
       <aside
         className={cn(
           'hidden md:flex flex-col bg-sidebar text-white transition-all duration-200',
+          'sticky top-0 h-screen self-start',
           collapsed ? 'w-16' : 'w-60'
         )}
       >
