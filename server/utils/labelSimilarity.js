@@ -1,15 +1,12 @@
 // Mesure la similarité entre deux libellés bancaires.
 // Combine deux métriques complémentaires :
 //
-//  1. Token overlap (mots significatifs communs) :
-//     |intersection(ta, tb)| / min(|ta|, |tb|)
-//     → "carte 23 0 4 sauvegarde" ≈ "carte 25 0 4 sauvegarde"
-//       tokens : {"carte","sauvegarde"} vs {"carte","sauvegarde"} → 1.0
-//     → "échéance de crédit" ≈ "échéance 2029 lion de crédit"
-//       tokens : {"echeance","credit"} vs {"echeance","lion","credit"} → 2/2 = 1.0
+//  1. Token overlap : Dice sur les tokens **discriminants** (significatifs hors
+//     mots génériques bancaires comme "carte", "virement", "prlv"…). Avec un
+//     shortcut mono-token pour les libellés saisis manuellement.
 //
 //  2. Similarité trigramme (coefficient de Dice sur les trigrammes de caractères) :
-//     fallback quand les libellés sont trop courts / mono-token.
+//     fallback quand les libellés sont trop courts.
 //
 // La fonction retourne max(tokenOverlap, trigramSim) ∈ [0, 1].
 // Seuil recommandé pour l'auto-affectation de catégories : 0.8.
@@ -25,6 +22,22 @@ function normalize(s) {
     .trim();
 }
 
+// Mots génériques omniprésents dans les libellés bancaires français : "carte X X
+// SAUVEGARDE", "PRLV EDF", "VIR SALAIRE"… Ils ne discriminent rien : si le seul
+// token commun entre deux libellés est un de ceux-là, on ne doit pas conclure
+// à une correspondance ("carte 21 0 3" ≠ "carte su 69 lion").
+const GENERIC_BANK_TOKENS = new Set([
+  'carte', 'cb', 'ecb',
+  'paiement', 'pmt', 'paie',
+  'achat',
+  'virement', 'vir', 'vrt',
+  'prelevement', 'prlv',
+  'retrait',
+  'transfert',
+  'tip',
+  'cheque', 'chq',
+]);
+
 // Retourne les tokens significatifs : au moins 3 caractères ET non purement numériques.
 // On ignore les tokens courts ("de", "la", "au") et les codes numériques variables
 // (numéros de carte, dates, montants intégrés dans le libellé).
@@ -32,6 +45,10 @@ function significantTokens(normalized) {
   return normalized
     .split(/\s+/)
     .filter((t) => t.length >= 3 && !/^\d+$/.test(t));
+}
+
+function meaningfulTokens(tokens) {
+  return tokens.filter((t) => !GENERIC_BANK_TOKENS.has(t));
 }
 
 // Trigrammes d'une chaîne normalisée (padded pour capturer le début et la fin).
@@ -57,23 +74,39 @@ function trigramSim(na, nb) {
   return (2 * common) / (ta.size + tb.size);
 }
 
-// Token overlap : fraction des tokens significatifs de la chaîne la plus courte
-// qui apparaissent dans la chaîne la plus longue.
-// Cas particulier 1 token : très courant pour les libellés saisis manuellement
-// (ex. "Loyer") opposés aux libellés bancaires détaillés ("PRLV LOYER MARS").
-// Si le token unique est présent dans l'autre liste, on considère que c'est
-// une correspondance forte (1.0). Sinon, on retombe sur la similarité trigramme.
+// Score basé sur les tokens significatifs.
+//
+// Cas spécial : libellé saisi manuellement (1 token brut, ex. "Loyer") opposé à
+// un libellé bancaire détaillé (ex. "PRLV LOYER MARS"). Si le token unique est
+// présent dans l'autre liste, on retourne 1.0. Si c'est un mot générique
+// (carte, virement…), 0.
+//
+// Cas général : coefficient de Dice sur les tokens **discriminants**
+// (significatifs hors mots génériques bancaires) : 2|ma∩mb| / (|ma|+|mb|).
+// Cette mesure pénalise correctement les libellés qui ne partagent qu'un seul
+// mot discriminant alors qu'ils en ont plusieurs ("CARTE SU 69 LYON" vs
+// "CARTE GREECE 40 LYON" partagent uniquement "lyon" → 0.67).
 function tokenOverlapSim(na, nb) {
+  const rawA = na ? na.split(/\s+/).filter(Boolean) : [];
+  const rawB = nb ? nb.split(/\s+/).filter(Boolean) : [];
   const ta = significantTokens(na);
   const tb = significantTokens(nb);
   if (ta.length === 0 || tb.length === 0) return 0;
-  if (ta.length === 1 || tb.length === 1) {
-    const [single, other] = ta.length === 1 ? [ta[0], tb] : [tb[0], ta];
+
+  if (rawA.length === 1 || rawB.length === 1) {
+    const single = rawA.length === 1 ? ta[0] : tb[0];
+    const other = rawA.length === 1 ? tb : ta;
+    if (!single || GENERIC_BANK_TOKENS.has(single)) return 0;
     return other.includes(single) ? 1 : 0;
   }
-  const setB = new Set(tb);
-  const common = ta.filter((t) => setB.has(t)).length;
-  return common / Math.min(ta.length, tb.length);
+
+  const ma = meaningfulTokens(ta);
+  const mb = meaningfulTokens(tb);
+  if (ma.length === 0 || mb.length === 0) return 0;
+  const setMb = new Set(mb);
+  const common = ma.filter((t) => setMb.has(t)).length;
+  if (common === 0) return 0;
+  return (2 * common) / (ma.length + mb.length);
 }
 
 /**

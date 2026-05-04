@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Tag, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { useState, useMemo, Fragment } from 'react';
+import {
+  Plus, Pencil, Trash2, Tag, ArrowDownCircle, ArrowUpCircle, ChevronRight,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -109,6 +111,20 @@ export default function CategoriesPage() {
     return m;
   }, [recurring]);
 
+  // Liste des récurrentes triées par jour du mois, indexées par categoryId.
+  const recurringListByCategory = useMemo(() => {
+    const m = new Map();
+    for (const r of recurring) {
+      if (!r.categoryId) continue;
+      if (!m.has(r.categoryId)) m.set(r.categoryId, []);
+      m.get(r.categoryId).push(r);
+    }
+    for (const list of m.values()) list.sort((a, b) => a.dayOfMonth - b.dayOfMonth);
+    return m;
+  }, [recurring]);
+
+  const [expandedId, setExpandedId] = useState(null);
+
   // Pour chaque catégorie : récurrentes + complément (maxAmount) + total.
   // C'est ce total qui sert de budget mensuel pour le chart.
   const budgets = useMemo(() => categories.map((c) => {
@@ -169,6 +185,7 @@ export default function CategoriesPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8" />
                 <TableHead>Libellé</TableHead>
                 <TableHead className="hidden sm:table-cell">Type</TableHead>
                 <TableHead className="text-right hidden md:table-cell">Récurrentes</TableHead>
@@ -180,46 +197,71 @@ export default function CategoriesPage() {
             <TableBody>
               {categories.map((cat, i) => {
                 const b = budgets[i];
+                const ops = recurringListByCategory.get(cat._id) ?? [];
+                const expandable = ops.length > 0;
+                const isExpanded = expandable && expandedId === cat._id;
                 return (
-                  <TableRow key={cat._id}>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-2 font-medium">
-                        <CategoryColorPicker
-                          color={cat.color}
-                          onChange={(c) => onColorChange(cat, c)}
-                        />
-                        {cat.label}
-                      </span>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <KindBadge kind={cat.kind ?? 'debit'} />
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums hidden md:table-cell text-muted-foreground">
-                      {b.recurringAmount > 0 ? formatEur(b.recurringAmount) : <span>—</span>}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums hidden md:table-cell text-muted-foreground">
-                      {cat.maxAmount != null ? formatEur(cat.maxAmount) : <span>—</span>}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {b.total > 0 ? formatEur(b.total) : <span className="text-muted-foreground font-normal">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(cat)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="supprimer"
-                          className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                          onClick={() => setDeleteTarget(cat._id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <Fragment key={cat._id}>
+                    <TableRow>
+                      <TableCell className="w-8">
+                        {expandable ? (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId(isExpanded ? null : cat._id)}
+                            aria-label={isExpanded ? 'Replier' : 'Déplier'}
+                            aria-expanded={isExpanded}
+                            className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted text-muted-foreground"
+                          >
+                            <ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />
+                          </button>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-2 font-medium">
+                          <CategoryColorPicker
+                            color={cat.color}
+                            onChange={(c) => onColorChange(cat, c)}
+                          />
+                          {cat.label}
+                        </span>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <KindBadge kind={cat.kind ?? 'debit'} />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums hidden md:table-cell text-muted-foreground">
+                        {b.recurringAmount > 0 ? formatEur(b.recurringAmount) : <span>—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums hidden md:table-cell text-muted-foreground">
+                        {cat.maxAmount != null ? formatEur(cat.maxAmount) : <span>—</span>}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-medium">
+                        {b.total > 0 ? formatEur(b.total) : <span className="text-muted-foreground font-normal">—</span>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(cat)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="supprimer"
+                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                            onClick={() => setDeleteTarget(cat._id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && (
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell colSpan={7} className="p-0">
+                          <RecurringList ops={ops} />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 );
               })}
             </TableBody>
@@ -340,6 +382,30 @@ function BudgetField({ maxAmount, setMaxAmount, kind, recurringSum }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function RecurringList({ ops }) {
+  return (
+    <ul className="divide-y divide-border/60 px-4 sm:px-12 py-2">
+      {ops.map((r) => (
+        <li key={r._id} className="flex items-center gap-3 py-1.5 text-sm">
+          <span className="w-10 shrink-0 text-xs text-muted-foreground tabular-nums">
+            j. {r.dayOfMonth}
+          </span>
+          <span className="flex-1 truncate">{r.label}</span>
+          <span className="hidden sm:inline text-xs text-muted-foreground truncate">
+            {r.bankId?.label}
+          </span>
+          <span className={cn(
+            'tabular-nums font-medium',
+            r.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+          )}>
+            {formatEur(r.amount)}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

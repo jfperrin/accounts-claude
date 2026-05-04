@@ -115,7 +115,8 @@
       "Bash(command -v yarn.cmd)",
       "Bash(npx --no-install eslint src)",
       "Bash(taskkill //F //IM node.exe)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(./node_modules/.bin/vitest run *)"
     ]
   }
 }

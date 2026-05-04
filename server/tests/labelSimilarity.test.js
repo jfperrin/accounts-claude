@@ -39,6 +39,30 @@ describe('labelSimilarity', () => {
     expect(sim('loyer appartement', 'loyer voiture')).toBeLessThan(THRESHOLD);
   });
 
+  it('mot générique bancaire seul ne suffit pas (carte + chiffres variables)', () => {
+    expect(sim('carte 21 0 3', 'carte su 69 lion')).toBeLessThan(THRESHOLD);
+  });
+
+  it('mot générique seul commun à deux libellés multi-tokens', () => {
+    expect(sim('carte fnac', 'carte amazon')).toBeLessThan(THRESHOLD);
+    expect(sim('virement salaire', 'virement remboursement')).toBeLessThan(THRESHOLD);
+  });
+
+  it('ville commune seule ne suffit pas à matcher des marchands différents', () => {
+    expect(sim('CARTE 10/04 SU 69 LYON', 'CARTE 29/04 GREECE 40 LYON 7E')).toBeLessThan(THRESHOLD);
+    expect(sim('CARTE 10/04 SU 69 LYON', 'CARTE 16/04 MKPAS LYON')).toBeLessThan(THRESHOLD);
+    expect(sim('CARTE 10/04 SU 69 LYON', 'CARTE 28/04 L IMPROBABLE LYON')).toBeLessThan(THRESHOLD);
+    expect(sim('CARTE 10/04 SU 69 LYON', 'CARTE 23/04 SAUVEGARDE IMA LYON')).toBeLessThan(THRESHOLD);
+  });
+
+  it('même marchand → même match malgré dates variables', () => {
+    expect(sim('CARTE 16/04 MKPAS LYON', 'CARTE 14/04 MKPAS LYON')).toBeGreaterThanOrEqual(THRESHOLD);
+  });
+
+  it('libellé manuel mono-token reste reconnu (loyer)', () => {
+    expect(sim('Loyer', 'PRLV LOYER MARS')).toBeGreaterThanOrEqual(THRESHOLD);
+  });
+
   it('chaînes vides → 0', () => {
     expect(sim('', 'virement')).toBe(0);
     expect(sim('virement', '')).toBe(0);

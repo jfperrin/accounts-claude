@@ -4,24 +4,32 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import { formatEur } from '@/lib/utils';
 
-const UNCATEGORIZED_ID = '__uncategorized__';
-const UNCATEGORIZED_COLOR = '#94a3b8';
+// Compare deux YYYY-MM-DD via les 10 premiers caractères ISO. Indépendant du
+// fuseau, contrairement à new Date(...) qui ramène à minuit UTC.
+function isoDay(d) {
+  return typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10);
+}
 
-export default function ExpensesByCategoryChart({ categories, operations }) {
-  const { slices, total } = useMemo(() => {
+export default function ExpensesByCategoryChart({ categories, operations, startDate, endDate }) {
+  const { slices, total, uncategorized } = useMemo(() => {
     const sumById = new Map();
+    let uncat = 0;
     for (const o of operations) {
       if (o.amount >= 0) continue;
-      const key = o.categoryId ?? UNCATEGORIZED_ID;
-      sumById.set(key, (sumById.get(key) ?? 0) + Math.abs(o.amount));
+      if (startDate || endDate) {
+        const day = isoDay(o.date);
+        if (startDate && day < startDate) continue;
+        if (endDate && day > endDate) continue;
+      }
+      if (!o.categoryId) {
+        uncat += Math.abs(o.amount);
+        continue;
+      }
+      sumById.set(o.categoryId, (sumById.get(o.categoryId) ?? 0) + Math.abs(o.amount));
     }
     const catById = new Map(categories.map((c) => [c._id, c]));
     const list = [];
     for (const [id, value] of sumById.entries()) {
-      if (id === UNCATEGORIZED_ID) {
-        list.push({ id, label: 'Sans catégorie', color: UNCATEGORIZED_COLOR, value });
-        continue;
-      }
       const cat = catById.get(id);
       // On ne garde que les catégories de type "debit" — un débit posé sur
       // une catégorie credit (remboursement, ajustement) n'est pas une dépense.
@@ -30,8 +38,8 @@ export default function ExpensesByCategoryChart({ categories, operations }) {
     }
     list.sort((a, b) => b.value - a.value);
     const tot = list.reduce((s, r) => s + r.value, 0);
-    return { slices: list, total: tot };
-  }, [categories, operations]);
+    return { slices: list, total: tot, uncategorized: uncat };
+  }, [categories, operations, startDate, endDate]);
 
   if (slices.length === 0) {
     return (
@@ -41,6 +49,11 @@ export default function ExpensesByCategoryChart({ categories, operations }) {
           Dépenses par catégorie
         </h2>
         <p className="text-sm text-muted-foreground">Aucune dépense sur cette période.</p>
+        {uncategorized > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+            Sans catégorie : {formatEur(uncategorized)}
+          </p>
+        )}
       </div>
     );
   }
@@ -54,6 +67,9 @@ export default function ExpensesByCategoryChart({ categories, operations }) {
         </h2>
         <p className="text-xs text-muted-foreground tabular-nums">
           Total {formatEur(total)}
+          {uncategorized > 0 && (
+            <span className="ml-2">· Sans catégorie {formatEur(uncategorized)}</span>
+          )}
         </p>
       </div>
 

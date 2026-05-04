@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { point } from '@/api/operations';
@@ -13,7 +13,6 @@ import BudgetSummary from '@/components/BudgetSummary';
 import ExpensesByCategoryChart from '@/components/ExpensesByCategoryChart';
 import MonthlyComparison from '@/components/MonthlyComparison';
 import ProjectionSummary from '@/components/ProjectionSummary';
-import FutureBalanceChart from '@/components/FutureBalanceChart';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
 
 const COOKIE_NAME = 'home_date_range';
@@ -35,6 +34,13 @@ function setCookiePref(val) {
   document.cookie = `${COOKIE_NAME}=${encoded}; path=/; max-age=${60 * 60 * 24 * 365}`;
 }
 
+function formatRange(startDate, endDate) {
+  const s = dayjs(startDate);
+  const e = dayjs(endDate);
+  const startFmt = s.year() === e.year() ? s.format('D MMM') : s.format('D MMM YYYY');
+  return `${startFmt} → ${e.format('D MMM YYYY')}`;
+}
+
 export default function HomePage() {
   const { banks } = useBanks();
   const { categories } = useCategories();
@@ -44,10 +50,15 @@ export default function HomePage() {
   const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref()?.mode ?? '30d');
   const [customStart, setCustomStart] = useState(() => getCookiePref()?.start ?? dayjs().subtract(29, 'day').format('YYYY-MM-DD'));
   const [customEnd, setCustomEnd] = useState(() => getCookiePref()?.end ?? dayjs().format('YYYY-MM-DD'));
+  const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
 
-  const setRangeMode = (mode) => { setRangeModeRaw(mode); setCookiePref({ mode, start: customStart, end: customEnd }); };
-  const updateCustomStart = (v) => { setCustomStart(v); setCookiePref({ mode: rangeMode, start: v, end: customEnd }); };
-  const updateCustomEnd = (v) => { setCustomEnd(v); setCookiePref({ mode: rangeMode, start: customStart, end: v }); };
+  const persist = (over) => setCookiePref({
+    mode: rangeMode, start: customStart, end: customEnd, monthOffset, ...over,
+  });
+  const setRangeMode = (mode) => { setRangeModeRaw(mode); persist({ mode }); };
+  const updateCustomStart = (v) => { setCustomStart(v); persist({ start: v }); };
+  const updateCustomEnd = (v) => { setCustomEnd(v); persist({ end: v }); };
+  const setMonthOffset = (v) => { setMonthOffsetRaw(v); persist({ monthOffset: v }); };
 
   const { startDate, endDate } = useMemo(() => {
     if (rangeMode === '30d') return {
@@ -58,12 +69,15 @@ export default function HomePage() {
       startDate: dayjs().subtract(89, 'day').format('YYYY-MM-DD'),
       endDate: dayjs().format('YYYY-MM-DD'),
     };
-    if (rangeMode === 'month') return {
-      startDate: dayjs().startOf('month').format('YYYY-MM-DD'),
-      endDate: dayjs().endOf('month').format('YYYY-MM-DD'),
-    };
+    if (rangeMode === 'month') {
+      const m = dayjs().add(monthOffset, 'month');
+      return {
+        startDate: m.startOf('month').format('YYYY-MM-DD'),
+        endDate: m.endOf('month').format('YYYY-MM-DD'),
+      };
+    }
     return { startDate: customStart, endDate: customEnd };
-  }, [rangeMode, customStart, customEnd]);
+  }, [rangeMode, customStart, customEnd, monthOffset]);
 
   // Operations sur la période, pour le calcul du budget réel.
   const { operations } = useOperations({ startDate, endDate });
@@ -124,6 +138,43 @@ export default function HomePage() {
             />
           </>
         )}
+        {rangeMode === 'month' && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setMonthOffset(monthOffset - 1)}
+              aria-label="Mois précédent"
+              className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-[110px] text-center text-sm font-medium tabular-nums capitalize">
+              {dayjs().add(monthOffset, 'month').format('MMMM YYYY')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMonthOffset(monthOffset + 1)}
+              aria-label="Mois suivant"
+              className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            {monthOffset !== 0 && (
+              <button
+                type="button"
+                onClick={() => setMonthOffset(0)}
+                className="ml-1 text-xs text-indigo-600 hover:underline"
+              >
+                Auj.
+              </button>
+            )}
+          </div>
+        )}
+        {rangeMode !== 'custom' && rangeMode !== 'month' && (
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {formatRange(startDate, endDate)}
+          </span>
+        )}
       </div>
 
       {banks.length > 0 && (
@@ -138,15 +189,18 @@ export default function HomePage() {
           startDate={startDate}
           endDate={endDate}
         />
-        <ExpensesByCategoryChart categories={categories} operations={operations} />
+        <ExpensesByCategoryChart
+          categories={categories}
+          operations={operations}
+          startDate={startDate}
+          endDate={endDate}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <MonthlyComparison operations={history} />
         <ProjectionSummary banks={banks} recurring={recurring} history={history} />
       </div>
-
-      <FutureBalanceChart banks={banks} recurring={recurring} history={history} />
 
       <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
     </div>

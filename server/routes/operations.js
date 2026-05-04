@@ -157,7 +157,7 @@ router.post('/generate-recurring', wrap(async (req, res) => {
 // (ex. après création d'une récurrente) où on veut chercher dans l'historique
 // les opérations correspondantes à catégoriser en lot.
 router.get('/similar-uncategorized', wrap(async (req, res) => {
-  const { label, bankId, excludeId } = req.query;
+  const { label, bankId, excludeId, referenceDate } = req.query;
   if (!label || typeof label !== 'string') {
     return res.status(400).json({ message: 'label requis' });
   }
@@ -165,7 +165,7 @@ router.get('/similar-uncategorized', wrap(async (req, res) => {
     return res.status(400).json({ message: 'bankId requis' });
   }
   const all = await req.app.locals.db.operations.findAllMinimal(req.user._id);
-  const matches = findSimilarUncategorized(all, label, bankId, excludeId || null);
+  const matches = findSimilarUncategorized(all, label, bankId, excludeId || null, referenceDate || null);
   res.json(matches.map((o) => ({
     _id: o._id, label: o.label, amount: o.amount, date: o.date,
   })));
@@ -182,7 +182,7 @@ router.get('/:id/similar-uncategorized', wrap(async (req, res) => {
   if (!source) return res.status(404).json({ message: 'Introuvable' });
   const sourceBankId = source.bankId && source.bankId._id ? source.bankId._id : source.bankId;
   const all = await operations.findAllMinimal(userId);
-  const matches = findSimilarUncategorized(all, source.label, sourceBankId, source._id);
+  const matches = findSimilarUncategorized(all, source.label, sourceBankId, source._id, source.date);
   res.json(matches.map((o) => ({
     _id: o._id, label: o.label, amount: o.amount, date: o.date,
   })));
