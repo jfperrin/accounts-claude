@@ -90,19 +90,27 @@ Une op pré-saisie (récurrente, manuelle approximative) à 800 € qui se réco
 
 ## Category hints (cache d'auto-affectation)
 
-Une entrée par couple `(userId, label)` unique. Beaucoup plus petit que `operations` → le scan d'inférence est rapide.
+Une entrée par couple `(userId, label)` unique, valeur `categoryId`. Beaucoup plus petit que `operations` → le scan d'inférence est rapide.
 
 ### Synchronisation
 
 | Évènement | Action |
 |-----------|--------|
-| `POST /api/operations` avec `category` | upsert hint |
-| `PUT /api/operations/:id` avec `category` truthy | upsert hint |
-| `PUT /api/operations/:id` avec `category` null/falsy | delete hint pour ce label |
+| `POST /api/operations` avec `categoryId` | upsert hint |
+| `PUT /api/operations/:id` avec `categoryId` truthy | upsert hint |
+| `PUT /api/operations/:id` avec `categoryId` null/falsy | delete hint pour ce label |
 | Inférence pendant import | upsert hint pour le libellé importé |
-| `POST /api/category-hints/rebuild` | reset + recalcul (catégorie majoritaire par label, à égalité la plus récente) |
+| `POST /api/category-hints/rebuild` | reset + recalcul (categoryId majoritaire par label, à égalité le plus récent) |
 | `DELETE /api/category-hints` | reset complet |
+| Suppression d'une catégorie | hints associés purgés (CASCADE SQLite + JS Mongo) |
 | 1er import si table vide pour l'utilisateur | rebuild lazy auto |
+
+## Migration legacy `category` → `categoryId`
+
+Avant ce refactor, ops/recurring/hints stockaient le **libellé** de la catégorie en texte (`category: string`). Désormais ils stockent un FK `categoryId` vers `categories._id`.
+
+- **SQLite** : `initSchema` ajoute `category_id` (FK), backfill via `UPDATE … SET category_id = (SELECT id FROM categories WHERE user_id = … AND label = …)`, puis `DROP COLUMN category`. Hints sans cible (libellé orphelin) supprimés. Idempotent.
+- **Mongo** : `migrateLegacyCategoryFields()` (appelé depuis `index.js` au boot) parcourt les docs avec un champ `category` résiduel, résout le libellé via la collection `categories` du même user, `$set categoryId` + `$unset category`. Idempotent.
 
 ### Token inverted index (`utils/tokenIndex.js`)
 

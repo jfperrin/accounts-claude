@@ -60,12 +60,12 @@ export default function MakeRecurringDialog({ open, form, banks, categories, onC
           </div>
           <div className="space-y-1.5">
             <Label>Catégorie</Label>
-            <Select value={form.category} onValueChange={(v) => onChange('category', v)}>
+            <Select value={form.categoryId} onValueChange={(v) => onChange('categoryId', v)}>
               <SelectTrigger><SelectValue placeholder="Sans catégorie" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">— Sans catégorie</SelectItem>
                 {categories.map((c) => (
-                  <SelectItem key={c._id} value={c.label}>
+                  <SelectItem key={c._id} value={c._id}>
                     <span className="inline-flex items-center gap-2">
                       <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
                       {c.label}

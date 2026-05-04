@@ -3,7 +3,8 @@ import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import LoginPage from '@/pages/LoginPage';
 import AppShell from '@/components/layout/AppShell';
-import DashboardPage from '@/pages/DashboardPage';
+import HomePage from '@/pages/HomePage';
+import OperationsPage from '@/pages/OperationsPage';
 import BanksPage from '@/pages/BanksPage';
 import RecurringPage from '@/pages/RecurringPage';
 import ProfilePage from '@/pages/ProfilePage';
@@ -37,7 +38,8 @@ export default function App() {
         <Route path="/cgu" element={<ToSPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/" element={<PrivateRoute><AppShell /></PrivateRoute>}>
-          <Route index element={<DashboardPage />} />
+          <Route index element={<HomePage />} />
+          <Route path="operations" element={<OperationsPage />} />
           <Route path="banks" element={<BanksPage />} />
           <Route path="recurring" element={<RecurringPage />} />
           <Route path="categories" element={<CategoriesPage />} />

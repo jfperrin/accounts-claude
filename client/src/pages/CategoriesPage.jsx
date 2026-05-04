@@ -103,8 +103,8 @@ export default function CategoriesPage() {
   const recurringByCategory = useMemo(() => {
     const m = new Map();
     for (const r of recurring) {
-      if (!r.category) continue;
-      m.set(r.category, (m.get(r.category) ?? 0) + r.amount);
+      if (!r.categoryId) continue;
+      m.set(r.categoryId, (m.get(r.categoryId) ?? 0) + r.amount);
     }
     return m;
   }, [recurring]);
@@ -112,7 +112,7 @@ export default function CategoriesPage() {
   // Pour chaque catégorie : récurrentes + complément (maxAmount) + total.
   // C'est ce total qui sert de budget mensuel pour le chart.
   const budgets = useMemo(() => categories.map((c) => {
-    const recurringAmount = directional(recurringByCategory.get(c.label) ?? 0, c.kind);
+    const recurringAmount = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
     const extra = c.maxAmount ?? 0;
     return { recurringAmount, extra, total: recurringAmount + extra };
   }), [categories, recurringByCategory]);

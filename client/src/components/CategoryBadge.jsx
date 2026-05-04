@@ -1,10 +1,14 @@
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 
-export default function CategoryBadge({ category, categories = [], onRemove }) {
-  if (!category) return null;
+// Affiche un badge pour une catégorie identifiée par son id. Le libellé et la
+// couleur sont récupérés dans la liste des catégories passée en prop. Si l'id
+// est inconnu (catégorie supprimée par exemple), le badge n'est pas rendu.
+export default function CategoryBadge({ categoryId, categories = [], onRemove }) {
+  if (!categoryId) return null;
 
-  const cat = categories.find((c) => c.label === category);
-  const col = cat?.color ?? DEFAULT_COLOR;
+  const cat = categories.find((c) => c._id === categoryId);
+  if (!cat) return null;
+  const col = cat.color ?? DEFAULT_COLOR;
 
   if (onRemove) {
     return (
@@ -16,7 +20,7 @@ export default function CategoryBadge({ category, categories = [], onRemove }) {
         title="Cliquer pour retirer la catégorie"
       >
         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: col }} />
-        {category}
+        {cat.label}
       </button>
     );
   }
@@ -27,7 +31,7 @@ export default function CategoryBadge({ category, categories = [], onRemove }) {
       style={{ backgroundColor: `${col}20`, color: col }}
     >
       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: col }} />
-      {category}
+      {cat.label}
     </span>
   );
 }

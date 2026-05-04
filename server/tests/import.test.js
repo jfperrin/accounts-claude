@@ -280,10 +280,11 @@ describe('POST /api/operations/import', () => {
     it('hérite de la catégorie d\'une op pré-existante au libellé similaire', async () => {
       // Op manuelle catégorisée → on importe une nouvelle ligne au libellé proche
       // → la nouvelle op doit récupérer la même catégorie.
+      const cat = (await agent.post('/api/categories').send({ label: 'Courses' })).body;
       await agent.post('/api/operations').send({
         label: 'CARREFOUR PARIS', amount: -45.10,
         date: '2026-04-02T00:00:00.000Z', bankId,
-        category: 'Courses',
+        categoryId: cat._id,
       });
 
       const buf = qifBuffer([{ label: 'CARREFOUR LYON', amount: -32.50, date: '20/04/2026' }]);
@@ -292,7 +293,7 @@ describe('POST /api/operations/import', () => {
       const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
       const inserted = ops.find((o) => o.label === 'CARREFOUR LYON');
       expect(inserted).toBeDefined();
-      expect(inserted.category).toBe('Courses');
+      expect(String(inserted.categoryId)).toBe(String(cat._id));
     });
   });
 });

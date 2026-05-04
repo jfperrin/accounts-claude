@@ -6,9 +6,9 @@
 const { Schema, model } = require('mongoose');
 
 const schema = new Schema({
-  userId:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  label:    { type: String, required: true },
-  category: { type: String, required: true },
+  userId:     { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  label:      { type: String, required: true },
+  categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
 }, { timestamps: true });
 
 schema.index({ userId: 1, label: 1 }, { unique: true });

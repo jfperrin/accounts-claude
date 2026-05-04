@@ -81,14 +81,23 @@ function initSchema(db) {
     );
 
     CREATE TABLE IF NOT EXISTS category_hints (
-      id         TEXT PRIMARY KEY,
-      user_id    TEXT NOT NULL REFERENCES users(id),
-      label      TEXT NOT NULL,
-      category   TEXT NOT NULL,
-      updated_at TEXT DEFAULT (datetime('now')),
+      id          TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL REFERENCES users(id),
+      label       TEXT NOT NULL,
+      category_id TEXT REFERENCES categories(id) ON DELETE CASCADE,
+      updated_at  TEXT DEFAULT (datetime('now')),
       UNIQUE(user_id, label)
     );
     CREATE INDEX IF NOT EXISTS idx_category_hints_user ON category_hints(user_id);
+
+    CREATE TABLE IF NOT EXISTS dismissed_recurring_suggestions (
+      id         TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL REFERENCES users(id),
+      key        TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_dismissed_recur_user ON dismissed_recurring_suggestions(user_id);
   `);
 
   // Migration: drop username column if it exists (schema change from username to email)
@@ -139,9 +148,13 @@ function initSchema(db) {
     'ALTER TABLE password_reset_tokens ADD COLUMN old_password_hash TEXT',
     // Solde courant des banques (saisi manuellement par l'utilisateur)
     'ALTER TABLE banks ADD COLUMN current_balance REAL NOT NULL DEFAULT 0',
-    // Catégorie sur les opérations et récurrentes
+    // Catégorie sur les opérations et récurrentes : ancien champ texte (legacy),
+    // remplacé ci-dessous par category_id (FK vers categories.id).
     'ALTER TABLE operations ADD COLUMN category TEXT',
     'ALTER TABLE recurring_operations ADD COLUMN category TEXT',
+    'ALTER TABLE operations ADD COLUMN category_id TEXT REFERENCES categories(id) ON DELETE SET NULL',
+    'ALTER TABLE recurring_operations ADD COLUMN category_id TEXT REFERENCES categories(id) ON DELETE SET NULL',
+    'ALTER TABLE category_hints ADD COLUMN category_id TEXT REFERENCES categories(id) ON DELETE CASCADE',
     'ALTER TABLE users ADD COLUMN accepted_tos_at TEXT',
     'ALTER TABLE categories ADD COLUMN color TEXT',
     // Budget par catégorie + qualification (debit = dépense, credit = revenu)
@@ -150,6 +163,35 @@ function initSchema(db) {
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
+
+  // Backfill category_id depuis l'ancienne colonne category (texte = libellé).
+  // On résout (user_id, label) → categories.id. Les libellés orphelins (catégorie
+  // supprimée) restent à NULL. Idempotent : seules les lignes où category_id est
+  // NULL et category est non-vide sont mises à jour.
+  for (const tbl of ['operations', 'recurring_operations', 'category_hints']) {
+    try {
+      db.exec(`
+        UPDATE ${tbl}
+        SET category_id = (
+          SELECT c.id FROM categories c
+          WHERE c.user_id = ${tbl}.user_id AND c.label = ${tbl}.category
+        )
+        WHERE category_id IS NULL AND category IS NOT NULL AND category != ''
+      `);
+    } catch (_) { /* table ou colonne inexistante */ }
+  }
+
+  // Suppression de l'ancienne colonne `category` (SQLite 3.35+).
+  // Idempotent : silencieux si la colonne n'existe plus.
+  for (const tbl of ['operations', 'recurring_operations', 'category_hints']) {
+    try { db.exec(`ALTER TABLE ${tbl} DROP COLUMN category`); }
+    catch (_) { /* colonne déjà supprimée */ }
+  }
+
+  // Les hints sans category_id (libellé orphelin) sont supprimés : un hint
+  // sans cible ne sert à rien et viole le NOT NULL Mongo.
+  try { db.exec('DELETE FROM category_hints WHERE category_id IS NULL'); }
+  catch (_) { /* table inexistante */ }
 }
 
 // --- Fonctions de mapping SQLite row → objet métier ---
@@ -187,7 +229,7 @@ const mapOp = (row) => row && {
   amount: row.amount,
   date: row.date,
   pointed: row.pointed === 1,
-  category: row.category ?? null,
+  categoryId: row.category_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
 };
@@ -197,7 +239,7 @@ const mapRecurring = (row) => row && {
   label: row.label,
   amount: row.amount,
   dayOfMonth: row.day_of_month,
-  category: row.category ?? null,
+  categoryId: row.category_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
 };
@@ -214,7 +256,7 @@ const mapCategory = (row) => row && {
 const mapHint = (row) => row && {
   _id: row.id,
   label: row.label,
-  category: row.category,
+  categoryId: row.category_id,
   userId: row.user_id,
 };
 
@@ -428,7 +470,7 @@ module.exports = function createSQLiteRepos() {
     //     filtrer les candidats déjà rapprochés et éviter de consommer 2× la même).
     findAllMinimal(userId) {
       return db.prepare(
-        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category FROM operations WHERE user_id = ?',
+        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category_id AS categoryId FROM operations WHERE user_id = ?',
       ).all(uid(userId)).map((r) => ({
         _id: r._id,
         label: r.label,
@@ -436,7 +478,7 @@ module.exports = function createSQLiteRepos() {
         amount: r.amount,
         date: r.date,
         pointed: r.pointed === 1,
-        category: r.category ?? null,
+        categoryId: r.categoryId ?? null,
       }));
     },
 
@@ -449,12 +491,12 @@ module.exports = function createSQLiteRepos() {
       return out;
     },
 
-    create({ label, amount, date, pointed = false, category = null, bankId, userId }) {
+    create({ label, amount, date, pointed = false, categoryId = null, bankId, userId }) {
       const id = randomUUID();
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dateStr, pointed ? 1 : 0, category ?? null, uid(bankId), uid(userId));
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, uid(bankId), uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -464,13 +506,15 @@ module.exports = function createSQLiteRepos() {
       if (!cur) return null;
       const { label = cur.label, amount = cur.amount, date = cur.date, bankId = cur.bank_id } = body;
       const pointed = body.pointed !== undefined ? (body.pointed ? 1 : 0) : cur.pointed;
-      const category = body.category !== undefined ? (body.category ?? null) : (cur.category ?? null);
+      const categoryId = body.categoryId !== undefined
+        ? (body.categoryId ? uid(body.categoryId) : null)
+        : (cur.category_id ?? null);
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(`
         UPDATE operations
-        SET label = ?, amount = ?, date = ?, pointed = ?, category = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, date = ?, pointed = ?, category_id = ?, bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dateStr, pointed, category, uid(bankId), id, uid(userId));
+      `).run(label, amount, dateStr, pointed, categoryId, uid(bankId), id, uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -492,13 +536,13 @@ module.exports = function createSQLiteRepos() {
     // Transaction : toutes les insertions réussissent ou aucune n'est commitée
     insertMany(items) {
       const stmt = db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       );
       db.transaction((ops) => {
         for (const op of ops) {
           const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
-            op.category ?? null, uid(op.bankId), uid(op.userId));
+            op.categoryId ? uid(op.categoryId) : null, uid(op.bankId), uid(op.userId));
         }
       })(items);
     },
@@ -521,16 +565,16 @@ module.exports = function createSQLiteRepos() {
         label: r.label,
         amount: r.amount,
         dayOfMonth: r.day_of_month,
-        category: r.category ?? null,
+        categoryId: r.category_id ?? null,
         bankId: r.bank_id, // ID brut pour la déduplication
         userId: r.user_id,
       })),
 
-    create({ label, amount, dayOfMonth, category = null, bankId, userId }) {
+    create({ label, amount, dayOfMonth, categoryId = null, bankId, userId }) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO recurring_operations (id, label, amount, day_of_month, category, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dayOfMonth, category ?? null, uid(bankId), uid(userId));
+        'INSERT INTO recurring_operations (id, label, amount, day_of_month, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dayOfMonth, categoryId ? uid(categoryId) : null, uid(bankId), uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
@@ -538,12 +582,14 @@ module.exports = function createSQLiteRepos() {
       const cur = db.prepare('SELECT * FROM recurring_operations WHERE id = ? AND user_id = ?').get(id, uid(userId));
       if (!cur) return null;
       const { label = cur.label, amount = cur.amount, dayOfMonth = cur.day_of_month, bankId = cur.bank_id } = body;
-      const category = body.category !== undefined ? (body.category ?? null) : (cur.category ?? null);
+      const categoryId = body.categoryId !== undefined
+        ? (body.categoryId ? uid(body.categoryId) : null)
+        : (cur.category_id ?? null);
       db.prepare(`
         UPDATE recurring_operations
-        SET label = ?, amount = ?, day_of_month = ?, category = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, day_of_month = ?, category_id = ?, bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dayOfMonth, category, uid(bankId), id, uid(userId));
+      `).run(label, amount, dayOfMonth, categoryId, uid(bankId), id, uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
@@ -630,16 +676,16 @@ module.exports = function createSQLiteRepos() {
     findByUser: (userId) =>
       db.prepare('SELECT * FROM category_hints WHERE user_id = ?').all(uid(userId)).map(mapHint),
 
-    upsert(userId, label, category) {
+    upsert(userId, label, categoryId) {
       // INSERT … ON CONFLICT DO UPDATE — atomique (SQLite 3.24+)
       const id = randomUUID();
       db.prepare(`
-        INSERT INTO category_hints (id, user_id, label, category)
+        INSERT INTO category_hints (id, user_id, label, category_id)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(user_id, label) DO UPDATE SET
-          category = excluded.category,
+          category_id = excluded.category_id,
           updated_at = datetime('now')
-      `).run(id, uid(userId), label, category);
+      `).run(id, uid(userId), label, uid(categoryId));
     },
 
     deleteHint(userId, label) {
@@ -653,10 +699,10 @@ module.exports = function createSQLiteRepos() {
 
     rebuildFromOperations(userId) {
       const rows = db.prepare(
-        'SELECT label, category, updated_at FROM operations WHERE user_id = ? AND category IS NOT NULL'
+        'SELECT label, category_id, updated_at FROM operations WHERE user_id = ? AND category_id IS NOT NULL'
       ).all(uid(userId));
 
-      // Group by label : on retient le compteur par catégorie + la dernière vue
+      // Group by label : on retient le compteur par categoryId + la dernière vue
       const byLabel = new Map();
       for (const r of rows) {
         let entry = byLabel.get(r.label);
@@ -664,28 +710,28 @@ module.exports = function createSQLiteRepos() {
           entry = { byCat: new Map(), latestCat: null, latestUpdated: '' };
           byLabel.set(r.label, entry);
         }
-        entry.byCat.set(r.category, (entry.byCat.get(r.category) || 0) + 1);
+        entry.byCat.set(r.category_id, (entry.byCat.get(r.category_id) || 0) + 1);
         if (r.updated_at > entry.latestUpdated) {
           entry.latestUpdated = r.updated_at;
-          entry.latestCat = r.category;
+          entry.latestCat = r.category_id;
         }
       }
 
       // Atomique : reset + insertions dans une transaction
       const insert = db.prepare(
-        'INSERT INTO category_hints (id, user_id, label, category) VALUES (?, ?, ?, ?)',
+        'INSERT INTO category_hints (id, user_id, label, category_id) VALUES (?, ?, ?, ?)',
       );
       const wipe = db.prepare('DELETE FROM category_hints WHERE user_id = ?');
       const tx = db.transaction(() => {
         wipe.run(uid(userId));
         for (const [label, entry] of byLabel) {
-          // Catégorie majoritaire ; à égalité, la plus récente l'emporte
+          // categoryId majoritaire ; à égalité, le plus récent l'emporte
           let winner = null;
           let max = 0;
-          for (const [cat, count] of entry.byCat) {
-            if (count > max || (count === max && cat === entry.latestCat)) {
+          for (const [catId, count] of entry.byCat) {
+            if (count > max || (count === max && catId === entry.latestCat)) {
               max = count;
-              winner = cat;
+              winner = catId;
             }
           }
           if (winner) insert.run(randomUUID(), uid(userId), label, winner);
@@ -696,5 +742,32 @@ module.exports = function createSQLiteRepos() {
     },
   };
 
-  return { users, banks, operations, recurringOps, resetTokens, categories, categoryHints };
+  // ─────────────────────────────────────────────
+  // DISMISSED RECURRING SUGGESTIONS — clés ignorées par l'utilisateur pour la
+  // détection automatique de récurrentes (cf. services/recurringDetectionService).
+  // ─────────────────────────────────────────────
+  const dismissedRecurringSuggestions = {
+    findKeysByUser: (userId) =>
+      db.prepare('SELECT key FROM dismissed_recurring_suggestions WHERE user_id = ?')
+        .all(uid(userId)).map((r) => r.key),
+
+    add(userId, key) {
+      const id = randomUUID();
+      db.prepare(`
+        INSERT INTO dismissed_recurring_suggestions (id, user_id, key)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, key) DO NOTHING
+      `).run(id, uid(userId), key);
+    },
+
+    remove(userId, key) {
+      db.prepare('DELETE FROM dismissed_recurring_suggestions WHERE user_id = ? AND key = ?')
+        .run(uid(userId), key);
+    },
+  };
+
+  return {
+    users, banks, operations, recurringOps, resetTokens,
+    categories, categoryHints, dismissedRecurringSuggestions,
+  };
 };

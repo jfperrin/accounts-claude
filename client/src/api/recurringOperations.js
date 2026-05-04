@@ -25,3 +25,11 @@ export const remove = async (id) => {
   emitChanged();
   return res;
 };
+
+export const getSuggestions = () => client.get('/recurring-operations/suggestions');
+
+export const dismissSuggestion = (key) =>
+  client.post('/recurring-operations/suggestions/dismiss', { key });
+
+export const undismissSuggestion = (key) =>
+  client.delete(`/recurring-operations/suggestions/dismiss/${encodeURIComponent(key)}`);

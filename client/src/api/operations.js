@@ -24,3 +24,18 @@ export const importFile = (file, { bankId }) => {
 // selectedOpIds vide = créer la ligne du fichier telle quelle.
 export const resolveImport = (resolutions) =>
   client.post('/operations/import/resolve', { resolutions });
+
+// Liste les opérations sans catégorie de la même banque dont le libellé est
+// similaire à celui d'une op source. Utilisé pour proposer une catégorisation en lot.
+export const getSimilarUncategorized = (id) =>
+  client.get(`/operations/${id}/similar-uncategorized`);
+
+// Variante "sans op source en base" : recherche par (label, bankId).
+// Utilisée après création d'une récurrente pour proposer la catégorisation
+// des opérations existantes correspondant au pattern.
+export const findSimilarUncategorized = ({ label, bankId, excludeId }) =>
+  client.get('/operations/similar-uncategorized', { params: { label, bankId, excludeId } });
+
+// Affecte une catégorie à plusieurs opérations en une requête.
+export const bulkCategorize = (ids, categoryId) =>
+  client.post('/operations/bulk-categorize', { ids, categoryId });

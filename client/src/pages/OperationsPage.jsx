@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { CalendarDays, ChevronDown, Download, Plus, Upload } from 'lucide-react';
+import { CalendarDays, ChevronDown, Download, Plus, Tag, Upload } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
@@ -10,12 +10,15 @@ import {
   generateRecurring,
   importFile,
   resolveImport,
+  getSimilarUncategorized,
+  bulkCategorize,
 } from '@/api/operations';
 import { update as updateBank } from '@/api/banks';
 import { create as createRecurring } from '@/api/recurringOperations';
 import { useCategories } from '@/hooks/useCategories';
 import { useBanks } from '@/hooks/useBanks';
 import { useOperations } from '@/hooks/useOperations';
+import { useRecurringOperations } from '@/hooks/useRecurringOperations';
 import BankBalances from '@/components/BankBalances';
 import OperationsTable from '@/components/OperationsTable';
 import OperationForm from '@/components/OperationForm';
@@ -23,6 +26,7 @@ import ImportDialog from '@/components/ImportDialog';
 import MakeRecurringDialog from '@/components/MakeRecurringDialog';
 import ImportResolveDialog from '@/components/ImportResolveDialog';
 import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
+import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
@@ -46,9 +50,10 @@ function setCookiePref(val) {
   document.cookie = `${COOKIE_NAME}=${encoded}; path=/; max-age=${60 * 60 * 24 * 365}`;
 }
 
-export default function DashboardPage() {
+export default function OperationsPage() {
   const { categories } = useCategories();
   const { banks, reload: reloadBanks } = useBanks();
+  const { recurring } = useRecurringOperations();
 
   const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref()?.mode ?? '30d');
   const [customStart, setCustomStart] = useState(() => getCookiePref()?.start ?? dayjs().subtract(29, 'day').format('YYYY-MM-DD'));
@@ -65,6 +70,16 @@ export default function DashboardPage() {
   }, [rangeMode, customStart, customEnd]);
 
   const { operations, reload: reloadOperations } = useOperations({ startDate, endDate });
+
+  const [onlyUncategorized, setOnlyUncategorized] = useState(false);
+  const uncategorizedCount = useMemo(
+    () => operations.filter((o) => !o.categoryId).length,
+    [operations],
+  );
+  const visibleOperations = useMemo(
+    () => (onlyUncategorized ? operations.filter((o) => !o.categoryId) : operations),
+    [operations, onlyUncategorized],
+  );
 
   const [formOpen, setFormOpen] = useState(false);
   const [editOp, setEditOp] = useState(null);
@@ -139,9 +154,33 @@ export default function DashboardPage() {
     reloadBanks();
   };
 
-  const handleCategoryChange = async (id, category) => {
-    await updateOp(id, { category });
+  // Quand on affecte une catégorie : si on en pose une (truthy), on cherche
+  // les opérations similaires sans catégorie pour proposer un bulk-update.
+  const [bulkCat, setBulkCat] = useState(null); // { categoryId, candidates }
+
+  const handleCategoryChange = async (id, categoryId) => {
+    await updateOp(id, { categoryId });
     reloadOperations();
+    if (!categoryId) return;
+    try {
+      const candidates = await getSimilarUncategorized(id);
+      if (candidates.length > 0) setBulkCat({ categoryId, candidates });
+    } catch {
+      /* silencieux : la catégorie principale est déjà appliquée */
+    }
+  };
+
+  const handleBulkConfirm = async (ids) => {
+    if (ids.length === 0) { setBulkCat(null); return; }
+    try {
+      const { updated } = await bulkCategorize(ids, bulkCat.categoryId);
+      toast.success(`${updated} opération${updated > 1 ? 's' : ''} catégorisée${updated > 1 ? 's' : ''}`);
+      reloadOperations();
+    } catch (err) {
+      toast.error(err.message || 'Erreur');
+    } finally {
+      setBulkCat(null);
+    }
   };
 
   const handleImportSubmit = async (file, bankId) => {
@@ -185,7 +224,7 @@ export default function DashboardPage() {
       amount: String(op.amount),
       dayOfMonth: String(dayjs(op.date).date()),
       bankId: op.bankId?._id ?? String(op.bankId ?? ''),
-      category: op.category ?? 'none',
+      categoryId: op.categoryId ?? 'none',
     });
   };
 
@@ -197,7 +236,7 @@ export default function DashboardPage() {
         amount: parseFloat(recurringForm.amount),
         dayOfMonth: Number(recurringForm.dayOfMonth),
         bankId: recurringForm.bankId,
-        category: recurringForm.category !== 'none' ? recurringForm.category : null,
+        categoryId: recurringForm.categoryId !== 'none' ? recurringForm.categoryId : null,
       });
       toast.success('Opération récurrente créée');
       setRecurringForm(null);
@@ -257,6 +296,27 @@ export default function DashboardPage() {
             />
           </>
         )}
+        <button
+          type="button"
+          onClick={() => setOnlyUncategorized((s) => !s)}
+          aria-pressed={onlyUncategorized}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+            onlyUncategorized
+              ? 'border-indigo-600 bg-indigo-600 text-white'
+              : 'border-border bg-card text-muted-foreground hover:bg-muted'
+          }`}
+          title="Afficher uniquement les opérations sans catégorie"
+        >
+          <Tag className="h-4 w-4" />
+          <span className="hidden sm:inline">Sans catégorie</span>
+          {uncategorizedCount > 0 && (
+            <span className={`ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums ${
+              onlyUncategorized ? 'bg-white/20 text-white' : 'bg-muted text-foreground'
+            }`}>
+              {uncategorizedCount}
+            </span>
+          )}
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="sm:hidden" aria-label="Importer">
@@ -308,10 +368,14 @@ export default function DashboardPage() {
         </>
       )}
 
-      {operations.length === 0 ? (
+      {visibleOperations.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <CalendarDays className="mb-3 h-10 w-10 opacity-30" />
-          <p className="text-sm">Aucune opération sur cette période</p>
+          <p className="text-sm">
+            {onlyUncategorized
+              ? 'Aucune opération sans catégorie sur cette période'
+              : 'Aucune opération sur cette période'}
+          </p>
         </div>
       ) : (
         <div className="sm:rounded-xl sm:border sm:border-border sm:bg-card sm:p-4 sm:shadow-xs">
@@ -321,11 +385,17 @@ export default function DashboardPage() {
               {rangeMode === '90d' && '90 derniers jours'}
               {rangeMode === 'custom' && `${dayjs(startDate).format('DD/MM/YYYY')} – ${dayjs(endDate).format('DD/MM/YYYY')}`}
             </span>
-            <span className="text-sm text-muted-foreground">{operations.length} opération(s)</span>
+            <span className="text-sm text-muted-foreground">
+              {visibleOperations.length} opération(s)
+              {onlyUncategorized && operations.length !== visibleOperations.length && (
+                <span> / {operations.length}</span>
+              )}
+            </span>
           </div>
           <OperationsTable
-            operations={operations}
+            operations={visibleOperations}
             categories={categories}
+            recurring={recurring}
             onPoint={handlePoint}
             onEdit={(op) => { setEditOp(op); setFormOpen(true); }}
             onDelete={handleDelete}
@@ -372,6 +442,15 @@ export default function DashboardPage() {
         open={generateRecurringOpen}
         onConfirm={handleConfirmGenerateRecurring}
         onCancel={() => setGenerateRecurringOpen(false)}
+      />
+
+      <BulkCategorizeDialog
+        open={!!bulkCat}
+        candidates={bulkCat?.candidates ?? []}
+        categoryId={bulkCat?.categoryId}
+        categories={categories}
+        onConfirm={handleBulkConfirm}
+        onCancel={() => setBulkCat(null)}
       />
 
       <button

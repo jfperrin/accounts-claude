@@ -66,8 +66,9 @@ describe('POST /api/recurring-operations', () => {
   });
 
   it('propage la catégorie', async () => {
-    const res = await alice.post('/api/recurring-operations').send(makeRec({ category: 'Logement' }));
-    expect(res.body.category).toBe('Logement');
+    const cat = (await alice.post('/api/categories').send({ label: 'Logement' })).body;
+    const res = await alice.post('/api/recurring-operations').send(makeRec({ categoryId: cat._id }));
+    expect(String(res.body.categoryId)).toBe(String(cat._id));
   });
 
   it('accepte un montant positif (crédit)', async () => {
@@ -90,11 +91,12 @@ describe('PUT /api/recurring-operations/:id', () => {
   });
 
   it('met à jour la catégorie', async () => {
+    const cat = (await alice.post('/api/categories').send({ label: 'Transport' })).body;
     const { body: rec } = await alice.post('/api/recurring-operations').send(makeRec());
     const res = await alice.put(`/api/recurring-operations/${rec._id}`).send({
-      label: rec.label, amount: rec.amount, dayOfMonth: rec.dayOfMonth, bankId, category: 'Transport',
+      label: rec.label, amount: rec.amount, dayOfMonth: rec.dayOfMonth, bankId, categoryId: cat._id,
     });
-    expect(res.body.category).toBe('Transport');
+    expect(String(res.body.categoryId)).toBe(String(cat._id));
   });
 
   it("retourne 404 si la récurrente appartient à un autre utilisateur", async () => {

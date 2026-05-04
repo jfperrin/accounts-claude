@@ -128,8 +128,9 @@ describe('POST /api/operations', () => {
   });
 
   it('propage la catégorie', async () => {
-    const res = await agent.post('/api/operations').send(makeOp({ category: 'Logement' }));
-    expect(res.body.category).toBe('Logement');
+    const cat = (await agent.post('/api/categories').send({ label: 'Logement' })).body;
+    const res = await agent.post('/api/operations').send(makeOp({ categoryId: cat._id }));
+    expect(String(res.body.categoryId)).toBe(String(cat._id));
   });
 });
 
@@ -143,9 +144,10 @@ describe('PUT /api/operations/:id', () => {
   });
 
   it('met à jour la catégorie', async () => {
+    const cat = (await agent.post('/api/categories').send({ label: 'Loisirs' })).body;
     const { body: op } = await agent.post('/api/operations').send(makeOp());
-    const res = await agent.put(`/api/operations/${op._id}`).send({ category: 'Loisirs' });
-    expect(res.body.category).toBe('Loisirs');
+    const res = await agent.put(`/api/operations/${op._id}`).send({ categoryId: cat._id });
+    expect(String(res.body.categoryId)).toBe(String(cat._id));
   });
 
   it("retourne 404 si l'opération appartient à un autre utilisateur", async () => {

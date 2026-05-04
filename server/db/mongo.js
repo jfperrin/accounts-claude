@@ -18,6 +18,7 @@ const RecurringOperation = require('../models/RecurringOperation');
 const PasswordResetToken = require('../models/PasswordResetToken');
 const Category = require('../models/Category');
 const CategoryHint = require('../models/CategoryHint');
+const DismissedRecurringSuggestion = require('../models/DismissedRecurringSuggestion');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -124,7 +125,7 @@ const operations = {
   // Utilisée par l'import (CSV/QIF/OFX) pour dédup globale + réconciliation
   // par montant : besoin de _id pour le tracking et pointed pour filtrer.
   findAllMinimal(userId) {
-    return Operation.find({ userId }).select('label bankId amount date pointed category');
+    return Operation.find({ userId }).select('label bankId amount date pointed categoryId');
   },
 
   async sumUnpointedByBank(userId) {
@@ -206,6 +207,8 @@ const resetTokens = {
 };
 
 // ─── CATEGORIES ──────────────────────────────────────────────────────────────
+// La suppression d'une catégorie déréfère les opérations, récurrentes et hints
+// qui la pointent (équivalent du ON DELETE SET NULL/CASCADE de SQLite).
 const categories = {
   findByUser: (userId) => Category.find({ userId }).sort('label'),
 
@@ -225,7 +228,16 @@ const categories = {
       { returnDocument: 'after' },
     ),
 
-  delete: (id, userId) => Category.findOneAndDelete({ _id: id, userId }),
+  async delete(id, userId) {
+    const removed = await Category.findOneAndDelete({ _id: id, userId });
+    if (!removed) return null;
+    await Promise.all([
+      Operation.updateMany({ userId, categoryId: id }, { $set: { categoryId: null } }),
+      RecurringOperation.updateMany({ userId, categoryId: id }, { $set: { categoryId: null } }),
+      CategoryHint.deleteMany({ userId, categoryId: id }),
+    ]);
+    return removed;
+  },
 };
 
 // ─── CATEGORY HINTS ──────────────────────────────────────────────────────────
@@ -236,10 +248,10 @@ const categories = {
 const categoryHints = {
   findByUser: (userId) => CategoryHint.find({ userId }),
 
-  upsert: (userId, label, category) =>
+  upsert: (userId, label, categoryId) =>
     CategoryHint.updateOne(
       { userId, label },
-      { $set: { category } },
+      { $set: { categoryId } },
       { upsert: true },
     ),
 
@@ -248,8 +260,8 @@ const categoryHints = {
   deleteAll: (userId) => CategoryHint.deleteMany({ userId }),
 
   async rebuildFromOperations(userId) {
-    const rows = await Operation.find({ userId, category: { $ne: null } })
-      .select('label category updatedAt');
+    const rows = await Operation.find({ userId, categoryId: { $ne: null } })
+      .select('label categoryId updatedAt');
 
     const byLabel = new Map();
     for (const r of rows) {
@@ -258,11 +270,12 @@ const categoryHints = {
         entry = { byCat: new Map(), latestCat: null, latestUpdated: 0 };
         byLabel.set(r.label, entry);
       }
-      entry.byCat.set(r.category, (entry.byCat.get(r.category) || 0) + 1);
+      const cid = String(r.categoryId);
+      entry.byCat.set(cid, (entry.byCat.get(cid) || 0) + 1);
       const t = r.updatedAt ? r.updatedAt.getTime() : 0;
       if (t > entry.latestUpdated) {
         entry.latestUpdated = t;
-        entry.latestCat = r.category;
+        entry.latestCat = cid;
       }
     }
 
@@ -270,13 +283,13 @@ const categoryHints = {
     for (const [label, entry] of byLabel) {
       let winner = null;
       let max = 0;
-      for (const [cat, count] of entry.byCat) {
-        if (count > max || (count === max && cat === entry.latestCat)) {
+      for (const [catId, count] of entry.byCat) {
+        if (count > max || (count === max && catId === entry.latestCat)) {
           max = count;
-          winner = cat;
+          winner = catId;
         }
       }
-      if (winner) docs.push({ userId, label, category: winner });
+      if (winner) docs.push({ userId, label, categoryId: winner });
     }
 
     await CategoryHint.deleteMany({ userId });
@@ -285,4 +298,69 @@ const categoryHints = {
   },
 };
 
-module.exports = { users, banks, operations, recurringOps, resetTokens, categories, categoryHints };
+// ─── DISMISSED RECURRING SUGGESTIONS ─────────────────────────────────────────
+// Clés (label normalisé + bankId) ignorées par l'utilisateur pour ne plus
+// proposer une suggestion de récurrente automatiquement détectée.
+const dismissedRecurringSuggestions = {
+  findKeysByUser: async (userId) => {
+    const rows = await DismissedRecurringSuggestion.find({ userId }).select('key');
+    return rows.map((r) => r.key);
+  },
+
+  add: (userId, key) =>
+    DismissedRecurringSuggestion.updateOne(
+      { userId, key },
+      { $setOnInsert: { userId, key } },
+      { upsert: true },
+    ),
+
+  remove: (userId, key) =>
+    DismissedRecurringSuggestion.deleteOne({ userId, key }),
+};
+
+// ─── MIGRATION LEGACY : category (string) → categoryId (ObjectId) ────────────
+// One-shot au boot. Chaque appel parcourt les collections concernées et résout
+// le label texte vers l'_id de Category correspondant pour ce user. Idempotent :
+// les docs sans `category` (déjà migrés) sont ignorés. Les libellés orphelins
+// (catégorie supprimée) sont nullifiés. À la fin on $unset le champ legacy.
+async function migrateLegacyCategoryFields() {
+  const cats = await Category.find({}).select('_id userId label');
+  // Index : `${userId}|${label}` → categoryId
+  const lookup = new Map(cats.map((c) => [`${String(c.userId)}|${c.label}`, c._id]));
+
+  for (const Model of [Operation, RecurringOperation]) {
+    const docs = await Model.find({ category: { $exists: true, $ne: null } })
+      .select('_id userId category');
+    for (const d of docs) {
+      const cid = lookup.get(`${String(d.userId)}|${d.category}`) ?? null;
+      await Model.updateOne(
+        { _id: d._id },
+        { $set: { categoryId: cid }, $unset: { category: '' } },
+      );
+    }
+    // Cleanup : retire le champ legacy résiduel sur les docs déjà migrés.
+    await Model.updateMany({ category: { $exists: true } }, { $unset: { category: '' } });
+  }
+
+  // Hints : même logique, mais un hint sans cible n'a aucun sens → on supprime.
+  const hints = await CategoryHint.find({ category: { $exists: true, $ne: null } })
+    .select('_id userId category');
+  for (const h of hints) {
+    const cid = lookup.get(`${String(h.userId)}|${h.category}`) ?? null;
+    if (cid) {
+      await CategoryHint.updateOne(
+        { _id: h._id },
+        { $set: { categoryId: cid }, $unset: { category: '' } },
+      );
+    } else {
+      await CategoryHint.deleteOne({ _id: h._id });
+    }
+  }
+  await CategoryHint.updateMany({ category: { $exists: true } }, { $unset: { category: '' } });
+}
+
+module.exports = {
+  users, banks, operations, recurringOps, resetTokens,
+  categories, categoryHints, dismissedRecurringSuggestions,
+  migrateLegacyCategoryFields,
+};

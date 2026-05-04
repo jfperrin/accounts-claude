@@ -1,4 +1,4 @@
-// Tests d'intégration pour le cache label → catégorie utilisé par l'auto-affectation
+// Tests d'intégration pour le cache label → categoryId utilisé par l'auto-affectation
 // à l'import. Endpoints : /api/category-hints (GET, POST /rebuild, DELETE)
 // + hooks sur POST/PUT /api/operations.
 
@@ -11,6 +11,7 @@ afterAll(teardown);
 
 let agent;
 let bankId;
+let catCourses, catAlim, catLogement, catSalaire, catAutre;
 
 beforeEach(async () => {
   await clearDB();
@@ -18,6 +19,11 @@ beforeEach(async () => {
   agent = request.agent(app);
   await agent.post('/api/auth/login').send({ email: 'alice@test.com', password: 'pass1234' });
   bankId = (await agent.post('/api/banks').send({ label: 'BNP', currentBalance: 1000 })).body._id;
+  catCourses  = (await agent.post('/api/categories').send({ label: 'Courses' })).body;
+  catAlim     = (await agent.post('/api/categories').send({ label: 'Alimentation' })).body;
+  catLogement = (await agent.post('/api/categories').send({ label: 'Logement' })).body;
+  catSalaire  = (await agent.post('/api/categories').send({ label: 'Salaire', kind: 'credit' })).body;
+  catAutre    = (await agent.post('/api/categories').send({ label: 'Autre', kind: 'credit' })).body;
 });
 
 describe('GET /api/category-hints', () => {
@@ -38,12 +44,13 @@ describe('hooks de synchronisation sur opérations', () => {
     await agent.post('/api/operations').send({
       label: 'CARREFOUR PARIS', amount: -45,
       date: '2026-04-05T00:00:00.000Z', bankId,
-      category: 'Courses',
+      categoryId: catCourses._id,
     });
 
     const hints = (await agent.get('/api/category-hints')).body;
     expect(hints).toHaveLength(1);
-    expect(hints[0]).toMatchObject({ label: 'CARREFOUR PARIS', category: 'Courses' });
+    expect(hints[0].label).toBe('CARREFOUR PARIS');
+    expect(String(hints[0].categoryId)).toBe(String(catCourses._id));
   });
 
   it('ne crée pas de hint si la catégorie est nulle', async () => {
@@ -62,33 +69,34 @@ describe('hooks de synchronisation sur opérations', () => {
       date: '2026-04-05T00:00:00.000Z', bankId,
     });
 
-    await agent.put(`/api/operations/${op._id}`).send({ category: 'Courses' });
+    await agent.put(`/api/operations/${op._id}`).send({ categoryId: catCourses._id });
 
     const hints = (await agent.get('/api/category-hints')).body;
     expect(hints).toHaveLength(1);
-    expect(hints[0]).toMatchObject({ label: 'CARREFOUR PARIS', category: 'Courses' });
+    expect(hints[0].label).toBe('CARREFOUR PARIS');
+    expect(String(hints[0].categoryId)).toBe(String(catCourses._id));
   });
 
   it('met à jour le hint quand on change la catégorie', async () => {
     const { body: op } = await agent.post('/api/operations').send({
       label: 'CARREFOUR PARIS', amount: -45,
       date: '2026-04-05T00:00:00.000Z', bankId,
-      category: 'Courses',
+      categoryId: catCourses._id,
     });
-    await agent.put(`/api/operations/${op._id}`).send({ category: 'Alimentation' });
+    await agent.put(`/api/operations/${op._id}`).send({ categoryId: catAlim._id });
 
     const hints = (await agent.get('/api/category-hints')).body;
     expect(hints).toHaveLength(1);
-    expect(hints[0].category).toBe('Alimentation');
+    expect(String(hints[0].categoryId)).toBe(String(catAlim._id));
   });
 
-  it('supprime le hint quand on efface la catégorie (PUT category=null)', async () => {
+  it('supprime le hint quand on efface la catégorie (PUT categoryId=null)', async () => {
     const { body: op } = await agent.post('/api/operations').send({
       label: 'CARREFOUR PARIS', amount: -45,
       date: '2026-04-05T00:00:00.000Z', bankId,
-      category: 'Courses',
+      categoryId: catCourses._id,
     });
-    await agent.put(`/api/operations/${op._id}`).send({ category: null });
+    await agent.put(`/api/operations/${op._id}`).send({ categoryId: null });
 
     const hints = (await agent.get('/api/category-hints')).body;
     expect(hints).toHaveLength(0);
@@ -97,17 +105,15 @@ describe('hooks de synchronisation sur opérations', () => {
 
 describe('POST /api/category-hints/rebuild', () => {
   it('reconstruit le cache depuis les opérations catégorisées', async () => {
-    // On crée plusieurs ops sans laisser le hook les indexer (insertion en bulk
-    // via le repo direct) — pour simuler un état où les hints sont obsolètes.
     await agent.post('/api/operations').send({
       label: 'LOYER', amount: -800,
       date: '2026-04-05T00:00:00.000Z', bankId,
-      category: 'Logement',
+      categoryId: catLogement._id,
     });
     await agent.post('/api/operations').send({
       label: 'CARREFOUR', amount: -45,
       date: '2026-04-10T00:00:00.000Z', bankId,
-      category: 'Courses',
+      categoryId: catCourses._id,
     });
 
     // Reset puis rebuild
@@ -120,27 +126,28 @@ describe('POST /api/category-hints/rebuild', () => {
 
     const hints = (await agent.get('/api/category-hints')).body;
     expect(hints).toHaveLength(2);
-    const byLabel = Object.fromEntries(hints.map((h) => [h.label, h.category]));
-    expect(byLabel.LOYER).toBe('Logement');
-    expect(byLabel.CARREFOUR).toBe('Courses');
+    const byLabel = Object.fromEntries(hints.map((h) => [h.label, String(h.categoryId)]));
+    expect(byLabel.LOYER).toBe(String(catLogement._id));
+    expect(byLabel.CARREFOUR).toBe(String(catCourses._id));
   });
 
   it('prend la catégorie majoritaire en cas de conflit sur un même libellé', async () => {
     // 2 ops "VIRT" en "Salaire", 1 op "VIRT" en "Autre" → majoritaire = Salaire
     await agent.post('/api/operations').send({
-      label: 'VIRT', amount: 2500, date: '2026-04-01T00:00:00.000Z', bankId, category: 'Salaire',
+      label: 'VIRT', amount: 2500, date: '2026-04-01T00:00:00.000Z', bankId, categoryId: catSalaire._id,
     });
     await agent.post('/api/operations').send({
-      label: 'VIRT', amount: 2500, date: '2026-04-02T00:00:00.000Z', bankId, category: 'Salaire',
+      label: 'VIRT', amount: 2500, date: '2026-04-02T00:00:00.000Z', bankId, categoryId: catSalaire._id,
     });
     await agent.post('/api/operations').send({
-      label: 'VIRT', amount: 100, date: '2026-04-03T00:00:00.000Z', bankId, category: 'Autre',
+      label: 'VIRT', amount: 100, date: '2026-04-03T00:00:00.000Z', bankId, categoryId: catAutre._id,
     });
 
     await agent.post('/api/category-hints/rebuild');
     const hints = (await agent.get('/api/category-hints')).body;
     expect(hints).toHaveLength(1);
-    expect(hints[0]).toMatchObject({ label: 'VIRT', category: 'Salaire' });
+    expect(hints[0].label).toBe('VIRT');
+    expect(String(hints[0].categoryId)).toBe(String(catSalaire._id));
   });
 });
 
@@ -149,7 +156,7 @@ describe('DELETE /api/category-hints', () => {
     await agent.post('/api/operations').send({
       label: 'LOYER', amount: -800,
       date: '2026-04-05T00:00:00.000Z', bankId,
-      category: 'Logement',
+      categoryId: catLogement._id,
     });
     expect((await agent.get('/api/category-hints')).body).toHaveLength(1);
 
@@ -162,17 +169,18 @@ describe('DELETE /api/category-hints', () => {
     await agent.post('/api/operations').send({
       label: 'LOYER', amount: -800,
       date: '2026-04-05T00:00:00.000Z', bankId,
-      category: 'Logement',
+      categoryId: catLogement._id,
     });
 
     const bob = request.agent(app);
     await createVerifiedUser(app, 'bob@test.com', 'pass1234');
     await bob.post('/api/auth/login').send({ email: 'bob@test.com', password: 'pass1234' });
     const bobBankId = (await bob.post('/api/banks').send({ label: 'CA', currentBalance: 0 })).body._id;
+    const bobCat = (await bob.post('/api/categories').send({ label: 'Alimentation' })).body;
     await bob.post('/api/operations').send({
       label: 'COURSES', amount: -30,
       date: '2026-04-05T00:00:00.000Z', bankId: bobBankId,
-      category: 'Alimentation',
+      categoryId: bobCat._id,
     });
 
     await agent.delete('/api/category-hints');

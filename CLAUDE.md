@@ -55,10 +55,12 @@ Toutes les entités portent `userId` — chaque requête est scopée à l'utilis
 
 - **User** — `email`, `passwordHash`, `googleId`, `title`, `firstName`, `lastName`, `nickname`, `avatarUrl`, `emailVerified`, `role`, `acceptedToSAt`
 - **Bank** — `label`, `userId`, `currentBalance` (saisi manuellement d'après le site bancaire)
-- **RecurringOperation** — `label`, `amount`, `dayOfMonth` (1–31), `bankId`, `userId`, `category`
-- **Operation** — `label`, `amount`, `date` (ISO 8601), `pointed` (bool), `bankId`, `userId`, `category`
-- **Category** — `label`, `color`, `userId`
-- **CategoryHint** — `label`, `category`, `userId` *(cache d'auto-affectation à l'import — voir `server/CLAUDE.md`)*
+- **RecurringOperation** — `label`, `amount`, `dayOfMonth` (1–31), `bankId`, `userId`, `categoryId` (FK → Category)
+- **Operation** — `label`, `amount`, `date` (ISO 8601), `pointed` (bool), `bankId`, `userId`, `categoryId` (FK → Category)
+- **Category** — `label`, `color`, `maxAmount`, `kind` (`debit`|`credit`), `userId`
+- **CategoryHint** — `label`, `categoryId`, `userId` *(cache d'auto-affectation à l'import — voir `server/CLAUDE.md`)*
+
+Les opérations et récurrentes pointent une catégorie par `_id` (FK), pas par libellé : renommer une catégorie n'oblige pas à toucher aux opérations. Suppression d'une catégorie : `categoryId` → `null` sur les ops/recurring (ON DELETE SET NULL en SQLite, équivalent en JS dans `categories.delete` côté Mongo) ; les hints associés sont supprimés (CASCADE).
 
 `amount` négatif = débit, positif = crédit. **Pas de `Period`** — les opérations sont une liste plate filtrée par plage de dates à la lecture.
 

@@ -20,6 +20,8 @@ async function main() {
     await require('./config/db')();
     db = require('./db/mongo');
     mongoUri = process.env.MONGODB_URI; // transmis à app.js pour le session store
+    // Migration legacy `category` (string) → `categoryId` (ObjectId). Idempotent.
+    await db.migrateLegacyCategoryFields();
   }
 
   // Crée ou met à jour le compte admin si ADMIN_EMAIL/ADMIN_PASSWORD sont définis

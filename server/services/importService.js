@@ -51,7 +51,7 @@ function appendImportLabel(currentLabel, importedLabel) {
   return currentLabel + suffix;
 }
 
-// Cherche la catégorie d'un hint dont le libellé est similaire à `label`
+// Cherche le categoryId d'un hint dont le libellé est similaire à `label`
 // à au moins SIMILARITY_THRESHOLD. Utilise un index inversé par tokens pour
 // ne calculer la similarité que sur les hints partageant au moins un token
 // avec `label` (au lieu de scanner toute la liste).
@@ -63,11 +63,11 @@ function inferCategoryFromHints(hints, tokenIndex, label) {
     const score = labelSimilarity(h.label, label);
     if (score > bestScore) {
       bestScore = score;
-      best = h.category;
+      best = h.categoryId;
       if (score === 1) break;
     }
   }
-  return best;
+  return best ? String(best) : null;
 }
 
 // Trouve parmi les candidats celui dont le libellé est le plus proche de `label`,
@@ -206,15 +206,15 @@ async function processImportFile(file, bankId, userId, db) {
         newAmount: r.amount,
       });
     } else {
-      const cat = inferCategoryFromHints(hints, tokenIndex, r.label);
+      const categoryId = inferCategoryFromHints(hints, tokenIndex, r.label);
       toInsert.push({
         label: r.label, amount: r.amount, date: r.date,
         bankId, userId, pointed: true,
-        category: cat,
+        categoryId,
       });
       existingKeys.add(exactKey(r.label, String(bankId), amountKey(r.amount), r.date));
       // On enrichit le cache avec le libellé importé pour les imports futurs
-      if (cat) newHints.push({ label: r.label, category: cat });
+      if (categoryId) newHints.push({ label: r.label, categoryId });
     }
   }
 
@@ -223,7 +223,7 @@ async function processImportFile(file, bankId, userId, db) {
     await operations.update(r.id, userId, { pointed: true, label: r.newLabel, amount: r.newAmount });
   }
   for (const h of newHints) {
-    await categoryHints.upsert(userId, h.label, h.category);
+    await categoryHints.upsert(userId, h.label, h.categoryId);
   }
 
   return {
@@ -260,7 +260,7 @@ async function resolveImportMatches(resolutions, userId, db) {
       throw err;
     }
     if (ids.length === 0) {
-      const cat = inferCategoryFromHints(hints, tokenIndex, row.label);
+      const categoryId = inferCategoryFromHints(hints, tokenIndex, row.label);
       toInsert.push({
         label: row.label,
         amount: row.amount,
@@ -268,9 +268,9 @@ async function resolveImportMatches(resolutions, userId, db) {
         bankId: row.bankId,
         userId,
         pointed: true,
-        category: cat,
+        categoryId,
       });
-      if (cat) newHints.push({ label: row.label, category: cat });
+      if (categoryId) newHints.push({ label: row.label, categoryId });
     } else {
       for (const opId of ids) {
         const cur = await operations.findById(opId, userId);
@@ -288,7 +288,7 @@ async function resolveImportMatches(resolutions, userId, db) {
 
   if (toInsert.length) await operations.insertMany(toInsert);
   for (const h of newHints) {
-    await categoryHints.upsert(userId, h.label, h.category);
+    await categoryHints.upsert(userId, h.label, h.categoryId);
   }
   return { imported: toInsert.length, reconciled };
 }

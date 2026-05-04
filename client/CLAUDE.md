@@ -115,9 +115,13 @@ Certaines pages sont **volontairement claires en dark mode** : `LoginPage`, `ToS
 
 ### `OperationsTable` (`components/OperationsTable.jsx`)
 
-- Select catégorie inline dans la cellule Libellé. **Sentinelle "none"** : Radix Select interdit `value=""` → utiliser `"none"` côté UI, convertir en `null` avant l'appel API
+- Select catégorie inline dans la cellule Libellé : la `value` du `<SelectItem>` est l'**`_id`** de la catégorie (pas son libellé), envoyé tel quel comme `categoryId` au serveur. **Sentinelle "none"** : Radix Select interdit `value=""` → utiliser `"none"` côté UI, convertir en `null` avant l'appel API
 - Tri décroissant par date, pagination 20/50/100/200
 - Mobile : clic sur ligne → toggle `pointed`
+
+### `CategoryBadge` (`components/CategoryBadge.jsx`)
+
+Reçoit `categoryId` + la liste `categories` complète. Lookup par `_id` pour récupérer libellé et couleur. Si l'id est inconnu (catégorie supprimée), ne rend rien — la suppression d'une catégorie déréfère côté serveur (`categoryId → null`), mais ce garde-fou évite un crash si le client a un cache obsolète.
 
 ### `CategoryColorPicker` (`components/CategoryColorPicker.jsx`)
 
@@ -167,6 +171,7 @@ Création/édition utilisateur côté admin. Champs : email, password (création
 
 - `lib/categoryColors.js` exporte `CATEGORY_COLORS` (palette préréglée 12 hex) et `DEFAULT_COLOR` (`#6366f1`)
 - `pages/CategoriesPage.jsx` permet d'éditer la couleur **directement depuis la liste** (popover sur la pastille) ou via le modal complet pour le libellé
+- Lien Operation/Recurring → Category par **`categoryId`** (FK sur `_id`), pas par libellé. Renommer une catégorie n'oblige pas à mettre à jour les opérations.
 
 ## Linting
 

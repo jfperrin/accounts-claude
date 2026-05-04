@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 
-const empty = () => ({ label: '', bankId: '', date: dayjs().format('YYYY-MM-DD'), amount: '', category: '' });
+const empty = () => ({ label: '', bankId: '', date: dayjs().format('YYYY-MM-DD'), amount: '', categoryId: '' });
 
 export default function OperationForm({ open, operation, banks, categories = [], onFinish, onCancel }) {
   const [form, setForm] = useState(empty());
@@ -24,7 +24,7 @@ export default function OperationForm({ open, operation, banks, categories = [],
             bankId: operation.bankId?._id ?? operation.bankId ?? '',
             date: dayjs(operation.date).format('YYYY-MM-DD'),
             amount: String(operation.amount),
-            category: operation.category ?? '',
+            categoryId: operation.categoryId ?? '',
           }
         : empty()
       );
@@ -41,7 +41,7 @@ export default function OperationForm({ open, operation, banks, categories = [],
       bankId: form.bankId,
       date: new Date(form.date).toISOString(),
       amount: parseFloat(form.amount),
-      category: form.category || null,
+      categoryId: form.categoryId || null,
     });
   };
 
@@ -90,12 +90,12 @@ export default function OperationForm({ open, operation, banks, categories = [],
 
           <div className="space-y-1.5">
             <Label>Catégorie</Label>
-            <Select value={form.category || 'none'} onValueChange={(v) => setForm((f) => ({ ...f, category: v === 'none' ? '' : v }))}>
+            <Select value={form.categoryId || 'none'} onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v === 'none' ? '' : v }))}>
               <SelectTrigger><SelectValue placeholder="Sans catégorie" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">— Sans catégorie</SelectItem>
                 {categories.map((c) => (
-                  <SelectItem key={c._id} value={c.label}>
+                  <SelectItem key={c._id} value={c._id}>
                     <span className="inline-flex items-center gap-2">
                       <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
                       {c.label}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal } from 'lucide-react';
+import { Home, ListOrdered, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,8 @@ export default function AppShell() {
   const isAdmin = user?.role === 'admin';
 
   const NAV_ITEMS = [
-    { key: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
+    { key: '/', icon: Home, label: 'Accueil' },
+    { key: '/operations', icon: ListOrdered, label: 'Opérations' },
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
     { key: '/categories', icon: Tag, label: 'Catégories' },
@@ -26,7 +27,8 @@ export default function AppShell() {
   ];
 
   const BOTTOM_TABS = [
-    { key: '/', icon: LayoutDashboard, label: 'Accueil' },
+    { key: '/', icon: Home, label: 'Accueil' },
+    { key: '/operations', icon: ListOrdered, label: 'Opérations' },
     { key: '/profile', icon: UserCircle, label: 'Profil' },
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Admin' }] : []),
   ];
@@ -151,7 +153,7 @@ export default function AppShell() {
 
       {/* ── Bottom navigation mobile uniquement ── */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden border-t border-border bg-card">
-        {BOTTOM_TABS.slice(0, 1).map(({ key, icon: Icon, label }) => {
+        {BOTTOM_TABS.slice(0, 2).map(({ key, icon: Icon, label }) => {
           const active = pathname === key;
           return (
             <button
@@ -191,7 +193,7 @@ export default function AppShell() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {BOTTOM_TABS.slice(1).map(({ key, icon: Icon, label }) => {
+        {BOTTOM_TABS.slice(2).map(({ key, icon: Icon, label }) => {
           const active = pathname === key;
           return (
             <button

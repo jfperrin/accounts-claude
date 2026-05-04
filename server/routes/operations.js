@@ -9,6 +9,7 @@ const router = require('express').Router();
 const multer = require('multer');
 const wrap = require('../utils/asyncHandler');
 const importService = require('../services/importService');
+const { findSimilarUncategorized } = require('../services/categoryPropagationService');
 
 // Multer mémoire pour l'import (1 Mo max).
 // Accepte .qif, .ofx ou .zip (qui doit contenir un de ces formats).
@@ -63,8 +64,8 @@ router.post('/', wrap(async (req, res) => {
   const { categoryHints } = req.app.locals.db;
   const op = await req.app.locals.db.operations.create({ ...req.body, userId: req.user._id });
   // Synchronise le cache hints : nouvelle op catégorisée → upsert
-  if (op && op.category) {
-    await categoryHints.upsert(req.user._id, op.label, op.category);
+  if (op && op.categoryId) {
+    await categoryHints.upsert(req.user._id, op.label, op.categoryId);
   }
   res.status(201).json(op);
 }));
@@ -75,11 +76,11 @@ router.put('/:id', wrap(async (req, res) => {
   const op = await operations.update(req.params.id, req.user._id, req.body);
   if (!op) return res.status(404).json({ message: 'Introuvable' });
   // Synchronise le cache hints sur changement de catégorie :
-  //  - catégorie posée → upsert (label, category)
+  //  - catégorie posée → upsert (label, categoryId)
   //  - catégorie effacée → delete (label)
-  if (req.body.category !== undefined) {
-    if (req.body.category) {
-      await categoryHints.upsert(req.user._id, op.label, req.body.category);
+  if (req.body.categoryId !== undefined) {
+    if (req.body.categoryId) {
+      await categoryHints.upsert(req.user._id, op.label, req.body.categoryId);
     } else {
       await categoryHints.deleteHint(req.user._id, op.label);
     }
@@ -143,12 +144,70 @@ router.post('/generate-recurring', wrap(async (req, res) => {
       bankId: r.bankId,
       userId,
       pointed: false,
-      category: r.category ?? null,
+      categoryId: r.categoryId ?? null,
     });
   }
 
   if (toInsert.length) await operations.insertMany(toInsert);
   res.json({ imported: toInsert.length });
+}));
+
+// GET /api/operations/similar-uncategorized?label=...&bankId=...[&excludeId=...]
+// Variante "sans op source en base" : utile pour les patterns synthétiques
+// (ex. après création d'une récurrente) où on veut chercher dans l'historique
+// les opérations correspondantes à catégoriser en lot.
+router.get('/similar-uncategorized', wrap(async (req, res) => {
+  const { label, bankId, excludeId } = req.query;
+  if (!label || typeof label !== 'string') {
+    return res.status(400).json({ message: 'label requis' });
+  }
+  if (!bankId || typeof bankId !== 'string') {
+    return res.status(400).json({ message: 'bankId requis' });
+  }
+  const all = await req.app.locals.db.operations.findAllMinimal(req.user._id);
+  const matches = findSimilarUncategorized(all, label, bankId, excludeId || null);
+  res.json(matches.map((o) => ({
+    _id: o._id, label: o.label, amount: o.amount, date: o.date,
+  })));
+}));
+
+// GET /api/operations/:id/similar-uncategorized
+// Renvoie les opérations sans catégorie de la même banque dont le libellé est
+// similaire à celui de l'op source. Utilisé pour proposer une catégorisation
+// en lot après affectation d'une catégorie.
+router.get('/:id/similar-uncategorized', wrap(async (req, res) => {
+  const { operations } = req.app.locals.db;
+  const userId = req.user._id;
+  const source = await operations.findById(req.params.id, userId);
+  if (!source) return res.status(404).json({ message: 'Introuvable' });
+  const sourceBankId = source.bankId && source.bankId._id ? source.bankId._id : source.bankId;
+  const all = await operations.findAllMinimal(userId);
+  const matches = findSimilarUncategorized(all, source.label, sourceBankId, source._id);
+  res.json(matches.map((o) => ({
+    _id: o._id, label: o.label, amount: o.amount, date: o.date,
+  })));
+}));
+
+// POST /api/operations/bulk-categorize  body: { ids: string[], categoryId: string }
+// Affecte la catégorie aux opérations listées et synchronise les hints.
+router.post('/bulk-categorize', wrap(async (req, res) => {
+  const { ids, categoryId } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: 'ids[] requis' });
+  }
+  if (!categoryId || typeof categoryId !== 'string') {
+    return res.status(400).json({ message: 'categoryId requis' });
+  }
+  const { operations, categoryHints } = req.app.locals.db;
+  const userId = req.user._id;
+  let updated = 0;
+  for (const id of ids) {
+    const op = await operations.update(id, userId, { categoryId });
+    if (!op) continue;
+    await categoryHints.upsert(userId, op.label, categoryId);
+    updated++;
+  }
+  res.json({ updated });
 }));
 
 // POST /api/operations/import  (multipart/form-data) — fields: file, bankId

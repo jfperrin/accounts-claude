@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat2 } from 'lucide-react';
+import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
@@ -126,7 +126,7 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
 const PAGE_SIZES = [20, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 50;
 
-export default function OperationsTable({ operations, categories = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring }) {
+export default function OperationsTable({ operations, categories = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
@@ -136,6 +136,22 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
     () => [...operations].sort((a, b) => new Date(b.date) - new Date(a.date)),
     [operations]
   );
+
+  // Match heuristique op ↔ récurrente : même `label|bankId|amount` (clé utilisée
+  // par le moteur de génération côté serveur). Cas non couverts : op réconciliée
+  // à l'import dont le label a été suffixé `(rowLabel)` ou montant ajusté.
+  const recurringKeys = useMemo(() => {
+    const set = new Set();
+    for (const r of recurring) {
+      const bId = String(r.bankId?._id ?? r.bankId);
+      set.add(`${r.label}|${bId}|${r.amount}`);
+    }
+    return set;
+  }, [recurring]);
+  const isFromRecurring = (op) => {
+    const bId = String(op.bankId?._id ?? op.bankId);
+    return recurringKeys.has(`${op.label}|${bId}|${op.amount}`);
+  };
 
   const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -169,9 +185,9 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground shrink-0">{dayjs(op.date).format('DD/MM')}</span>
               <div className="min-w-0 flex-1">
-                {onCategoryChange && (op.category ? (
+                {onCategoryChange && (op.categoryId ? (
                   <CategoryBadge
-                    category={op.category}
+                    categoryId={op.categoryId}
                     categories={categories}
                     onRemove={() => onCategoryChange(op._id, null)}
                   />
@@ -186,7 +202,7 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
                     <SelectContent>
                       <SelectItem value="none">— Sans catégorie</SelectItem>
                       {categories.map((c) => (
-                        <SelectItem key={c._id} value={c.label}>
+                        <SelectItem key={c._id} value={c._id}>
                           <span className="inline-flex items-center gap-2">
                             <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
                             {c.label}
@@ -202,6 +218,11 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
+              {isFromRecurring(op) && (
+                <span title="Opération récurrente" className="shrink-0">
+                  <Repeat className="h-3 w-3 text-violet-500" />
+                </span>
+              )}
               <span className="text-xs text-muted-foreground truncate min-w-0 flex-1">{op.label}</span>
               <Switch checked={op.pointed} onCheckedChange={() => onPoint(op._id)} />
             </div>
@@ -236,10 +257,17 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
               <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
               <TableCell>
                 <div className="flex flex-col gap-1">
-                  <span className="font-medium">{op.label}</span>
-                  {onCategoryChange && (op.category ? (
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    {isFromRecurring(op) && (
+                      <span title="Opération récurrente" className="shrink-0">
+                        <Repeat className="h-3.5 w-3.5 text-violet-500" />
+                      </span>
+                    )}
+                    {op.label}
+                  </span>
+                  {onCategoryChange && (op.categoryId ? (
                     <CategoryBadge
-                      category={op.category}
+                      categoryId={op.categoryId}
                       categories={categories}
                       onRemove={() => onCategoryChange(op._id, null)}
                     />
@@ -254,7 +282,7 @@ export default function OperationsTable({ operations, categories = [], onPoint, 
                       <SelectContent>
                         <SelectItem value="none">— Sans catégorie</SelectItem>
                         {categories.map((c) => (
-                          <SelectItem key={c._id} value={c.label}>
+                          <SelectItem key={c._id} value={c._id}>
                             <span className="inline-flex items-center gap-2">
                               <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
                               {c.label}
