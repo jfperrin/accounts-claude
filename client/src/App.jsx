@@ -1,19 +1,32 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
-import LoginPage from '@/pages/LoginPage';
 import AppShell from '@/components/layout/AppShell';
-import HomePage from '@/pages/HomePage';
-import OperationsPage from '@/pages/OperationsPage';
-import BanksPage from '@/pages/BanksPage';
-import RecurringPage from '@/pages/RecurringPage';
-import ProfilePage from '@/pages/ProfilePage';
-import AdminPage from '@/pages/AdminPage';
-import CategoriesPage from '@/pages/CategoriesPage';
-import ResetPasswordPage from '@/pages/ResetPasswordPage';
-import ToSPage from '@/pages/ToSPage';
 import RequireAdmin from '@/components/RequireAdmin';
 import CookieConsentBanner from '@/components/CookieConsent';
+
+// Code-splitting par route : chaque page devient un chunk dédié, ce qui sort
+// notamment recharts (utilisé par HomePage et CategoriesPage) du bundle initial.
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const HomePage = lazy(() => import('@/pages/HomePage'));
+const OperationsPage = lazy(() => import('@/pages/OperationsPage'));
+const BanksPage = lazy(() => import('@/pages/BanksPage'));
+const RecurringPage = lazy(() => import('@/pages/RecurringPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const AdminPage = lazy(() => import('@/pages/AdminPage'));
+const CategoriesPage = lazy(() => import('@/pages/CategoriesPage'));
+const HelpPage = lazy(() => import('@/pages/HelpPage'));
+const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
+const ToSPage = lazy(() => import('@/pages/ToSPage'));
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -33,20 +46,23 @@ export default function App() {
   return (
     <BrowserRouter>
       <CookieConsentBanner />
-      <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-        <Route path="/cgu" element={<ToSPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/" element={<PrivateRoute><AppShell /></PrivateRoute>}>
-          <Route index element={<HomePage />} />
-          <Route path="operations" element={<OperationsPage />} />
-          <Route path="banks" element={<BanksPage />} />
-          <Route path="recurring" element={<RecurringPage />} />
-          <Route path="categories" element={<CategoriesPage />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+          <Route path="/cgu" element={<ToSPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/" element={<PrivateRoute><AppShell /></PrivateRoute>}>
+            <Route index element={<HomePage />} />
+            <Route path="operations" element={<OperationsPage />} />
+            <Route path="banks" element={<BanksPage />} />
+            <Route path="recurring" element={<RecurringPage />} />
+            <Route path="categories" element={<CategoriesPage />} />
+            <Route path="help" element={<HelpPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

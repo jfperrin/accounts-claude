@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, ListOrdered, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal } from 'lucide-react';
+import { Home, ListOrdered, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal, HelpCircle } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ export default function AppShell() {
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
     { key: '/categories', icon: Tag, label: 'Catégories' },
+    { key: '/help', icon: HelpCircle, label: 'Aide' },
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Administration' }] : []),
   ];
 
@@ -36,6 +37,7 @@ export default function AppShell() {
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
     { key: '/categories', icon: Tag, label: 'Catégories' },
+    { key: '/help', icon: HelpCircle, label: 'Aide' },
   ];
   const moreActive = BOTTOM_MORE.some((t) => t.key === pathname);
 

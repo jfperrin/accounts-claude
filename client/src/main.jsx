@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { AuthProvider } from '@/store/AuthContext';
 import { ThemeProvider } from '@/store/ThemeContext';
 import App from '@/App';
+import PwaUpdatePrompt from '@/components/PwaUpdatePrompt';
 import './index.css';
 import './styles/cookieconsent-theme.css';
 
@@ -16,6 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <AuthProvider>
       <ThemeProvider>
         <App />
+        <PwaUpdatePrompt />
       </ThemeProvider>
       <Toaster richColors position="top-right" />
     </AuthProvider>

@@ -51,6 +51,7 @@
     "tailwindcss": "latest",
     "vite": "latest",
     "vite-plugin-eslint2": "^4.0.0",
+    "vite-plugin-pwa": "^1.0.1",
     "vitest": "latest"
   }
 }
