@@ -11,6 +11,7 @@ import {
   importFile,
   resolveImport,
   getSimilarUncategorized,
+  findSimilarUncategorized,
   bulkCategorize,
 } from '@/api/operations';
 import { update as updateBank } from '@/api/banks';
@@ -238,16 +239,26 @@ export default function OperationsPage() {
 
   const handleRecurringSave = async (e) => {
     e.preventDefault();
+    const categoryId = recurringForm.categoryId !== 'none' ? recurringForm.categoryId : null;
+    const { label, bankId } = recurringForm;
     try {
       await createRecurring({
-        label: recurringForm.label,
+        label,
         amount: parseFloat(recurringForm.amount),
         dayOfMonth: Number(recurringForm.dayOfMonth),
-        bankId: recurringForm.bankId,
-        categoryId: recurringForm.categoryId !== 'none' ? recurringForm.categoryId : null,
+        bankId,
+        categoryId,
       });
       toast.success('Opération récurrente créée');
       setRecurringForm(null);
+      if (categoryId && bankId) {
+        try {
+          const candidates = await findSimilarUncategorized({ label, bankId });
+          if (candidates.length > 0) setBulkCat({ categoryId, candidates });
+        } catch {
+          /* silencieux : la récurrente est déjà enregistrée */
+        }
+      }
     } catch (err) {
       toast.error(err.message || 'Erreur lors de la création');
     }
