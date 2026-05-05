@@ -23,8 +23,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn, formatEur } from '@/lib/utils';
-import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import CategoryBadge from '@/components/CategoryBadge';
+import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import RecurringSuggestions from '@/components/RecurringSuggestions';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
@@ -306,14 +306,7 @@ export default function RecurringPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">— Sans catégorie</SelectItem>
-                        {categories.map((c) => (
-                          <SelectItem key={c._id} value={c._id}>
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
-                              {c.label}
-                            </span>
-                          </SelectItem>
-                        ))}
+                        <CategorySelectItems categories={categories} />
                       </SelectContent>
                     </Select>
                   )}
@@ -380,14 +373,7 @@ export default function RecurringPage() {
                 <SelectTrigger><SelectValue placeholder="Sans catégorie" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">— Sans catégorie</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color ?? DEFAULT_COLOR }} />
-                        {c.label}
-                      </span>
-                    </SelectItem>
-                  ))}
+                  <CategorySelectItems categories={categories} />
                 </SelectContent>
               </Select>
             </div>

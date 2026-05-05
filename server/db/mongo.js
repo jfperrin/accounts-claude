@@ -214,7 +214,7 @@ const categories = {
 
   create: (data) => Category.create(data),
 
-  update: (id, userId, { label, color, maxAmount, kind }) =>
+  update: (id, userId, { label, color, maxAmount, kind, parentId }) =>
     Category.findOneAndUpdate(
       { _id: id, userId },
       {
@@ -223,15 +223,23 @@ const categories = {
           color: color ?? null,
           ...(maxAmount !== undefined && { maxAmount: maxAmount ?? null }),
           ...(kind !== undefined && { kind }),
+          ...(parentId !== undefined && { parentId: parentId ?? null }),
         },
       },
       { returnDocument: 'after' },
     ),
 
+  hasChildren: async (id, userId) => {
+    const child = await Category.findOne({ userId, parentId: id }).select('_id').lean();
+    return !!child;
+  },
+
   async delete(id, userId) {
     const removed = await Category.findOneAndDelete({ _id: id, userId });
     if (!removed) return null;
     await Promise.all([
+      // Enfants orphelins → racine (équivalent ON DELETE SET NULL SQLite)
+      Category.updateMany({ userId, parentId: id }, { $set: { parentId: null } }),
       Operation.updateMany({ userId, categoryId: id }, { $set: { categoryId: null } }),
       RecurringOperation.updateMany({ userId, categoryId: id }, { $set: { categoryId: null } }),
       CategoryHint.deleteMany({ userId, categoryId: id }),

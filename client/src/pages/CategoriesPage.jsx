@@ -10,6 +10,7 @@ import { create, update, remove } from '@/api/categories';
 import { useCategories } from '@/hooks/useCategories';
 import { useRecurringOperations } from '@/hooks/useRecurringOperations';
 import { CATEGORY_COLORS, DEFAULT_COLOR } from '@/lib/categoryColors';
+import { sortCategoriesByHierarchy } from '@/lib/categoryHierarchy';
 import { cn, formatEur } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import CategoryColorPicker from '@/components/CategoryColorPicker';
 
@@ -32,10 +36,11 @@ export default function CategoriesPage() {
   const [color, setColor] = useState(DEFAULT_COLOR);
   const [maxAmount, setMaxAmount] = useState('');
   const [kind, setKind] = useState('debit');
+  const [parentId, setParentId] = useState('none');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const openAdd = () => {
-    setLabel(''); setColor(DEFAULT_COLOR); setMaxAmount(''); setKind('debit');
+    setLabel(''); setColor(DEFAULT_COLOR); setMaxAmount(''); setKind('debit'); setParentId('none');
     setModal({});
   };
   const openEdit = (cat) => {
@@ -43,8 +48,24 @@ export default function CategoriesPage() {
     setColor(cat.color ?? DEFAULT_COLOR);
     setMaxAmount(cat.maxAmount != null ? String(cat.maxAmount) : '');
     setKind(cat.kind ?? 'debit');
+    setParentId(cat.parentId ?? 'none');
     setModal({ cat });
   };
+
+  // Une catégorie qui a déjà des enfants ne peut pas devenir elle-même enfant
+  // (limite à 1 niveau). On détecte ça côté UI pour désactiver le select Parent.
+  const editingHasChildren = useMemo(() => {
+    if (!modal?.cat) return false;
+    return categories.some((c) => c.parentId === modal.cat._id);
+  }, [modal, categories]);
+
+  // Parents éligibles : racines du même kind, exclut la cat éditée elle-même.
+  const eligibleParents = useMemo(() => {
+    return categories
+      .filter((c) => !c.parentId)
+      .filter((c) => c.kind === kind)
+      .filter((c) => !modal?.cat || c._id !== modal.cat._id);
+  }, [categories, kind, modal]);
 
   const onSave = async (e) => {
     e.preventDefault();
@@ -53,6 +74,7 @@ export default function CategoriesPage() {
       label: label.trim(),
       color,
       kind,
+      parentId: parentId === 'none' ? null : parentId,
       maxAmount: kind === 'transfer' || maxAmount.trim() === ''
         ? null
         : Number(maxAmount.replace(',', '.')),
@@ -92,6 +114,7 @@ export default function CategoriesPage() {
         color: newColor,
         maxAmount: cat.maxAmount,
         kind: cat.kind,
+        parentId: cat.parentId ?? null,
       });
       reload();
     } catch (err) {
@@ -134,6 +157,16 @@ export default function CategoriesPage() {
     const extra = c.maxAmount ?? 0;
     return { recurringAmount, extra, total: recurringAmount + extra };
   }), [categories, recurringByCategory]);
+
+  // Lookup budget par categoryId — l'index par position du tableau ne suffit
+  // plus dès qu'on rend dans l'ordre hiérarchique.
+  const budgetById = useMemo(() => {
+    const m = new Map();
+    categories.forEach((c, i) => m.set(c._id, budgets[i]));
+    return m;
+  }, [categories, budgets]);
+
+  const orderedRows = useMemo(() => sortCategoriesByHierarchy(categories), [categories]);
 
   // Chart : agrégat global des budgets définis (récurrentes + complément).
   // Deux barres empilées — Dépenses vs Revenus — chaque segment représentant
@@ -198,8 +231,8 @@ export default function CategoriesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {categories.map((cat, i) => {
-                const b = budgets[i];
+              {orderedRows.map(({ cat, depth }) => {
+                const b = budgetById.get(cat._id) ?? { recurringAmount: 0, extra: 0, total: 0 };
                 const ops = recurringListByCategory.get(cat._id) ?? [];
                 const expandable = ops.length > 0;
                 const isExpanded = expandable && expandedId === cat._id;
@@ -220,7 +253,13 @@ export default function CategoriesPage() {
                         ) : null}
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center gap-2 font-medium">
+                        <span
+                          className="inline-flex items-center gap-2 font-medium"
+                          style={depth > 0 ? { paddingLeft: '1.25rem' } : undefined}
+                        >
+                          {depth > 0 && (
+                            <span className="text-muted-foreground text-xs select-none">↳</span>
+                          )}
                           <CategoryColorPicker
                             color={cat.color}
                             onChange={(c) => onColorChange(cat, c)}
@@ -314,6 +353,42 @@ export default function CategoriesPage() {
               />
             )}
 
+            <div className="space-y-1.5">
+              <Label>Catégorie parente (optionnelle)</Label>
+              <Select
+                value={parentId}
+                onValueChange={setParentId}
+                disabled={editingHasChildren}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Aucune (catégorie racine)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Aucune (racine)</SelectItem>
+                  {eligibleParents.map((p) => (
+                    <SelectItem key={p._id} value={p._id}>
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: p.color ?? DEFAULT_COLOR }}
+                        />
+                        {p.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {editingHasChildren && (
+                <p className="text-xs text-muted-foreground">
+                  Cette catégorie a des sous-catégories — elle ne peut pas devenir enfant.
+                </p>
+              )}
+              {!editingHasChildren && eligibleParents.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Aucune catégorie racine du même type disponible.
+                </p>
+              )}
+            </div>
 
             <div className="space-y-1.5">
               <Label>Couleur</Label>

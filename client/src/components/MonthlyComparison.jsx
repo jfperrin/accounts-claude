@@ -16,32 +16,51 @@ function aggregate(operations, start, end, transferCatIds) {
   return { revenues, expenses, net: revenues - expenses };
 }
 
-export default function MonthlyComparison({ operations, categories = [] }) {
-  const { current, previous, rangeLabel } = useMemo(() => {
+export default function MonthlyComparison({ operations, categories = [], monthOffset = 0 }) {
+  const {
+    current, previous, currentLabel, previousLabel, rangeLabel,
+  } = useMemo(() => {
     const transferCatIds = new Set(
       categories.filter((c) => c.kind === 'transfer').map((c) => String(c._id)),
     );
+    const sel = dayjs().add(monthOffset, 'month');
+    const prev = sel.subtract(1, 'month');
     const today = dayjs().endOf('day');
-    const dayOfMonth = today.date();
-    const curStart = today.startOf('month');
-    const prevMonth = today.subtract(1, 'month');
-    // À date équivalente : on borne le mois précédent au même jour-du-mois
-    // (ou au dernier jour si le mois précédent est plus court).
-    const prevEndDay = Math.min(dayOfMonth, prevMonth.endOf('month').date());
-    const prevEnd = prevMonth.startOf('month').date(prevEndDay).endOf('day');
+    const isCurrentMonth = monthOffset === 0;
+
+    const curStart = sel.startOf('month');
+    // Mois courant : on borne à aujourd'hui pour comparer "à date équivalente".
+    // Mois passé/futur : mois plein.
+    const curEnd = isCurrentMonth ? today : sel.endOf('month');
+
+    const prevStart = prev.startOf('month');
+    let prevEnd;
+    if (isCurrentMonth) {
+      // Même jour-du-mois (ou dernier jour si mois précédent plus court).
+      const dayOfMonth = today.date();
+      const prevEndDay = Math.min(dayOfMonth, prev.endOf('month').date());
+      prevEnd = prev.startOf('month').date(prevEndDay).endOf('day');
+    } else {
+      prevEnd = prev.endOf('month');
+    }
+
     return {
-      current: aggregate(operations, curStart, today, transferCatIds),
-      previous: aggregate(operations, prevMonth.startOf('month'), prevEnd, transferCatIds),
-      rangeLabel: `du 1 au ${dayOfMonth}`,
+      current: aggregate(operations, curStart, curEnd, transferCatIds),
+      previous: aggregate(operations, prevStart, prevEnd, transferCatIds),
+      currentLabel: sel.format('MMM YYYY'),
+      previousLabel: prev.format('MMM YYYY'),
+      rangeLabel: isCurrentMonth ? `du 1 au ${today.date()}` : 'mois plein',
     };
-  }, [operations, categories]);
+  }, [operations, categories, monthOffset]);
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
           <CalendarRange className="h-4 w-4 text-indigo-600" />
-          Mois en cours vs précédent
+          <span className="capitalize">{currentLabel}</span>
+          <span className="text-muted-foreground font-normal">vs</span>
+          <span className="capitalize">{previousLabel}</span>
         </h2>
         <p className="text-xs text-muted-foreground">{rangeLabel}</p>
       </div>

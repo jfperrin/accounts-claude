@@ -1,27 +1,19 @@
 import { useMemo } from 'react';
-import dayjs from 'dayjs';
 import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { cn, formatEur } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 
-// Pour une catégorie, le budget MENSUEL = somme des récurrentes assignées
-// (en valeur directionnelle selon kind) + maxAmount complémentaire.
-// Identique au calcul de CategoriesPage — gardé inline pour ne pas coupler
-// les deux pages via un util qui figerait la sémantique trop tôt.
+// Budget mensuel d'une catégorie = somme des récurrentes assignées (en valeur
+// directionnelle selon kind) + maxAmount complémentaire. Identique au calcul
+// de CategoriesPage — gardé inline pour ne pas coupler les deux pages via un
+// util qui figerait la sémantique trop tôt.
 function directional(sum, kind) {
   return kind === 'credit' ? Math.max(0, sum) : Math.max(0, -sum);
 }
 
-function monthsInRange(startDate, endDate) {
-  const days = dayjs(endDate).diff(dayjs(startDate), 'day') + 1;
-  return Math.max(days / 30.4375, 0);
-}
-
 export default function BudgetSummary({
-  categories, recurring, operations, startDate, endDate,
+  categories, recurring, operations,
 }) {
-  const months = useMemo(() => monthsInRange(startDate, endDate), [startDate, endDate]);
-
   const recurringByCategory = useMemo(() => {
     const m = new Map();
     for (const r of recurring) {
@@ -44,28 +36,27 @@ export default function BudgetSummary({
     .filter((c) => c.kind !== 'transfer')
     .map((c) => {
       const recurringSum = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
-      const monthlyBudget = recurringSum + (c.maxAmount ?? 0);
-      const periodBudget = monthlyBudget * months;
+      const rawBudget = recurringSum + (c.maxAmount ?? 0);
+      const budget = Math.ceil(rawBudget / 10) * 10;
       const actual = directional(actualByCategory.get(c._id) ?? 0, c.kind);
-      return { cat: c, periodBudget, actual };
+      return { cat: c, budget, actual };
     })
-    .filter((r) => r.periodBudget > 0 || r.actual > 0)
+    .filter((r) => r.budget > 0 || r.actual > 0)
     .sort((a, b) => {
-      // Revenus en premier, puis dépenses, chacun trié par budget décroissant
       if (a.cat.kind !== b.cat.kind) return a.cat.kind === 'credit' ? -1 : 1;
-      return b.periodBudget - a.periodBudget;
+      return b.budget - a.budget;
     }),
-  [categories, recurringByCategory, actualByCategory, months]);
+  [categories, recurringByCategory, actualByCategory]);
 
   const totals = useMemo(() => {
     let budgetCredit = 0; let budgetDebit = 0;
     let actualCredit = 0; let actualDebit = 0;
     for (const r of rows) {
       if (r.cat.kind === 'credit') {
-        budgetCredit += r.periodBudget;
+        budgetCredit += r.budget;
         actualCredit += r.actual;
       } else {
-        budgetDebit += r.periodBudget;
+        budgetDebit += r.budget;
         actualDebit += r.actual;
       }
     }
@@ -91,12 +82,7 @@ export default function BudgetSummary({
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold">Budget</h2>
-        <p className="text-xs text-muted-foreground">
-          {months < 1.05
-            ? '~1 mois'
-            : `~${months.toFixed(1).replace('.', ',')} mois`}
-          {' · prévu vs réel'}
-        </p>
+        <p className="text-xs text-muted-foreground">réel vs prévu</p>
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-4">
@@ -125,8 +111,8 @@ export default function BudgetSummary({
       </div>
 
       <ul className="space-y-2">
-        {rows.map(({ cat, periodBudget, actual }) => (
-          <BudgetRow key={cat._id} cat={cat} periodBudget={periodBudget} actual={actual} />
+        {rows.map(({ cat, budget, actual }) => (
+          <BudgetRow key={cat._id} cat={cat} budget={budget} actual={actual} />
         ))}
       </ul>
     </div>
@@ -154,12 +140,12 @@ function SummaryCell({ icon: Icon, label, actual, budget, tone, showSign }) {
   );
 }
 
-function BudgetRow({ cat, periodBudget, actual }) {
+function BudgetRow({ cat, budget, actual }) {
   const isCredit = cat.kind === 'credit';
   const color = cat.color || DEFAULT_COLOR;
-  // Pour un revenu : ratio = atteint / prévu (idéalement ≥ 1)
-  // Pour une dépense : ratio = consommé / autorisé (alerte si > 1)
-  const ratio = periodBudget > 0 ? actual / periodBudget : 0;
+  // Revenu : ratio = atteint / prévu (idéalement ≥ 1)
+  // Dépense : ratio = consommé / autorisé (alerte si > 1)
+  const ratio = budget > 0 ? actual / budget : 0;
   const overrun = !isCredit && ratio > 1;
   const pct = Math.min(ratio * 100, 100);
 
@@ -175,7 +161,7 @@ function BudgetRow({ cat, periodBudget, actual }) {
           {formatEur(actual)}
         </span>
         <span className="text-xs text-muted-foreground tabular-nums">
-          / {formatEur(periodBudget)}
+          / {formatEur(budget)}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

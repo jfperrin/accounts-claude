@@ -109,3 +109,73 @@ describe('DELETE /api/categories/:id', () => {
     expect((await alice.delete('/api/categories/000000000000000000000000')).status).toBe(204);
   });
 });
+
+describe('Sous-catégories (parentId)', () => {
+  it('crée une sous-catégorie sous un parent racine', async () => {
+    const { body: parent } = await alice.post('/api/categories').send({ label: 'Alimentation' });
+    const res = await alice.post('/api/categories').send({ label: 'Restaurants', parentId: parent._id });
+    expect(res.status).toBe(201);
+    expect(String(res.body.parentId)).toBe(String(parent._id));
+  });
+
+  it('expose parentId=null par défaut sur les racines', async () => {
+    const { body: cat } = await alice.post('/api/categories').send({ label: 'Loisirs' });
+    expect(cat.parentId).toBeNull();
+  });
+
+  it('refuse un parentId inconnu', async () => {
+    const res = await alice.post('/api/categories').send({ label: 'X', parentId: '000000000000000000000000' });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse un parentId appartenant à un autre utilisateur', async () => {
+    const { body: bobCat } = await bob.post('/api/categories').send({ label: 'Bob cat' });
+    const res = await alice.post('/api/categories').send({ label: 'X', parentId: bobCat._id });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse une sous-catégorie sous une sous-catégorie (max 1 niveau)', async () => {
+    const { body: parent } = await alice.post('/api/categories').send({ label: 'A' });
+    const { body: child } = await alice.post('/api/categories').send({ label: 'B', parentId: parent._id });
+    const res = await alice.post('/api/categories').send({ label: 'C', parentId: child._id });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse un parent de kind différent', async () => {
+    const { body: parent } = await alice.post('/api/categories').send({ label: 'Salaires', kind: 'credit' });
+    const res = await alice.post('/api/categories').send({ label: 'Prime', kind: 'debit', parentId: parent._id });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse de devenir son propre parent en update', async () => {
+    const { body: cat } = await alice.post('/api/categories').send({ label: 'Self' });
+    const res = await alice.put(`/api/categories/${cat._id}`).send({ label: 'Self', parentId: cat._id });
+    expect(res.status).toBe(400);
+  });
+
+  it("refuse de passer enfant une catégorie qui a elle-même des enfants", async () => {
+    const { body: a } = await alice.post('/api/categories').send({ label: 'A' });
+    const { body: b } = await alice.post('/api/categories').send({ label: 'B' });
+    await alice.post('/api/categories').send({ label: 'A1', parentId: a._id });
+    const res = await alice.put(`/api/categories/${a._id}`).send({ label: 'A', parentId: b._id });
+    expect(res.status).toBe(400);
+  });
+
+  it("supprime un parent → les enfants remontent en racine", async () => {
+    const { body: parent } = await alice.post('/api/categories').send({ label: 'Alim' });
+    const { body: child } = await alice.post('/api/categories').send({ label: 'Resto', parentId: parent._id });
+    expect((await alice.delete(`/api/categories/${parent._id}`)).status).toBe(204);
+    const cats = (await alice.get('/api/categories')).body;
+    const orphan = cats.find((c) => c._id === child._id);
+    expect(orphan).toBeDefined();
+    expect(orphan.parentId).toBeNull();
+  });
+
+  it('peut détacher une sous-catégorie via parentId=null', async () => {
+    const { body: parent } = await alice.post('/api/categories').send({ label: 'P' });
+    const { body: child } = await alice.post('/api/categories').send({ label: 'C', parentId: parent._id });
+    const res = await alice.put(`/api/categories/${child._id}`).send({ label: 'C', parentId: null });
+    expect(res.status).toBe(200);
+    expect(res.body.parentId).toBeNull();
+  });
+});

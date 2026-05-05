@@ -118,7 +118,8 @@
       "Bash(netstat -ano)",
       "Bash(./node_modules/.bin/vitest run *)",
       "Bash(C:/Users/jf/OneDrive/Github/accounts-claude/server/node_modules/.bin/eslint C:/Users/jf/OneDrive/Github/accounts-claude/server/db/sqlite.js C:/Users/jf/OneDrive/Github/accounts-claude/server/db/mongo.js C:/Users/jf/OneDrive/Github/accounts-claude/server/routes/categories.js C:/Users/jf/OneDrive/Github/accounts-claude/server/models/Category.js)",
-      "Bash(cmd //c \"node_modules\\\\\\\\.bin\\\\\\\\eslint.cmd db/sqlite.js db/mongo.js routes/categories.js models/Category.js\")"
+      "Bash(cmd //c \"node_modules\\\\\\\\.bin\\\\\\\\eslint.cmd db/sqlite.js db/mongo.js routes/categories.js models/Category.js\")",
+      "Bash(where npm *)"
     ]
   }
 }

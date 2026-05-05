@@ -161,6 +161,10 @@ function initSchema(db) {
     // 'transfer' (virement interne — exclus des graphes/prévisions)
     'ALTER TABLE categories ADD COLUMN max_amount REAL',
     "ALTER TABLE categories ADD COLUMN kind TEXT NOT NULL DEFAULT 'debit'",
+    // Sous-catégories (1 niveau) : parent_id pointe vers une autre catégorie racine
+    // du même utilisateur. ON DELETE SET NULL → l'enfant remonte en racine si le
+    // parent disparaît. Validation "1 niveau" + "même kind" côté route.
+    'ALTER TABLE categories ADD COLUMN parent_id TEXT REFERENCES categories(id) ON DELETE SET NULL',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -259,6 +263,7 @@ const mapCategory = (row) => row && {
   color: row.color ?? null,
   maxAmount: row.max_amount ?? null,
   kind: row.kind ?? 'debit',
+  parentId: row.parent_id ?? null,
   userId: row.user_id,
 };
 
@@ -649,24 +654,33 @@ module.exports = function createSQLiteRepos() {
     findByUser: (userId) =>
       db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY label').all(uid(userId)).map(mapCategory),
 
-    create({ label, color = null, maxAmount = null, kind = 'debit', userId }) {
+    create({ label, color = null, maxAmount = null, kind = 'debit', parentId = null, userId }) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO categories (id, label, color, max_amount, kind, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, label, color ?? null, maxAmount ?? null, kind, uid(userId));
+        'INSERT INTO categories (id, label, color, max_amount, kind, parent_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, color ?? null, maxAmount ?? null, kind, parentId ?? null, uid(userId));
       return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
     },
 
-    update(id, userId, { label, color, maxAmount, kind }) {
+    update(id, userId, { label, color, maxAmount, kind, parentId }) {
       const cur = db.prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?').get(id, uid(userId));
       if (!cur) return null;
       const newColor = color !== undefined ? (color ?? null) : (cur.color ?? null);
       const newMax = maxAmount !== undefined ? (maxAmount ?? null) : (cur.max_amount ?? null);
       const newKind = kind !== undefined ? kind : (cur.kind ?? 'debit');
+      const newParent = parentId !== undefined ? (parentId ?? null) : (cur.parent_id ?? null);
       db.prepare(
-        "UPDATE categories SET label = ?, color = ?, max_amount = ?, kind = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
-      ).run(label, newColor, newMax, newKind, id, uid(userId));
+        "UPDATE categories SET label = ?, color = ?, max_amount = ?, kind = ?, parent_id = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
+      ).run(label, newColor, newMax, newKind, newParent, id, uid(userId));
       return mapCategory(db.prepare('SELECT * FROM categories WHERE id = ?').get(id));
+    },
+
+    // Vérifie si une catégorie a au moins un enfant. Utilisé par la route pour
+    // refuser de la passer enfant elle-même (sinon on créerait un 2e niveau).
+    hasChildren: (id, userId) => {
+      const row = db.prepare('SELECT 1 FROM categories WHERE parent_id = ? AND user_id = ? LIMIT 1')
+        .get(id, uid(userId));
+      return !!row;
     },
 
     delete: (id, userId) =>

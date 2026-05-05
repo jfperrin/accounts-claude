@@ -203,7 +203,17 @@ function Categories() {
       <p>
         Sur la page Catégories, dépliez une catégorie pour voir la liste des
         récurrentes qui lui sont rattachées. La page Accueil affiche le
-        rapport «&nbsp;prévu vs réel&nbsp;» sur la période choisie.
+        rapport «&nbsp;réel vs prévu&nbsp;» pour le mois sélectionné&nbsp;:
+        somme des opérations de la catégorie comparée à son budget mensuel.
+      </p>
+      <p>
+        Une catégorie peut avoir une <strong>catégorie parente</strong> pour
+        regrouper des dépenses apparentées (ex.&nbsp;: <em>Restaurants</em> et
+        <em> Courses</em> sous <em>Alimentation</em>). La hiérarchie est limitée
+        à un seul niveau, et l'enfant doit avoir le même type que son parent.
+        Les sélecteurs de catégorie affichent les sous-catégories indentées
+        sous leur parent. Supprimer un parent fait remonter ses enfants au
+        niveau racine.
       </p>
       <p>
         Le camembert <em>Dépenses par catégorie</em> ne représente que les
@@ -257,22 +267,12 @@ function Period() {
   return (
     <Section id="period" title="Sélecteur de période">
       <p>
-        L'accueil expose quatre modes de période, qui pilotent l'ensemble des
-        agrégats (budget, camembert, comparaison N/N-1)&nbsp;:
-      </p>
-      <ul className="ml-5 list-disc space-y-1">
-        <li><strong>30 jours</strong>&nbsp;— les 30 derniers jours glissants.</li>
-        <li><strong>90 jours</strong>&nbsp;— les 90 derniers jours glissants.</li>
-        <li>
-          <strong>Mois</strong>&nbsp;— le mois courant. Les flèches navigent
-          au mois précédent ou suivant&nbsp;; le bouton «&nbsp;Auj.&nbsp;»
-          revient au mois en cours.
-        </li>
-        <li><strong>Perso</strong>&nbsp;— une plage libre, persistée entre les sessions.</li>
-      </ul>
-      <p>
-        Les bornes choisies sont indiquées en regard du sélecteur. La page
-        Opérations dispose du même sélecteur, hors mode <em>Mois</em>.
+        L'accueil se cale sur un mois entier. Les flèches naviguent au mois
+        précédent ou suivant&nbsp;; le bouton «&nbsp;Auj.&nbsp;» revient au
+        mois en cours. Le mois sélectionné pilote le budget, le camembert et
+        la comparaison vs mois précédent. La projection reste basée sur les
+        soldes courants et les six derniers mois pleins, indépendamment du
+        mois affiché.
       </p>
     </Section>
   );
