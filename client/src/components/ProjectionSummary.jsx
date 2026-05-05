@@ -6,16 +6,16 @@ import { computeMonthlyNetByBank } from '@/lib/forecast';
 
 const HORIZONS = [3, 6, 12];
 
-export default function ProjectionSummary({ banks, recurring, history }) {
+export default function ProjectionSummary({ banks, recurring, history, categories = [] }) {
   const { totalCurrent, monthlyTotalNet, recurringTotal, ponctualTotal } = useMemo(() => {
-    const stats = computeMonthlyNetByBank({ banks, recurring, history });
+    const stats = computeMonthlyNetByBank({ banks, recurring, history, categories });
     return {
       totalCurrent: banks.reduce((s, b) => s + (b.currentBalance ?? 0), 0),
       monthlyTotalNet: stats.reduce((s, x) => s + x.monthlyNet, 0),
       recurringTotal: stats.reduce((s, x) => s + x.recurringNet, 0),
       ponctualTotal: stats.reduce((s, x) => s + x.ponctualAvg, 0),
     };
-  }, [banks, recurring, history]);
+  }, [banks, recurring, history, categories]);
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">

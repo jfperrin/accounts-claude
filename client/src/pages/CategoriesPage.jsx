@@ -1,6 +1,6 @@
 import { useState, useMemo, Fragment } from 'react';
 import {
-  Plus, Pencil, Trash2, Tag, ArrowDownCircle, ArrowUpCircle, ChevronRight,
+  Plus, Pencil, Trash2, Tag, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -53,7 +53,9 @@ export default function CategoriesPage() {
       label: label.trim(),
       color,
       kind,
-      maxAmount: maxAmount.trim() === '' ? null : Number(maxAmount.replace(',', '.')),
+      maxAmount: kind === 'transfer' || maxAmount.trim() === ''
+        ? null
+        : Number(maxAmount.replace(',', '.')),
     };
     if (payload.maxAmount !== null && (!Number.isFinite(payload.maxAmount) || payload.maxAmount < 0)) {
       toast.error('Montant max invalide');
@@ -143,6 +145,7 @@ export default function CategoriesPage() {
     let totalDebit = 0;
     let totalCredit = 0;
     categories.forEach((c, i) => {
+      if (c.kind === 'transfer') return;
       const total = budgets[i].total;
       if (total <= 0) return;
       used.push({ label: c.label, color: c.color || DEFAULT_COLOR });
@@ -290,18 +293,26 @@ export default function CategoriesPage() {
 
             <div className="space-y-1.5">
               <Label>Type</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <KindButton active={kind === 'debit'} onClick={() => setKind('debit')} kind="debit" />
                 <KindButton active={kind === 'credit'} onClick={() => setKind('credit')} kind="credit" />
+                <KindButton active={kind === 'transfer'} onClick={() => setKind('transfer')} kind="transfer" />
               </div>
+              {kind === 'transfer' && (
+                <p className="text-xs text-muted-foreground">
+                  Les opérations de cette catégorie sont exclues des graphes et prévisions.
+                </p>
+              )}
             </div>
 
-            <BudgetField
-              maxAmount={maxAmount}
-              setMaxAmount={setMaxAmount}
-              kind={kind}
-              recurringSum={directional(recurringByCategory.get(label) ?? 0, kind)}
-            />
+            {kind !== 'transfer' && (
+              <BudgetField
+                maxAmount={maxAmount}
+                setMaxAmount={setMaxAmount}
+                kind={kind}
+                recurringSum={directional(recurringByCategory.get(label) ?? 0, kind)}
+              />
+            )}
 
 
             <div className="space-y-1.5">
@@ -409,26 +420,47 @@ function RecurringList({ ops }) {
   );
 }
 
+const KIND_META = {
+  debit: {
+    label: 'Dépense',
+    Icon: ArrowDownCircle,
+    badge: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+    border: 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+  },
+  credit: {
+    label: 'Revenu',
+    Icon: ArrowUpCircle,
+    badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+    border: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  },
+  transfer: {
+    label: 'Virement interne',
+    shortLabel: 'Virement',
+    Icon: ArrowLeftRight,
+    badge: 'bg-muted text-muted-foreground border border-border',
+    border: 'border-foreground/40 bg-muted text-foreground',
+  },
+};
+
 function KindBadge({ kind }) {
-  const isCredit = kind === 'credit';
-  const Icon = isCredit ? ArrowUpCircle : ArrowDownCircle;
+  const meta = KIND_META[kind] ?? KIND_META.debit;
+  const Icon = meta.Icon;
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
-        isCredit ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                 : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+        meta.badge,
       )}
     >
       <Icon className="h-3 w-3" />
-      {isCredit ? 'Revenu' : 'Dépense'}
+      {meta.label}
     </span>
   );
 }
 
 function KindButton({ active, onClick, kind }) {
-  const isCredit = kind === 'credit';
-  const Icon = isCredit ? ArrowUpCircle : ArrowDownCircle;
+  const meta = KIND_META[kind] ?? KIND_META.debit;
+  const Icon = meta.Icon;
   return (
     <button
       type="button"
@@ -436,14 +468,12 @@ function KindButton({ active, onClick, kind }) {
       className={cn(
         'flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
         active
-          ? isCredit
-            ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-            : 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+          ? meta.border
           : 'border-border bg-card text-muted-foreground hover:text-foreground',
       )}
     >
       <Icon className="h-4 w-4" />
-      {isCredit ? 'Revenu' : 'Dépense'}
+      {meta.shortLabel ?? meta.label}
     </button>
   );
 }

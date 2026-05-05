@@ -157,7 +157,8 @@ function initSchema(db) {
     'ALTER TABLE category_hints ADD COLUMN category_id TEXT REFERENCES categories(id) ON DELETE CASCADE',
     'ALTER TABLE users ADD COLUMN accepted_tos_at TEXT',
     'ALTER TABLE categories ADD COLUMN color TEXT',
-    // Budget par catégorie + qualification (debit = dépense, credit = revenu)
+    // Budget par catégorie + qualification : 'debit' (dépense), 'credit' (revenu),
+    // 'transfer' (virement interne — exclus des graphes/prévisions)
     'ALTER TABLE categories ADD COLUMN max_amount REAL',
     "ALTER TABLE categories ADD COLUMN kind TEXT NOT NULL DEFAULT 'debit'",
   ]) {
@@ -192,6 +193,14 @@ function initSchema(db) {
   // sans cible ne sert à rien et viole le NOT NULL Mongo.
   try { db.exec('DELETE FROM category_hints WHERE category_id IS NULL'); }
   catch (_) { /* table inexistante */ }
+
+  // Migration : la case "excluded_from_budget" a été remplacée par un 3e kind
+  // ('transfer'). On reporte la valeur si la colonne existe encore, puis on la
+  // droppe. Idempotent : silencieux si déjà fait.
+  try {
+    db.exec("UPDATE categories SET kind = 'transfer' WHERE excluded_from_budget = 1");
+    db.exec('ALTER TABLE categories DROP COLUMN excluded_from_budget');
+  } catch (_) { /* colonne déjà supprimée */ }
 }
 
 // --- Fonctions de mapping SQLite row → objet métier ---

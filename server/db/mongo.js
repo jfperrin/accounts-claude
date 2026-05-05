@@ -357,6 +357,17 @@ async function migrateLegacyCategoryFields() {
     }
   }
   await CategoryHint.updateMany({ category: { $exists: true } }, { $unset: { category: '' } });
+
+  // Migration : la case "excludedFromBudget" a été remplacée par un 3e kind ('transfer').
+  // Idempotent : les docs déjà migrés n'ont plus le champ et passent inaperçus.
+  await Category.updateMany(
+    { excludedFromBudget: true },
+    { $set: { kind: 'transfer' }, $unset: { excludedFromBudget: '' } },
+  );
+  await Category.updateMany(
+    { excludedFromBudget: { $exists: true } },
+    { $unset: { excludedFromBudget: '' } },
+  );
 }
 
 module.exports = {

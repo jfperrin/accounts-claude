@@ -3,10 +3,11 @@ import dayjs from 'dayjs';
 import { CalendarRange } from 'lucide-react';
 import { cn, formatEur } from '@/lib/utils';
 
-function aggregate(operations, start, end) {
+function aggregate(operations, start, end, transferCatIds) {
   let revenues = 0;
   let expenses = 0;
   for (const o of operations) {
+    if (o.categoryId && transferCatIds.has(String(o.categoryId?._id ?? o.categoryId))) continue;
     const d = dayjs(o.date);
     if (d.isBefore(start) || d.isAfter(end)) continue;
     if (o.amount >= 0) revenues += o.amount;
@@ -15,8 +16,11 @@ function aggregate(operations, start, end) {
   return { revenues, expenses, net: revenues - expenses };
 }
 
-export default function MonthlyComparison({ operations }) {
+export default function MonthlyComparison({ operations, categories = [] }) {
   const { current, previous, rangeLabel } = useMemo(() => {
+    const transferCatIds = new Set(
+      categories.filter((c) => c.kind === 'transfer').map((c) => String(c._id)),
+    );
     const today = dayjs().endOf('day');
     const dayOfMonth = today.date();
     const curStart = today.startOf('month');
@@ -26,11 +30,11 @@ export default function MonthlyComparison({ operations }) {
     const prevEndDay = Math.min(dayOfMonth, prevMonth.endOf('month').date());
     const prevEnd = prevMonth.startOf('month').date(prevEndDay).endOf('day');
     return {
-      current: aggregate(operations, curStart, today),
-      previous: aggregate(operations, prevMonth.startOf('month'), prevEnd),
+      current: aggregate(operations, curStart, today, transferCatIds),
+      previous: aggregate(operations, prevMonth.startOf('month'), prevEnd, transferCatIds),
       rangeLabel: `du 1 au ${dayOfMonth}`,
     };
-  }, [operations]);
+  }, [operations, categories]);
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">

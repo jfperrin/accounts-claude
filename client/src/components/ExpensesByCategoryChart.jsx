@@ -32,7 +32,8 @@ export default function ExpensesByCategoryChart({ categories, operations, startD
     for (const [id, value] of sumById.entries()) {
       const cat = catById.get(id);
       // On ne garde que les catégories de type "debit" — un débit posé sur
-      // une catégorie credit (remboursement, ajustement) n'est pas une dépense.
+      // une catégorie credit (remboursement) ou transfer (virement interne)
+      // n'est pas une dépense.
       if (!cat || cat.kind !== 'debit') continue;
       list.push({ id, label: cat.label, color: cat.color || DEFAULT_COLOR, value });
     }

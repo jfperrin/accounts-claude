@@ -198,8 +198,8 @@ export default function HomePage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <MonthlyComparison operations={history} />
-        <ProjectionSummary banks={banks} recurring={recurring} history={history} />
+        <MonthlyComparison operations={history} categories={categories} />
+        <ProjectionSummary banks={banks} recurring={recurring} history={history} categories={categories} />
       </div>
 
       <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />

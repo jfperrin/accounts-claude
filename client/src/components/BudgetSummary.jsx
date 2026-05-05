@@ -41,6 +41,7 @@ export default function BudgetSummary({
   }, [operations]);
 
   const rows = useMemo(() => categories
+    .filter((c) => c.kind !== 'transfer')
     .map((c) => {
       const recurringSum = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
       const monthlyBudget = recurringSum + (c.maxAmount ?? 0);

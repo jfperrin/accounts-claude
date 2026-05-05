@@ -9,9 +9,21 @@ import dayjs from 'dayjs';
 // Identité : ponctualAvg + recurringNet = totalAvg historique (l'historique
 // inclut déjà les récurrentes générées, donc on les retranche pour isoler
 // les ponctuelles).
-export function computeMonthlyNetByBank({ banks, recurring, history, historyMonths = 6 }) {
+export function computeMonthlyNetByBank({
+  banks, recurring, history, categories = [], historyMonths = 6,
+}) {
+  // Catégories de type "transfer" (virements inter-banques) : exclues à la fois
+  // des récurrentes et de l'historique pour ne pas biaiser la moyenne — un
+  // virement A→B est neutre globalement mais déforme la net-par-banque.
+  const transferCatIds = new Set(
+    categories.filter((c) => c.kind === 'transfer').map((c) => String(c._id)),
+  );
+  const isTransfer = (categoryId) => categoryId != null
+    && transferCatIds.has(String(categoryId?._id ?? categoryId));
+
   const recurringByBank = new Map();
   for (const r of recurring) {
+    if (isTransfer(r.categoryId)) continue;
     const id = String(r.bankId?._id ?? r.bankId);
     recurringByBank.set(id, (recurringByBank.get(id) ?? 0) + r.amount);
   }
@@ -20,6 +32,7 @@ export function computeMonthlyNetByBank({ banks, recurring, history, historyMont
   const cutoffEnd = dayjs().startOf('month');
   const histByBank = new Map();
   for (const o of history) {
+    if (isTransfer(o.categoryId)) continue;
     const d = dayjs(o.date);
     if (d.isBefore(cutoffStart) || !d.isBefore(cutoffEnd)) continue;
     const id = String(o.bankId?._id ?? o.bankId);

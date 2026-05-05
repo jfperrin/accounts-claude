@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Download, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Pencil, Trash2, Download, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
@@ -76,8 +76,40 @@ export default function RecurringPage() {
   useEffect(() => { runDetection({ silent: true }); }, []);
 
   const { categories } = useCategories();
-  const load = () => Promise.all([listRecurring(), listBanks()]).then(([ops, b]) => { setItems([...ops].sort((a, b) => a.dayOfMonth - b.dayOfMonth)); setBanks(b); });
+  const load = () => Promise.all([listRecurring(), listBanks()]).then(([ops, b]) => { setItems(ops); setBanks(b); });
   useEffect(() => { load(); }, []);
+
+  const [sortKey, setSortKey] = useState('dayOfMonth');
+  const [sortDir, setSortDir] = useState('asc');
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(key);
+      setSortDir(key === 'amount' || key === 'dayOfMonth' ? 'asc' : 'asc');
+    }
+  };
+  const sortIcon = (k) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const sortedItems = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const cmpStr = (a, b) => (a ?? '').localeCompare(b ?? '', 'fr', { sensitivity: 'base' });
+    const catLabel = (id) => categories.find((c) => c._id === id)?.label ?? '';
+    const arr = [...items];
+    arr.sort((a, b) => {
+      switch (sortKey) {
+        case 'label': return cmpStr(a.label, b.label) * dir;
+        case 'bank': return cmpStr(a.bankId?.label, b.bankId?.label) * dir;
+        case 'category': return cmpStr(catLabel(a.categoryId), catLabel(b.categoryId)) * dir;
+        case 'amount': return (a.amount - b.amount) * dir;
+        case 'dayOfMonth':
+        default: return (a.dayOfMonth - b.dayOfMonth) * dir;
+      }
+    });
+    return arr;
+  }, [items, sortKey, sortDir, categories]);
 
   const openAdd = () => { setForm(empty()); setModal({}); };
   const openFromSuggestion = (s) => {
@@ -224,16 +256,36 @@ export default function RecurringPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Libellé</TableHead>
-              <TableHead>Banque</TableHead>
-              <TableHead>Catégorie</TableHead>
-              <TableHead className="text-center">Jour</TableHead>
-              <TableHead className="text-right">Montant</TableHead>
+              <TableHead>
+                <button type="button" onClick={() => toggleSort('label')} className="inline-flex items-center gap-1 hover:text-foreground">
+                  Libellé {sortIcon('label')}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button type="button" onClick={() => toggleSort('bank')} className="inline-flex items-center gap-1 hover:text-foreground">
+                  Banque {sortIcon('bank')}
+                </button>
+              </TableHead>
+              <TableHead>
+                <button type="button" onClick={() => toggleSort('category')} className="inline-flex items-center gap-1 hover:text-foreground">
+                  Catégorie {sortIcon('category')}
+                </button>
+              </TableHead>
+              <TableHead className="text-center">
+                <button type="button" onClick={() => toggleSort('dayOfMonth')} className="inline-flex items-center gap-1 hover:text-foreground mx-auto">
+                  Jour {sortIcon('dayOfMonth')}
+                </button>
+              </TableHead>
+              <TableHead className="text-right">
+                <button type="button" onClick={() => toggleSort('amount')} className="inline-flex items-center gap-1 hover:text-foreground ml-auto">
+                  Montant {sortIcon('amount')}
+                </button>
+              </TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
+            {sortedItems.map((item) => (
               <TableRow key={item._id}>
                 <TableCell className="font-medium">{item.label}</TableCell>
                 <TableCell><Badge variant="secondary">{item.bankId?.label}</Badge></TableCell>

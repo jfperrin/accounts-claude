@@ -144,6 +144,14 @@ function Operations() {
         similarité tolérante aux variations de date / numéro de carte, mais
         suffisamment stricte pour ne pas mélanger deux marchands différents.
       </p>
+      <p>
+        <strong>Recherche et tri</strong>&nbsp;— un champ de recherche au-dessus
+        du tableau filtre les opérations par libellé en temps réel (insensible
+        à la casse). Sur ordinateur, les en-têtes <em>Date</em>,
+        <em> Libellé</em> et <em>Montant</em> sont cliquables pour basculer
+        l'ordre croissant/décroissant&nbsp;; sur mobile, un sélecteur dédié
+        offre les mêmes options de tri.
+      </p>
     </Section>
   );
 }
@@ -171,6 +179,11 @@ function Recurring() {
         <li>la part «&nbsp;Récurrentes&nbsp;» du budget mensuel d'une catégorie&nbsp;;</li>
         <li>les suggestions automatiques détectées dans l'historique.</li>
       </ul>
+      <p>
+        Le tableau se trie en cliquant sur les en-têtes&nbsp;: <em>Libellé</em>,
+        <em> Banque</em>, <em>Catégorie</em>, <em>Jour</em> et <em>Montant</em>.
+        Chaque clic bascule l'ordre croissant / décroissant.
+      </p>
     </Section>
   );
 }

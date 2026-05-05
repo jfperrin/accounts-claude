@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2 } from 'lucide-react';
+import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, formatEur } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
@@ -130,12 +131,43 @@ export default function OperationsTable({ operations, categories = [], recurring
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+  const [sortKey, setSortKey] = useState('date');
+  const [sortDir, setSortDir] = useState('desc');
 
-  // Tri décroissant : opérations les plus récentes en haut.
-  const sorted = useMemo(
-    () => [...operations].sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [operations]
-  );
+  const toggleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'label' ? 'asc' : 'desc');
+    }
+    setPage(1);
+  };
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return operations;
+    return operations.filter((op) => op.label?.toLowerCase().includes(q));
+  }, [operations, query]);
+
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      if (sortKey === 'amount') return (a.amount - b.amount) * dir;
+      if (sortKey === 'label') return a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }) * dir;
+      return (new Date(a.date) - new Date(b.date)) * dir;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  useEffect(() => { setPage(1); }, [query]);
+
+  const sortIcon = (k) => {
+    if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
 
   // Match heuristique op ↔ récurrente : même `label|bankId|amount` (clé utilisée
   // par le moteur de génération côté serveur). Cas non couverts : op réconciliée
@@ -172,6 +204,48 @@ export default function OperationsTable({ operations, categories = [], recurring
 
   return (
     <>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un libellé…"
+            className="pl-8 pr-8 h-9"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Effacer"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <div className="md:hidden flex items-center gap-1">
+          <Select value={sortKey} onValueChange={(v) => { setSortKey(v); setPage(1); }}>
+            <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="date">Date</SelectItem>
+              <SelectItem value="label">Libellé</SelectItem>
+              <SelectItem value="amount">Montant</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9"
+            aria-label={sortDir === 'asc' ? 'Croissant' : 'Décroissant'}
+            onClick={() => { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); setPage(1); }}
+          >
+            {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+
       <div className="md:hidden flex flex-col gap-2">
         {rows.map((op) => (
           <SwipeableCard
@@ -234,10 +308,22 @@ export default function OperationsTable({ operations, categories = [], recurring
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Libellé</TableHead>
+            <TableHead>
+              <button type="button" onClick={() => toggleSort('date')} className="inline-flex items-center gap-1 hover:text-foreground">
+                Date {sortIcon('date')}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button type="button" onClick={() => toggleSort('label')} className="inline-flex items-center gap-1 hover:text-foreground">
+                Libellé {sortIcon('label')}
+              </button>
+            </TableHead>
             <TableHead>Banque</TableHead>
-            <TableHead className="text-right">Montant</TableHead>
+            <TableHead className="text-right">
+              <button type="button" onClick={() => toggleSort('amount')} className="inline-flex items-center gap-1 hover:text-foreground ml-auto">
+                Montant {sortIcon('amount')}
+              </button>
+            </TableHead>
             <TableHead className="text-center">Pointé</TableHead>
             <TableHead />
           </TableRow>

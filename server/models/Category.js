@@ -4,7 +4,7 @@ const schema = new Schema({
   label:     { type: String, required: true, trim: true },
   color:     { type: String, default: null },
   maxAmount: { type: Number, default: null },
-  kind:      { type: String, enum: ['debit', 'credit'], default: 'debit' },
+  kind:      { type: String, enum: ['debit', 'credit', 'transfer'], default: 'debit' },
   userId:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
 
