@@ -132,6 +132,7 @@ export default function OperationsTable({ operations, categories = [], recurring
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortKey, setSortKey] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
 
@@ -147,9 +148,13 @@ export default function OperationsTable({ operations, categories = [], recurring
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return operations;
-    return operations.filter((op) => op.label?.toLowerCase().includes(q));
-  }, [operations, query]);
+    return operations.filter((op) => {
+      if (q && !op.label?.toLowerCase().includes(q)) return false;
+      if (categoryFilter === 'all') return true;
+      if (categoryFilter === 'none') return !op.categoryId;
+      return op.categoryId === categoryFilter;
+    });
+  }, [operations, query, categoryFilter]);
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -162,7 +167,7 @@ export default function OperationsTable({ operations, categories = [], recurring
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  useEffect(() => { setPage(1); }, [query]);
+  useEffect(() => { setPage(1); }, [query, categoryFilter]);
 
   const sortIcon = (k) => {
     if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
@@ -225,6 +230,18 @@ export default function OperationsTable({ operations, categories = [], recurring
             </button>
           )}
         </div>
+        {categories.length > 0 && (
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-9 w-40 sm:w-48" aria-label="Filtrer par catégorie">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes catégories</SelectItem>
+              <SelectItem value="none">— Sans catégorie</SelectItem>
+              <CategorySelectItems categories={categories} />
+            </SelectContent>
+          </Select>
+        )}
         <div className="md:hidden flex items-center gap-1">
           <Select value={sortKey} onValueChange={(v) => { setSortKey(v); setPage(1); }}>
             <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
@@ -280,7 +297,7 @@ export default function OperationsTable({ operations, categories = [], recurring
                   </Select>
                 ))}
               </div>
-              <span className={cn('text-sm font-semibold shrink-0', op.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+              <span className={cn('text-sm font-semibold shrink-0', op.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
                 {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
               </span>
             </div>
@@ -369,7 +386,7 @@ export default function OperationsTable({ operations, categories = [], recurring
               <TableCell>
                 <Badge variant="secondary">{op.bankId?.label}</Badge>
               </TableCell>
-              <TableCell className={cn('text-right font-semibold', op.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+              <TableCell className={cn('text-right font-semibold', op.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
                 {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
               </TableCell>
               <TableCell className="text-center">

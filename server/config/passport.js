@@ -63,8 +63,15 @@ module.exports = function configurePassport(db) {
   passport.deserializeUser(async (id, done) => {
     try {
       const user = await db.users.findById(id); // retourne sans passwordHash
-      done(null, user);
+      // Passport lance "Failed to deserialize user" si on lui passe undefined.
+      // SQLite renvoie undefined pour un id inexistant (Mongoose renvoie null) :
+      // on normalise en false → invalide proprement la session.
+      done(null, user || false);
     } catch (err) {
+      // En dual mode dev, l'id sérialisé peut venir d'un autre backend
+      // (CastError Mongoose sur un UUID, ou autre lookup raté) → user absent,
+      // pas une erreur 500.
+      if (err?.name === 'CastError') return done(null, false);
       done(err);
     }
   });

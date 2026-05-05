@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from '@/lib/utils';
 import Footer from '@/components/layout/Footer';
 import ThemeToggle from '@/components/ThemeToggle';
+import DbToggle from '@/components/DbToggle';
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
@@ -116,6 +117,8 @@ export default function AppShell() {
           </div>
 
           <div className="flex-1" />
+
+          {import.meta.env.DEV && <DbToggle />}
 
           <ThemeToggle />
 

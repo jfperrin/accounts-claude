@@ -16,6 +16,11 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
     [operations],
   );
 
+  const total = useMemo(
+    () => sorted.reduce((sum, op) => sum + op.amount, 0),
+    [sorted],
+  );
+
   const today = dayjs().startOf('day');
   const visible = expanded ? sorted : sorted.slice(0, INITIAL_LIMIT);
   const hidden = sorted.length - visible.length;
@@ -33,9 +38,17 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
 
   return (
     <div className="rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">
-      <div className="mb-2 flex items-center justify-between px-2 sm:px-0">
+      <div className="mb-2 flex items-center justify-between gap-2 px-2 sm:px-0">
         <h2 className="text-sm font-semibold">Opérations non pointées</h2>
-        <span className="text-xs text-muted-foreground">{sorted.length}</span>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">{sorted.length}</span>
+          <span className={cn(
+            'tabular-nums font-semibold',
+            total >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+          )}>
+            {formatEur(total)}
+          </span>
+        </div>
       </div>
 
       <ul className="divide-y divide-border/60">
@@ -76,7 +89,7 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
               </div>
               <span className={cn(
                 'tabular-nums text-sm font-semibold whitespace-nowrap',
-                op.amount >= 0 ? 'text-emerald-600' : 'text-rose-600',
+                op.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
               )}>
                 {formatEur(op.amount)}
               </span>

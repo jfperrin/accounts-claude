@@ -11,10 +11,16 @@ const cors = require('cors');
 const helmet = require('helmet');
 const requireAuth = require('./middleware/requireAuth');
 const requireAdmin = require('./middleware/requireAdmin');
+const { dbMiddleware } = require('./db/dualDb');
 
 // mongoUri est null en développement (SQLite) → on utilise MemoryStore pour les sessions.
 // En production, mongoUri est fourni → sessions persistées dans MongoDB via connect-mongo.
-module.exports = function createApp(db, mongoUri) {
+//
+// Quand `options.dualMode` est vrai, `db` doit être le proxy `createDualDb()`,
+// et un middleware en amont sélectionne SQLite ou MongoDB selon le cookie
+// `db_backend` (dev uniquement).
+module.exports = function createApp(db, mongoUri, options = {}) {
+  const { dualMode = false } = options;
   const app = express();
 
   // Configure les stratégies Passport avec l'implémentation de base de données active.
@@ -32,6 +38,9 @@ module.exports = function createApp(db, mongoUri) {
   // credentials:true est obligatoire pour que le cookie de session soit transmis.
   app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
   app.use(express.json());
+
+  // Doit être posé AVANT passport.session() — deserializeUser va lire le proxy db.
+  if (dualMode) app.use(dbMiddleware);
 
   // Sert les avatars en dev (stockage disque local)
   if (!mongoUri) app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -70,6 +79,9 @@ module.exports = function createApp(db, mongoUri) {
 
   // Routes publiques (pas de requireAuth)
   app.use('/api/auth', require('./routes/auth'));
+
+  // Endpoints de développement (introspection du backend actif).
+  if (dualMode) app.use('/api/dev', require('./routes/dev'));
 
   // Routes protégées : requireAuth renvoie 401 si la session est absente
   app.use('/api/banks', requireAuth, require('./routes/banks'));

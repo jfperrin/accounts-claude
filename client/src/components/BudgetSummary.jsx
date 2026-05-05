@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { HelpCircle, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { cn, formatEur } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 
@@ -14,6 +14,13 @@ function directional(sum, kind) {
 export default function BudgetSummary({
   categories, recurring, operations,
 }) {
+  const uncategorized = useMemo(() => {
+    let count = 0; let total = 0;
+    for (const o of operations) {
+      if (!o.categoryId) { count += 1; total += o.amount; }
+    }
+    return { count, total };
+  }, [operations]);
   const recurringByCategory = useMemo(() => {
     const m = new Map();
     for (const r of recurring) {
@@ -50,22 +57,24 @@ export default function BudgetSummary({
 
   const totals = useMemo(() => {
     let budgetCredit = 0; let budgetDebit = 0;
-    let actualCredit = 0; let actualDebit = 0;
     for (const r of rows) {
-      if (r.cat.kind === 'credit') {
-        budgetCredit += r.budget;
-        actualCredit += r.actual;
-      } else {
-        budgetDebit += r.budget;
-        actualDebit += r.actual;
-      }
+      if (r.cat.kind === 'credit') budgetCredit += r.budget;
+      else budgetDebit += r.budget;
+    }
+    // Réel = somme brute sur toutes les opérations de la période (catégorisées
+    // ou non), pour que Revenus/Dépenses/Solde reflètent l'argent réellement
+    // entré/sorti — pas seulement la part rangée dans une catégorie.
+    let actualCredit = 0; let actualDebit = 0;
+    for (const o of operations) {
+      if (o.amount >= 0) actualCredit += o.amount;
+      else actualDebit += -o.amount;
     }
     return {
       budgetCredit, budgetDebit, actualCredit, actualDebit,
       budgetNet: budgetCredit - budgetDebit,
       actualNet: actualCredit - actualDebit,
     };
-  }, [rows]);
+  }, [rows, operations]);
 
   if (rows.length === 0) {
     return (
@@ -115,6 +124,19 @@ export default function BudgetSummary({
           <BudgetRow key={cat._id} cat={cat} budget={budget} actual={actual} />
         ))}
       </ul>
+
+      {uncategorized.count > 0 && (
+        <div className="mt-3 pt-3 border-t border-border/60 flex items-center gap-2 text-sm">
+          <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="flex-1 truncate font-medium">Sans catégorie</span>
+          <span className={cn(
+            'tabular-nums font-semibold',
+            uncategorized.total >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+          )}>
+            {formatEur(uncategorized.total)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

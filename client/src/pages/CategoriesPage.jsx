@@ -499,13 +499,13 @@ const KIND_META = {
   debit: {
     label: 'Dépense',
     Icon: ArrowDownCircle,
-    badge: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+    badge: 'bg-rose-500 text-white dark:bg-rose-600',
     border: 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
   },
   credit: {
     label: 'Revenu',
     Icon: ArrowUpCircle,
-    badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+    badge: 'bg-emerald-500 text-white dark:bg-emerald-600',
     border: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
   },
   transfer: {
@@ -523,7 +523,7 @@ function KindBadge({ kind }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+        'inline-flex items-center gap-1 rounded-full pl-2 pr-2.5 py-1 text-xs font-medium',
         meta.badge,
       )}
     >
