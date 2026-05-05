@@ -162,7 +162,10 @@ export default function OperationsTable({ operations, categories = [], recurring
     arr.sort((a, b) => {
       if (sortKey === 'amount') return (a.amount - b.amount) * dir;
       if (sortKey === 'label') return a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }) * dir;
-      return (new Date(a.date) - new Date(b.date)) * dir;
+      const d = (new Date(a.date) - new Date(b.date)) * dir;
+      if (d !== 0) return d;
+      // À date égale : non pointées avant pointées (indépendant du sens de tri).
+      return (a.pointed === b.pointed) ? 0 : (a.pointed ? 1 : -1);
     });
     return arr;
   }, [filtered, sortKey, sortDir]);

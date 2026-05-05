@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { CalendarDays, ChevronDown, Download, Plus, Tag, Upload } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
@@ -36,6 +36,7 @@ const COOKIE_NAME = 'dash_date_range';
 const RANGE_MODES = [
   { value: '30d', label: '30j' },
   { value: '90d', label: '90j' },
+  { value: 'month', label: 'Mois' },
   { value: 'custom', label: 'Perso' },
 ];
 
@@ -58,16 +59,23 @@ export default function OperationsPage() {
   const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref()?.mode ?? '30d');
   const [customStart, setCustomStart] = useState(() => getCookiePref()?.start ?? dayjs().subtract(29, 'day').format('YYYY-MM-DD'));
   const [customEnd, setCustomEnd] = useState(() => getCookiePref()?.end ?? dayjs().format('YYYY-MM-DD'));
+  const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
 
-  const setRangeMode = (mode) => { setRangeModeRaw(mode); setCookiePref({ mode, start: customStart, end: customEnd }); };
-  const updateCustomStart = (v) => { setCustomStart(v); setCookiePref({ mode: rangeMode, start: v, end: customEnd }); };
-  const updateCustomEnd = (v) => { setCustomEnd(v); setCookiePref({ mode: rangeMode, start: customStart, end: v }); };
+  const persist = (next) => setCookiePref({ mode: rangeMode, start: customStart, end: customEnd, monthOffset, ...next });
+  const setRangeMode = (mode) => { setRangeModeRaw(mode); persist({ mode }); };
+  const updateCustomStart = (v) => { setCustomStart(v); persist({ start: v }); };
+  const updateCustomEnd = (v) => { setCustomEnd(v); persist({ end: v }); };
+  const setMonthOffset = (v) => { setMonthOffsetRaw(v); persist({ monthOffset: v }); };
 
   const { startDate, endDate } = useMemo(() => {
     if (rangeMode === '30d') return { startDate: dayjs().subtract(29, 'day').format('YYYY-MM-DD'), endDate: '2099-12-31' };
     if (rangeMode === '90d') return { startDate: dayjs().subtract(89, 'day').format('YYYY-MM-DD'), endDate: '2099-12-31' };
+    if (rangeMode === 'month') {
+      const m = dayjs().add(monthOffset, 'month');
+      return { startDate: m.startOf('month').format('YYYY-MM-DD'), endDate: m.endOf('month').format('YYYY-MM-DD') };
+    }
     return { startDate: customStart, endDate: customEnd };
-  }, [rangeMode, customStart, customEnd]);
+  }, [rangeMode, customStart, customEnd, monthOffset]);
 
   const { operations, reload: reloadOperations } = useOperations({ startDate, endDate });
 
@@ -296,6 +304,38 @@ export default function OperationsPage() {
             />
           </>
         )}
+        {rangeMode === 'month' && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setMonthOffset(monthOffset - 1)}
+              aria-label="Mois précédent"
+              className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-[140px] text-center text-sm font-medium tabular-nums capitalize">
+              {dayjs().add(monthOffset, 'month').format('MMMM YYYY')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setMonthOffset(monthOffset + 1)}
+              aria-label="Mois suivant"
+              className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            {monthOffset !== 0 && (
+              <button
+                type="button"
+                onClick={() => setMonthOffset(0)}
+                className="ml-1 text-xs text-indigo-600 hover:underline"
+              >
+                Auj.
+              </button>
+            )}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setOnlyUncategorized((s) => !s)}
@@ -383,6 +423,9 @@ export default function OperationsPage() {
             <span className="font-semibold text-foreground">
               {rangeMode === '30d' && '30 derniers jours'}
               {rangeMode === '90d' && '90 derniers jours'}
+              {rangeMode === 'month' && (
+                <span className="capitalize">{dayjs().add(monthOffset, 'month').format('MMMM YYYY')}</span>
+              )}
               {rangeMode === 'custom' && `${dayjs(startDate).format('DD/MM/YYYY')} – ${dayjs(endDate).format('DD/MM/YYYY')}`}
             </span>
             <span className="text-sm text-muted-foreground">
