@@ -39,21 +39,54 @@ export default function BudgetSummary({
     return m;
   }, [operations]);
 
-  const rows = useMemo(() => categories
-    .filter((c) => c.kind !== 'transfer')
-    .map((c) => {
-      const recurringSum = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
-      const rawBudget = recurringSum + (c.maxAmount ?? 0);
-      const budget = Math.ceil(rawBudget / 10) * 10;
-      const actual = directional(actualByCategory.get(c._id) ?? 0, c.kind);
-      return { cat: c, budget, actual };
-    })
-    .filter((r) => r.budget > 0 || r.actual > 0)
-    .sort((a, b) => {
+  const rows = useMemo(() => {
+    // 1. Calcule budget/actual pour chaque catégorie non-transfer.
+    const computed = categories
+      .filter((c) => c.kind !== 'transfer')
+      .map((c) => {
+        const recurringSum = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
+        const rawBudget = recurringSum + (c.maxAmount ?? 0);
+        const budget = Math.ceil(rawBudget / 10) * 10;
+        const actual = directional(actualByCategory.get(c._id) ?? 0, c.kind);
+        return { cat: c, budget, actual, hasOwn: budget > 0 || actual > 0 };
+      });
+    const byId = new Map(computed.map((r) => [String(r.cat._id), r]));
+
+    // 2. Sépare racines / enfants. Un parentId qui ne pointe sur aucune
+    //    catégorie connue → la catégorie est traitée en racine.
+    const childrenByParent = new Map();
+    const roots = [];
+    for (const r of computed) {
+      const pid = r.cat.parentId ? String(r.cat.parentId) : null;
+      if (pid && byId.has(pid)) {
+        if (!childrenByParent.has(pid)) childrenByParent.set(pid, []);
+        childrenByParent.get(pid).push(r);
+      } else {
+        roots.push(r);
+      }
+    }
+
+    // 3. Ordre : credit avant debit, puis par (budget+actual) décroissant.
+    const score = (r) => r.budget + r.actual;
+    const cmp = (a, b) => {
       if (a.cat.kind !== b.cat.kind) return a.cat.kind === 'credit' ? -1 : 1;
-      return b.budget - a.budget;
-    }),
-  [categories, recurringByCategory, actualByCategory]);
+      return score(b) - score(a);
+    };
+    roots.sort(cmp);
+    for (const arr of childrenByParent.values()) arr.sort(cmp);
+
+    // 4. Aplatissement avec depth. Une racine s'affiche si elle a un budget/actuel
+    //    propre, OU si au moins un de ses enfants est visible (pour conserver le
+    //    groupement parent → sous-catégories).
+    const out = [];
+    for (const r of roots) {
+      const kids = (childrenByParent.get(String(r.cat._id)) ?? []).filter((k) => k.hasOwn);
+      if (!r.hasOwn && kids.length === 0) continue;
+      out.push({ ...r, depth: 0 });
+      for (const k of kids) out.push({ ...k, depth: 1 });
+    }
+    return out;
+  }, [categories, recurringByCategory, actualByCategory]);
 
   const totals = useMemo(() => {
     let budgetCredit = 0; let budgetDebit = 0;
@@ -120,8 +153,8 @@ export default function BudgetSummary({
       </div>
 
       <ul className="space-y-2">
-        {rows.map(({ cat, budget, actual }) => (
-          <BudgetRow key={cat._id} cat={cat} budget={budget} actual={actual} />
+        {rows.map(({ cat, budget, actual, depth }) => (
+          <BudgetRow key={cat._id} cat={cat} budget={budget} actual={actual} depth={depth} />
         ))}
       </ul>
 
@@ -162,7 +195,7 @@ function SummaryCell({ icon: Icon, label, actual, budget, tone, showSign }) {
   );
 }
 
-function BudgetRow({ cat, budget, actual }) {
+function BudgetRow({ cat, budget, actual, depth = 0 }) {
   const isCredit = cat.kind === 'credit';
   const color = cat.color || DEFAULT_COLOR;
   // Revenu : ratio = atteint / prévu (idéalement ≥ 1)
@@ -172,8 +205,9 @@ function BudgetRow({ cat, budget, actual }) {
   const pct = Math.min(ratio * 100, 100);
 
   return (
-    <li className="space-y-1">
+    <li className={cn('space-y-1', depth > 0 && 'pl-4')}>
       <div className="flex items-center gap-2 text-sm">
+        {depth > 0 && <span className="text-muted-foreground text-xs shrink-0">↳</span>}
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <span className="flex-1 truncate font-medium">{cat.label}</span>
         <span className={cn(

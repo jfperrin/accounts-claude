@@ -15,7 +15,10 @@ import MonthlyComparison from '@/components/MonthlyComparison';
 import ProjectionSummary from '@/components/ProjectionSummary';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
 
-const COOKIE_NAME = 'home_date_range';
+// Cookie partagé avec OperationsPage pour conserver la période sélectionnée
+// d'une page à l'autre. HomePage ne pilote que `monthOffset` (et force
+// `mode: 'month'` pour que la page Opérations reflète le même mois).
+const COOKIE_NAME = 'dash_date_range';
 
 function getCookiePref() {
   const match = document.cookie.match(new RegExp('(?:^|; )' + COOKIE_NAME + '=([^;]*)'));
@@ -35,7 +38,10 @@ export default function HomePage() {
   const { operations: unpointed, reload: reloadUnpointed } = useUnpointedOperations();
 
   const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
-  const setMonthOffset = (v) => { setMonthOffsetRaw(v); setCookiePref({ monthOffset: v }); };
+  const setMonthOffset = (v) => {
+    setMonthOffsetRaw(v);
+    setCookiePref({ ...(getCookiePref() ?? {}), mode: 'month', monthOffset: v });
+  };
 
   const { startDate, endDate } = useMemo(() => {
     const m = dayjs().add(monthOffset, 'month');
