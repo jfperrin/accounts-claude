@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { HelpCircle, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { cn, formatEur } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
+import InfoTip from '@/components/InfoTip';
 
 // Budget mensuel d'une catégorie = somme des récurrentes assignées (en valeur
 // directionnelle selon kind) + maxAmount complémentaire. Identique au calcul
@@ -94,20 +95,24 @@ export default function BudgetSummary({
       if (r.cat.kind === 'credit') budgetCredit += r.budget;
       else budgetDebit += r.budget;
     }
-    // Réel = somme brute sur toutes les opérations de la période (catégorisées
-    // ou non), pour que Revenus/Dépenses/Solde reflètent l'argent réellement
-    // entré/sorti — pas seulement la part rangée dans une catégorie.
+    // Réel = uniquement les opérations dont la catégorie est de type credit /
+    // debit. Transferts et opérations sans catégorie sont exclus (ces dernières
+    // sont totalisées séparément dans la ligne « Sans catégorie » plus bas).
+    const catById = new Map(categories.map((c) => [String(c._id), c]));
     let actualCredit = 0; let actualDebit = 0;
     for (const o of operations) {
-      if (o.amount >= 0) actualCredit += o.amount;
-      else actualDebit += -o.amount;
+      if (!o.categoryId) continue;
+      const cat = catById.get(String(o.categoryId));
+      if (!cat || cat.kind === 'transfer') continue;
+      if (cat.kind === 'credit') actualCredit += Math.max(0, o.amount);
+      else actualDebit += Math.max(0, -o.amount);
     }
     return {
       budgetCredit, budgetDebit, actualCredit, actualDebit,
       budgetNet: budgetCredit - budgetDebit,
       actualNet: actualCredit - actualDebit,
     };
-  }, [rows, operations]);
+  }, [rows, operations, categories]);
 
   if (rows.length === 0) {
     return (
@@ -123,7 +128,19 @@ export default function BudgetSummary({
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold">Budget</h2>
+        <h2 className="text-sm font-semibold flex items-center gap-1.5">
+          Budget
+          <InfoTip>
+            Pour chaque tuile, le grand chiffre est le <strong>réel</strong>
+            {' '}constaté sur la période sélectionnée, le second est le
+            {' '}<strong>prévu</strong>. Le prévu d'une catégorie =
+            somme des récurrentes assignées + complément mensuel
+            (<em>maxAmount</em>), arrondi à la dizaine supérieure. Les
+            transferts internes et les opérations sans catégorie ne
+            comptent pas dans Revenus / Dépenses / Solde — les non
+            catégorisées sont totalisées séparément en bas.
+          </InfoTip>
+        </h2>
         <p className="text-xs text-muted-foreground">réel vs prévu</p>
       </div>
 

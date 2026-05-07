@@ -3,6 +3,7 @@ import { PieChart as PieChartIcon } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import { formatEur } from '@/lib/utils';
+import InfoTip from '@/components/InfoTip';
 
 // Compare deux YYYY-MM-DD via les 10 premiers caractères ISO. Indépendant du
 // fuseau, contrairement à new Date(...) qui ramène à minuit UTC.
@@ -65,6 +66,13 @@ export default function ExpensesByCategoryChart({ categories, operations, startD
         <h2 className="text-sm font-semibold flex items-center gap-2">
           <PieChartIcon className="h-4 w-4 text-indigo-600" />
           Dépenses par catégorie
+          <InfoTip>
+            Répartition des dépenses sur la période sélectionnée. Seules
+            les catégories de type <em>dépense</em> sont représentées —
+            un débit posé sur une catégorie de revenu (remboursement) ou
+            de transfert n'apparaît pas. Les opérations sans catégorie
+            sont totalisées séparément en haut à droite.
+          </InfoTip>
         </h2>
         <p className="text-xs text-muted-foreground tabular-nums">
           Total {formatEur(total)}

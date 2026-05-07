@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import dayjs from 'dayjs';
 import { CalendarRange } from 'lucide-react';
 import { cn, formatEur } from '@/lib/utils';
+import InfoTip from '@/components/InfoTip';
 
 function aggregate(operations, start, end, transferCatIds) {
   let revenues = 0;
@@ -61,6 +62,13 @@ export default function MonthlyComparison({ operations, categories = [], monthOf
           <span className="capitalize">{currentLabel}</span>
           <span className="text-muted-foreground font-normal">vs</span>
           <span className="capitalize">{previousLabel}</span>
+          <InfoTip>
+            Comparaison du mois sélectionné avec le précédent. Sur le
+            mois en cours, on s'arrête à aujourd'hui et on confronte au
+            même quantième du mois d'avant — sinon mois pleins. Les
+            transferts internes sont exclus. La couleur de la variation
+            indique si elle est favorable (vert) ou non (rose).
+          </InfoTip>
         </h2>
         <p className="text-xs text-muted-foreground">{rangeLabel}</p>
       </div>

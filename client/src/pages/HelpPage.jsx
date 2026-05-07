@@ -117,6 +117,12 @@ function Banks() {
       <p className="text-muted-foreground">
         Formule&nbsp;: <code>projetté = courant + Σ montant des opérations non pointées</code>.
       </p>
+      <p>
+        L'accueil affiche en haut une carte <em>Soldes</em> globale,
+        indépendante de la période sélectionnée&nbsp;: somme des soldes
+        courants, somme des soldes projetés et total signé des opérations
+        restant à pointer.
+      </p>
     </Section>
   );
 }
@@ -175,7 +181,6 @@ function Recurring() {
         Les récurrentes alimentent aussi&nbsp;:
       </p>
       <ul className="ml-5 list-disc space-y-1">
-        <li>la projection des soldes futurs (<em>Solde prévisionnel</em>)&nbsp;;</li>
         <li>la part «&nbsp;Récurrentes&nbsp;» du budget mensuel d'une catégorie&nbsp;;</li>
         <li>les suggestions automatiques détectées dans l'historique.</li>
       </ul>
@@ -219,6 +224,11 @@ function Categories() {
         Le camembert <em>Dépenses par catégorie</em> ne représente que les
         catégories de type dépense. Les opérations sans catégorie sont totalisées
         à part, en information, pour vous inviter à les classer.
+      </p>
+      <p>
+        Le <em>Taux de dépense</em> exprime la part de vos revenus consommée
+        par les dépenses sur la période sélectionnée. En dessous de 100&nbsp;%
+        vous épargnez&nbsp;; au-dessus, le solde du mois est négatif.
       </p>
     </Section>
   );
@@ -269,10 +279,9 @@ function Period() {
       <p>
         L'accueil se cale sur un mois entier. Les flèches naviguent au mois
         précédent ou suivant&nbsp;; le bouton «&nbsp;Auj.&nbsp;» revient au
-        mois en cours. Le mois sélectionné pilote le budget, le camembert et
-        la comparaison vs mois précédent. La projection reste basée sur les
-        soldes courants et les six derniers mois pleins, indépendamment du
-        mois affiché.
+        mois en cours. Le mois sélectionné pilote le budget, le camembert,
+        la comparaison vs mois précédent et le taux de dépense. La période
+        choisie est conservée entre l'accueil et la liste des opérations.
       </p>
     </Section>
   );

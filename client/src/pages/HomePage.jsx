@@ -8,12 +8,13 @@ import { useCategories } from '@/hooks/useCategories';
 import { useOperations } from '@/hooks/useOperations';
 import { useRecurringOperations } from '@/hooks/useRecurringOperations';
 import { useUnpointedOperations } from '@/hooks/useUnpointedOperations';
-import HomeBankCards from '@/components/HomeBankCards';
 import BudgetSummary from '@/components/BudgetSummary';
 import ExpensesByCategoryChart from '@/components/ExpensesByCategoryChart';
 import MonthlyComparison from '@/components/MonthlyComparison';
-import ProjectionSummary from '@/components/ProjectionSummary';
+import ExpenseRatioCard from '@/components/ExpenseRatioCard';
+import BalanceSummary from '@/components/BalanceSummary';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 // Cookie partagé avec OperationsPage pour conserver la période sélectionnée
 // d'une page à l'autre. HomePage ne pilote que `monthOffset` (et force
@@ -51,20 +52,10 @@ export default function HomePage() {
     };
   }, [monthOffset]);
 
-  // Operations sur le mois sélectionné — alimente Budget et graphe.
+  // Operations sur le mois sélectionné — alimente Budget, graphe et ratio.
   const { operations } = useOperations({ startDate, endDate });
 
-  // 12 mois pleins glissants : couvre le mois précédent du sélectionné pour la
-  // comparaison N/N-1, et alimente la moyenne ponctuelle de la projection
-  // (filtre interne sur 6 mois). Range stable au montage.
-  const historyRange = useMemo(() => ({
-    startDate: dayjs().subtract(12, 'month').startOf('month').format('YYYY-MM-DD'),
-    endDate: dayjs().format('YYYY-MM-DD'),
-  }), []);
-  const { operations: history } = useOperations(historyRange);
-
-  // Opérations du mois précédent du sélectionné (pour MonthlyComparison) —
-  // peut sortir de historyRange si on navigue loin dans le passé.
+  // Opérations du mois précédent du sélectionné (pour MonthlyComparison).
   const comparisonRange = useMemo(() => {
     const sel = dayjs().add(monthOffset, 'month');
     const prev = sel.subtract(1, 'month');
@@ -85,10 +76,9 @@ export default function HomePage() {
   };
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="space-y-4">
-      {banks.length > 0 && (
-        <HomeBankCards banks={banks} unpointed={unpointed} endDate={endDate} />
-      )}
+      {banks.length > 0 && <BalanceSummary banks={banks} />}
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">
         <CalendarDays className="h-5 w-5 text-indigo-600 shrink-0" />
@@ -144,10 +134,11 @@ export default function HomePage() {
           categories={categories}
           monthOffset={monthOffset}
         />
-        <ProjectionSummary banks={banks} recurring={recurring} history={history} categories={categories} />
+        <ExpenseRatioCard operations={operations} categories={categories} />
       </div>
 
       <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
     </div>
+    </TooltipProvider>
   );
 }
