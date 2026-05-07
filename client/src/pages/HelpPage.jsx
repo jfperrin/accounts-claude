@@ -8,6 +8,7 @@ const SECTIONS = [
   { id: 'categories', title: 'Catégories et budget' },
   { id: 'import', title: 'Import de relevés' },
   { id: 'period', title: 'Sélecteur de période' },
+  { id: 'insights', title: 'Analyse du mois' },
   { id: 'pwa', title: 'Installation et mises à jour' },
 ];
 
@@ -34,6 +35,7 @@ export default function HelpPage() {
           <Categories />
           <Import />
           <Period />
+          <Insights />
           <Pwa />
         </div>
       </div>
@@ -144,11 +146,16 @@ function Operations() {
       </p>
       <p>
         Lorsque vous attribuez une catégorie à une opération, l'application
-        propose d'appliquer la même catégorie aux opérations similaires non
-        catégorisées de la même banque, dans une fenêtre de ±3 mois autour de
-        la date de l'opération source. Les libellés sont comparés via une
-        similarité tolérante aux variations de date / numéro de carte, mais
-        suffisamment stricte pour ne pas mélanger deux marchands différents.
+        propose d'appliquer la même catégorie aux opérations similaires de
+        la même banque, dans une fenêtre de ±3 mois autour de la date de
+        l'opération source. Si la source était <strong>sans catégorie</strong>,
+        seules les autres opérations sans catégorie sont proposées. Si la
+        source <strong>changeait déjà de catégorie</strong>, les similaires
+        encore dans une autre catégorie (notamment l'ancienne) sont aussi
+        proposées pour les consolider sous la nouvelle. Les libellés sont
+        comparés via une similarité tolérante aux variations de date /
+        numéro de carte, mais suffisamment stricte pour ne pas mélanger
+        deux marchands différents.
       </p>
       <p>
         <strong>Recherche et tri</strong>&nbsp;— un champ de recherche au-dessus
@@ -228,7 +235,9 @@ function Categories() {
       <p>
         Le <em>Taux de dépense</em> exprime la part de vos revenus consommée
         par les dépenses sur la période sélectionnée. En dessous de 100&nbsp;%
-        vous épargnez&nbsp;; au-dessus, le solde du mois est négatif.
+        vous épargnez&nbsp;; au-dessus, le solde du mois est négatif. Un
+        second chiffre affiche la <strong>moyenne sur les 6 mois pleins
+        glissants</strong> (mois courant exclu) comme repère stable.
       </p>
     </Section>
   );
@@ -280,8 +289,88 @@ function Period() {
         L'accueil se cale sur un mois entier. Les flèches naviguent au mois
         précédent ou suivant&nbsp;; le bouton «&nbsp;Auj.&nbsp;» revient au
         mois en cours. Le mois sélectionné pilote le budget, le camembert,
-        la comparaison vs mois précédent et le taux de dépense. La période
-        choisie est conservée entre l'accueil et la liste des opérations.
+        la comparaison vs mois précédent, le taux de dépense et l'analyse
+        du mois. Les sélecteurs de période de l'accueil et de la liste
+        des opérations sont indépendants.
+      </p>
+    </Section>
+  );
+}
+
+function Insights() {
+  return (
+    <Section id="insights" title="Analyse du mois">
+      <p>
+        La carte <em>Analyse du mois</em> agrège des signaux automatiques
+        sur la période sélectionnée, triés par criticité (rouge → orange
+        → bleu → vert)&nbsp;:
+      </p>
+      <ul className="ml-5 list-disc space-y-1">
+        <li>
+          <strong>Solde projeté négatif</strong>&nbsp;— sur le mois en
+          cours, alerte si la somme des soldes courants + opérations en
+          attente jusqu'à la fin du mois passe sous zéro.
+        </li>
+        <li>
+          <strong>Mois déficitaire</strong>&nbsp;— compare revenus et
+          dépenses catégorisés ; alerte si le net est négatif.
+        </li>
+        <li>
+          <strong>Catégories en dépassement</strong>&nbsp;— liste les
+          catégories de dépense dont le réel franchit le budget prévu.
+        </li>
+        <li>
+          <strong>Rythme de dépenses</strong>&nbsp;— sur le mois en cours,
+          confronte le pourcentage de budget consommé au pourcentage du
+          mois écoulé. Au-delà de 15 points d'écart, signal d'alerte.
+        </li>
+        <li>
+          <strong>Dépense exceptionnelle</strong>&nbsp;— détecte une
+          opération unique au moins 5&nbsp;× la dépense médiane du mois.
+          Les opérations issues d'une récurrente (même banque, libellé
+          identique ou suffixé après import, montant à ±10&nbsp;%) sont
+          exclues.
+        </li>
+        <li>
+          <strong>Comparaison N/N-1</strong>&nbsp;— variation du net
+          (revenus − dépenses) supérieure à 25&nbsp;% vs le mois
+          précédent.
+        </li>
+        <li>
+          <strong>Opérations sans catégorie</strong>&nbsp;— signal
+          qualité de données quand &gt;10&nbsp;% du volume est non
+          classé.
+        </li>
+        <li>
+          <strong>Récurrentes non détectées</strong>&nbsp;— sur le mois
+          en cours, récurrentes attendues d'après leur jour-du-mois mais
+          non identifiées dans les opérations (libellé approchant + même
+          banque).
+        </li>
+        <li>
+          <strong>Moyenne ponctuelle historique</strong>&nbsp;— calcule
+          sur les 6 mois pleins glissants la dépense moyenne hors
+          récurrentes. Alerte si vous êtes au-dessus de cette moyenne
+          (proportionnellement au % du mois écoulé), ou si la marge
+          restante (solde courant − récurrentes débit à venir) ne couvre
+          plus le ponctuel habituel d'ici la fin du mois. Sinon, repère
+          d'information sur votre rythme habituel.
+        </li>
+      </ul>
+      <p>
+        Les signaux liés au temps réel (rythme, projection, récurrentes
+        manquantes) ne sortent que sur le mois en cours. Sur un mois
+        passé, seuls les signaux structurels apparaissent.
+      </p>
+      <p>
+        En complément, la carte <em>Évolution du solde mensuel</em> trace
+        trois courbes cumulées jour par jour en partant de 0 le 1er du
+        mois&nbsp;: trait plein pour le mois sélectionné, pointillé pour
+        M-1, pointillé clair pour M-2. Sur le mois en cours, la courbe M
+        va jusqu'à la fin du mois en intégrant les opérations futures
+        déjà en base (récurrentes générées, ops planifiées). M-2 dépend
+        de l'historique 6 mois chargé sur la page&nbsp;: au-delà, sa
+        courbe est absente. Transferts internes exclus.
       </p>
     </Section>
   );

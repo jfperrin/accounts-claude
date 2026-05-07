@@ -48,8 +48,7 @@ export default function BulkCategorizeDialog({
 
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
-              {candidates.length} opération{candidates.length > 1 ? 's' : ''} sans catégorie
-              au libellé similaire.
+              {candidates.length} opération{candidates.length > 1 ? 's' : ''} au libellé similaire.
             </p>
             <button
               type="button"
@@ -83,6 +82,9 @@ export default function BulkCategorizeDialog({
                     className="h-4 w-4 shrink-0 accent-indigo-600"
                   />
                   <span className="min-w-0 flex-1 truncate">{c.label}</span>
+                  {c.categoryId && c.categoryId !== categoryId && (
+                    <CategoryBadge categoryId={c.categoryId} categories={categories} />
+                  )}
                   <span className={cn(
                     'tabular-nums shrink-0',
                     c.amount < 0 ? 'text-rose-600' : 'text-emerald-600',

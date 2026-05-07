@@ -127,12 +127,13 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
 const PAGE_SIZES = [20, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 50;
 
-export default function OperationsTable({ operations, categories = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring }) {
+export default function OperationsTable({ operations, categories = [], banks = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onFilterStateChange }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [bankFilter, setBankFilter] = useState('all');
   const [sortKey, setSortKey] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
 
@@ -150,11 +151,15 @@ export default function OperationsTable({ operations, categories = [], recurring
     const q = query.trim().toLowerCase();
     return operations.filter((op) => {
       if (q && !op.label?.toLowerCase().includes(q)) return false;
+      if (bankFilter !== 'all') {
+        const opBank = String(op.bankId?._id ?? op.bankId);
+        if (opBank !== bankFilter) return false;
+      }
       if (categoryFilter === 'all') return true;
       if (categoryFilter === 'none') return !op.categoryId;
       return op.categoryId === categoryFilter;
     });
-  }, [operations, query, categoryFilter]);
+  }, [operations, query, categoryFilter, bankFilter]);
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -170,7 +175,20 @@ export default function OperationsTable({ operations, categories = [], recurring
     return arr;
   }, [filtered, sortKey, sortDir]);
 
-  useEffect(() => { setPage(1); }, [query, categoryFilter]);
+  useEffect(() => { setPage(1); }, [query, categoryFilter, bankFilter]);
+
+  // Remonte au parent l'état des filtres (count + somme signée) pour qu'il
+  // puisse compléter le titre de la table quand un filtre est actif.
+  const filteredSum = useMemo(
+    () => filtered.reduce((s, o) => s + o.amount, 0),
+    [filtered],
+  );
+  useEffect(() => {
+    if (!onFilterStateChange) return;
+    const active = query.trim() !== '' || categoryFilter !== 'all' || bankFilter !== 'all';
+    onFilterStateChange({ active, count: filtered.length, sum: filteredSum });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSum, filtered.length, query, categoryFilter, bankFilter]);
 
   const sortIcon = (k) => {
     if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
@@ -245,6 +263,19 @@ export default function OperationsTable({ operations, categories = [], recurring
             </SelectContent>
           </Select>
         )}
+        {banks.length > 1 && (
+          <Select value={bankFilter} onValueChange={setBankFilter}>
+            <SelectTrigger className="h-9 w-32 sm:w-40" aria-label="Filtrer par banque">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Toutes banques</SelectItem>
+              {banks.map((b) => (
+                <SelectItem key={b._id} value={String(b._id)}>{b.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="md:hidden flex items-center gap-1">
           <Select value={sortKey} onValueChange={(v) => { setSortKey(v); setPage(1); }}>
             <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
@@ -279,26 +310,26 @@ export default function OperationsTable({ operations, categories = [], recurring
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground shrink-0">{dayjs(op.date).format('DD/MM')}</span>
               <div className="min-w-0 flex-1">
-                {onCategoryChange && (op.categoryId ? (
-                  <CategoryBadge
-                    categoryId={op.categoryId}
-                    categories={categories}
-                    onRemove={() => onCategoryChange(op._id, null)}
-                  />
-                ) : (
+                {onCategoryChange && (
                   <Select
-                    value="none"
+                    value={op.categoryId ? String(op.categoryId?._id ?? op.categoryId) : 'none'}
                     onValueChange={(v) => onCategoryChange(op._id, v === 'none' ? null : v)}
                   >
-                    <SelectTrigger className="h-6 w-full max-w-32 border-dashed text-xs text-muted-foreground">
-                      <SelectValue placeholder="Catégorie…" />
+                    <SelectTrigger className={op.categoryId
+                      ? 'h-auto w-fit border-0 bg-transparent p-0 shadow-none focus:ring-0 [&>svg]:hidden'
+                      : 'h-6 w-full max-w-32 border-dashed text-xs text-muted-foreground'}>
+                      {op.categoryId ? (
+                        <CategoryBadge categoryId={op.categoryId} categories={categories} />
+                      ) : (
+                        <SelectValue placeholder="Catégorie…" />
+                      )}
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— Sans catégorie</SelectItem>
                       <CategorySelectItems categories={categories} />
                     </SelectContent>
                   </Select>
-                ))}
+                )}
               </div>
               <span className={cn('text-sm font-semibold shrink-0', op.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
                 {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
@@ -364,26 +395,26 @@ export default function OperationsTable({ operations, categories = [], recurring
                     )}
                     {op.label}
                   </span>
-                  {onCategoryChange && (op.categoryId ? (
-                    <CategoryBadge
-                      categoryId={op.categoryId}
-                      categories={categories}
-                      onRemove={() => onCategoryChange(op._id, null)}
-                    />
-                  ) : (
+                  {onCategoryChange && (
                     <Select
-                      value="none"
+                      value={op.categoryId ? String(op.categoryId?._id ?? op.categoryId) : 'none'}
                       onValueChange={(v) => onCategoryChange(op._id, v === 'none' ? null : v)}
                     >
-                      <SelectTrigger className="h-6 w-36 border-dashed text-xs text-muted-foreground">
-                        <SelectValue placeholder="Catégorie…" />
+                      <SelectTrigger className={op.categoryId
+                        ? 'h-auto w-fit border-0 bg-transparent p-0 shadow-none focus:ring-0 [&>svg]:hidden'
+                        : 'h-6 w-36 border-dashed text-xs text-muted-foreground'}>
+                        {op.categoryId ? (
+                          <CategoryBadge categoryId={op.categoryId} categories={categories} />
+                        ) : (
+                          <SelectValue placeholder="Catégorie…" />
+                        )}
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">— Sans catégorie</SelectItem>
                         <CategorySelectItems categories={categories} />
                       </SelectContent>
                     </Select>
-                  ))}
+                  )}
                 </div>
               </TableCell>
               <TableCell>

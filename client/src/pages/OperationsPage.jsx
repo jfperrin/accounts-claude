@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import {
   importFile,
   resolveImport,
   getSimilarUncategorized,
+  getSimilarExcludingCategory,
   findSimilarUncategorized,
   bulkCategorize,
 } from '@/api/operations';
@@ -28,6 +29,7 @@ import MakeRecurringDialog from '@/components/MakeRecurringDialog';
 import ImportResolveDialog from '@/components/ImportResolveDialog';
 import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
@@ -57,7 +59,7 @@ export default function OperationsPage() {
   const { banks, reload: reloadBanks } = useBanks();
   const { recurring } = useRecurringOperations();
 
-  const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref()?.mode ?? '30d');
+  const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref()?.mode ?? 'month');
   const [customStart, setCustomStart] = useState(() => getCookiePref()?.start ?? dayjs().subtract(29, 'day').format('YYYY-MM-DD'));
   const [customEnd, setCustomEnd] = useState(() => getCookiePref()?.end ?? dayjs().format('YYYY-MM-DD'));
   const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
@@ -100,6 +102,8 @@ export default function OperationsPage() {
   const bankBalancesRef = useRef(null);
   const [fabVisible, setFabVisible] = useState(false);
   const [totalBadgeVisible, setTotalBadgeVisible] = useState(false);
+  const [tableFilter, setTableFilter] = useState({ active: false, count: 0, sum: 0 });
+  const handleTableFilterChange = useCallback((info) => setTableFilter(info), []);
 
   useEffect(() => {
     const el = newOpBtnRef.current;
@@ -168,11 +172,22 @@ export default function OperationsPage() {
   const [bulkCat, setBulkCat] = useState(null); // { categoryId, candidates }
 
   const handleCategoryChange = async (id, categoryId) => {
+    // On capture l'ancienne catégorie AVANT la mise à jour pour décider du
+    // type de recherche : si la source était déjà catégorisée et qu'on
+    // change vers une autre catégorie, on élargit aux ops similaires non
+    // déjà dans la nouvelle catégorie (= uncat + autres catégories). Sinon
+    // on garde le scope historique (uncat seulement).
+    const sourceOp = operations.find((o) => o._id === id);
+    const prevCategoryId = sourceOp?.categoryId
+      ? String(sourceOp.categoryId?._id ?? sourceOp.categoryId)
+      : null;
     await updateOp(id, { categoryId });
     reloadOperations();
     if (!categoryId) return;
     try {
-      const candidates = await getSimilarUncategorized(id);
+      const candidates = (prevCategoryId && prevCategoryId !== categoryId)
+        ? await getSimilarExcludingCategory(id, categoryId)
+        : await getSimilarUncategorized(id);
       if (candidates.length > 0) setBulkCat({ categoryId, candidates });
     } catch {
       /* silencieux : la catégorie principale est déjà appliquée */
@@ -430,18 +445,28 @@ export default function OperationsPage() {
         </div>
       ) : (
         <div className="sm:rounded-xl sm:border sm:border-border sm:bg-card sm:p-4 sm:shadow-xs">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="font-semibold text-foreground">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="font-semibold text-foreground flex flex-wrap items-baseline gap-x-2">
               {rangeMode === '30d' && '30 derniers jours'}
               {rangeMode === '90d' && '90 derniers jours'}
               {rangeMode === 'month' && (
                 <span className="capitalize">{dayjs().add(monthOffset, 'month').format('MMMM YYYY')}</span>
               )}
               {rangeMode === 'custom' && `${dayjs(startDate).format('DD/MM/YYYY')} – ${dayjs(endDate).format('DD/MM/YYYY')}`}
+              {tableFilter.active && (
+                <Badge
+                  variant="outline"
+                  className={`tabular-nums ${tableFilter.sum >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}
+                >
+                  {formatEur(tableFilter.sum)}
+                </Badge>
+              )}
             </span>
-            <span className="text-sm text-muted-foreground">
-              {visibleOperations.length} opération(s)
-              {onlyUncategorized && operations.length !== visibleOperations.length && (
+            <span className="text-sm text-muted-foreground tabular-nums shrink-0">
+              {tableFilter.active
+                ? `${tableFilter.count} sur ${visibleOperations.length}`
+                : `${visibleOperations.length} opération(s)`}
+              {!tableFilter.active && onlyUncategorized && operations.length !== visibleOperations.length && (
                 <span> / {operations.length}</span>
               )}
             </span>
@@ -449,12 +474,14 @@ export default function OperationsPage() {
           <OperationsTable
             operations={visibleOperations}
             categories={categories}
+            banks={banks}
             recurring={recurring}
             onPoint={handlePoint}
             onEdit={(op) => { setEditOp(op); setFormOpen(true); }}
             onDelete={handleDelete}
             onCategoryChange={handleCategoryChange}
             onMakeRecurring={openMakeRecurring}
+            onFilterStateChange={handleTableFilterChange}
           />
         </div>
       )}

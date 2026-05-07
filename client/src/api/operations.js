@@ -30,6 +30,13 @@ export const resolveImport = (resolutions) =>
 export const getSimilarUncategorized = (id) =>
   client.get(`/operations/${id}/similar-uncategorized`);
 
+// Variante pour le cas "changement de catégorie d'une op déjà catégorisée" :
+// retourne les ops similaires (uncat + autres catégories) qui ne sont PAS dans
+// la catégorie cible. Chaque résultat contient son `categoryId` actuel pour
+// affichage dans le dialog de bulk.
+export const getSimilarExcludingCategory = (id, excludeCategoryId) =>
+  client.get(`/operations/${id}/similar`, { params: { excludeCategoryId } });
+
 // Variante "sans op source en base" : recherche par (label, bankId).
 // Utilisée après création d'une récurrente pour proposer la catégorisation
 // des opérations existantes correspondant au pattern.

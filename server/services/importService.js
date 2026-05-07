@@ -118,14 +118,6 @@ function extractImportPayload(file) {
   throw err;
 }
 
-/**
- * Traite un fichier importé (QIF/OFX/ZIP).
- * @param {object} file - fichier multer (buffer + originalname)
- * @param {string} bankId
- * @param {string} userId
- * @param {object} db - req.app.locals.db
- * @returns {{ imported, autoReconciled, duplicates, invalid, pendingMatches, _debug }}
- */
 // Charge les category_hints de l'utilisateur. Lazy init au 1er import :
 // si la table est vide, on rebuild depuis l'historique des opérations.
 async function loadHints(categoryHints, userId) {
@@ -137,6 +129,14 @@ async function loadHints(categoryHints, userId) {
   return hints;
 }
 
+/**
+ * Traite un fichier importé (QIF/OFX/ZIP).
+ * @param {object} file - fichier multer (buffer + originalname)
+ * @param {string} bankId
+ * @param {string} userId
+ * @param {object} db - req.app.locals.db
+ * @returns {{ imported, autoReconciled, duplicates, invalid, pendingMatches, _debug }}
+ */
 async function processImportFile(file, bankId, userId, db) {
   const { operations, banks, categoryHints } = db;
 
@@ -153,8 +153,15 @@ async function processImportFile(file, bankId, userId, db) {
 
   const existing = await operations.findAllMinimal(userId);
 
+  // On ne considère comme doublon strict qu'une op DÉJÀ pointée. Si une op
+  // non pointée match exactement (label/bankId/amount/date), on laisse la
+  // suite du pipeline la traiter comme candidate à la réconciliation pour
+  // qu'elle soit pointée par l'import (cas typique : récurrente générée ou
+  // op manuelle anticipée, que l'import bancaire vient confirmer).
   const existingKeys = new Set(
-    existing.map((o) => exactKey(o.label, bankIdOf(o), amountKey(o.amount), o.date)),
+    existing
+      .filter((o) => o.pointed)
+      .map((o) => exactKey(o.label, bankIdOf(o), amountKey(o.amount), o.date)),
   );
 
   // Index par banque uniquement : on filtrera ensuite par fenêtre temporelle

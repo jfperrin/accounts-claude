@@ -13,13 +13,14 @@ import ExpensesByCategoryChart from '@/components/ExpensesByCategoryChart';
 import MonthlyComparison from '@/components/MonthlyComparison';
 import ExpenseRatioCard from '@/components/ExpenseRatioCard';
 import BalanceSummary from '@/components/BalanceSummary';
+import MonthlyInsights from '@/components/MonthlyInsights';
+import MonthlyTrendChart from '@/components/MonthlyTrendChart';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-// Cookie partagé avec OperationsPage pour conserver la période sélectionnée
-// d'une page à l'autre. HomePage ne pilote que `monthOffset` (et force
-// `mode: 'month'` pour que la page Opérations reflète le même mois).
-const COOKIE_NAME = 'dash_date_range';
+// Cookie propre à HomePage (désynchronisé de OperationsPage). Stocke juste
+// le `monthOffset` (0 = mois en cours, défaut quand aucun cookie).
+const COOKIE_NAME = 'home_month';
 
 function getCookiePref() {
   const match = document.cookie.match(new RegExp('(?:^|; )' + COOKIE_NAME + '=([^;]*)'));
@@ -41,7 +42,7 @@ export default function HomePage() {
   const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
   const setMonthOffset = (v) => {
     setMonthOffsetRaw(v);
-    setCookiePref({ ...(getCookiePref() ?? {}), mode: 'month', monthOffset: v });
+    setCookiePref({ monthOffset: v });
   };
 
   const { startDate, endDate } = useMemo(() => {
@@ -54,6 +55,14 @@ export default function HomePage() {
 
   // Operations sur le mois sélectionné — alimente Budget, graphe et ratio.
   const { operations } = useOperations({ startDate, endDate });
+
+  // 6 mois pleins glissants pour calculer la moyenne ponctuelle historique
+  // utilisée par MonthlyInsights. Range stable au montage.
+  const historyRange = useMemo(() => ({
+    startDate: dayjs().subtract(6, 'month').startOf('month').format('YYYY-MM-DD'),
+    endDate: dayjs().endOf('day').format('YYYY-MM-DD'),
+  }), []);
+  const { operations: history } = useOperations(historyRange);
 
   // Opérations du mois précédent du sélectionné (pour MonthlyComparison).
   const comparisonRange = useMemo(() => {
@@ -114,6 +123,19 @@ export default function HomePage() {
         </div>
       </div>
 
+      <MonthlyInsights
+        operations={operations}
+        comparisonOps={comparisonOps}
+        history={history}
+        categories={categories}
+        recurring={recurring}
+        banks={banks}
+        unpointed={unpointed}
+        monthOffset={monthOffset}
+        startDate={startDate}
+        endDate={endDate}
+      />
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BudgetSummary
           categories={categories}
@@ -134,8 +156,16 @@ export default function HomePage() {
           categories={categories}
           monthOffset={monthOffset}
         />
-        <ExpenseRatioCard operations={operations} categories={categories} />
+        <ExpenseRatioCard operations={operations} categories={categories} history={history} />
       </div>
+
+      <MonthlyTrendChart
+        operations={operations}
+        comparisonOps={comparisonOps}
+        history={history}
+        categories={categories}
+        monthOffset={monthOffset}
+      />
 
       <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
     </div>

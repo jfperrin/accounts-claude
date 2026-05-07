@@ -9,7 +9,7 @@ const router = require('express').Router();
 const multer = require('multer');
 const wrap = require('../utils/asyncHandler');
 const importService = require('../services/importService');
-const { findSimilarUncategorized } = require('../services/categoryPropagationService');
+const { findSimilarUncategorized, findSimilarExcludingCategory } = require('../services/categoryPropagationService');
 
 // Multer mémoire pour l'import (1 Mo max).
 // Accepte .qif, .ofx ou .zip (qui doit contenir un de ces formats).
@@ -185,6 +185,29 @@ router.get('/:id/similar-uncategorized', wrap(async (req, res) => {
   const matches = findSimilarUncategorized(all, source.label, sourceBankId, source._id, source.date);
   res.json(matches.map((o) => ({
     _id: o._id, label: o.label, amount: o.amount, date: o.date,
+  })));
+}));
+
+// GET /api/operations/:id/similar?excludeCategoryId=...
+// Variante du précédent pour le cas "changement de catégorie d'une op déjà
+// catégorisée" : retourne les ops similaires (uncat + autres catégories) qui
+// ne sont PAS dans la catégorie cible. Permet de proposer la propagation
+// même quand les ops similaires ont une (autre) catégorie.
+router.get('/:id/similar', wrap(async (req, res) => {
+  const { operations } = req.app.locals.db;
+  const userId = req.user._id;
+  const source = await operations.findById(req.params.id, userId);
+  if (!source) return res.status(404).json({ message: 'Introuvable' });
+  const sourceBankId = source.bankId && source.bankId._id ? source.bankId._id : source.bankId;
+  const all = await operations.findAllMinimal(userId);
+  const excludeCategoryId = req.query.excludeCategoryId || null;
+  const matches = findSimilarExcludingCategory(all, source.label, sourceBankId, source._id, source.date, excludeCategoryId);
+  res.json(matches.map((o) => ({
+    _id: o._id,
+    label: o.label,
+    amount: o.amount,
+    date: o.date,
+    categoryId: o.categoryId ? String(o.categoryId?._id ?? o.categoryId) : null,
   })));
 }));
 
