@@ -74,6 +74,13 @@ body {
   font-family: var(--font-sans), serif;
 }
 
+/* iOS Safari zoome au focus si font-size < 16px. */
+@media (max-width: 639px) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
 @keyframes fly-to-corner {
   from {
     opacity: 0;
