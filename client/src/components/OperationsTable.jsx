@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
@@ -65,6 +65,17 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
     }
   };
 
+  // Clavier : Enter/Espace sur la ligne elle-même bascule pointed.
+  // On ignore les events qui remontent depuis un bouton/switch/select imbriqué.
+  const handleKeyDown = (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (offset !== 0) { setOffset(0); return; }
+      onPoint(op._id);
+    }
+  };
+
   const close = () => setOffset(0);
 
   return (
@@ -73,7 +84,7 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
         <button
           type="button"
           onClick={() => { close(); onEdit(op); }}
-          className="flex flex-col items-center justify-center gap-0.5 bg-indigo-500 px-3 text-white text-[10px] font-medium"
+          className="flex flex-col items-center justify-center gap-0.5 bg-primary px-3 text-primary-foreground text-[10px] font-medium"
           style={{ width: EDIT_REVEAL / 2 }}
         >
           <Pencil className="h-4 w-4" />
@@ -83,7 +94,7 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
           <button
             type="button"
             onClick={() => { close(); onMakeRecurring(op); }}
-            className="flex flex-col items-center justify-center gap-0.5 bg-violet-500 px-3 text-white text-[10px] font-medium"
+            className="flex flex-col items-center justify-center gap-0.5 bg-slate-600 px-3 text-white text-[10px] font-medium"
             style={{ width: EDIT_REVEAL / 2 }}
           >
             <Repeat2 className="h-4 w-4" />
@@ -103,7 +114,11 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
         </button>
       </div>
       <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={op.pointed}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -115,6 +130,7 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
         }}
         className={cn(
           'relative border border-border px-2 py-2 cursor-pointer',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
           op.pointed ? 'bg-muted text-muted-foreground' : 'bg-card',
         )}
       >
@@ -331,14 +347,14 @@ export default function OperationsTable({ operations, categories = [], banks = [
                   </Select>
                 )}
               </div>
-              <span className={cn('text-sm font-semibold shrink-0', op.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
+              <span className={cn('text-sm font-semibold shrink-0', amountClass(op.amount))}>
                 {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               {isFromRecurring(op) && (
                 <span title="Opération récurrente" className="shrink-0">
-                  <Repeat className="h-3 w-3 text-violet-500" />
+                  <Repeat className="h-3 w-3 text-slate-500 dark:text-slate-400" />
                 </span>
               )}
               <span className="text-xs text-muted-foreground truncate min-w-0 flex-1">{op.label}</span>
@@ -390,7 +406,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
                   <span className="inline-flex items-center gap-1.5 font-medium">
                     {isFromRecurring(op) && (
                       <span title="Opération récurrente" className="shrink-0">
-                        <Repeat className="h-3.5 w-3.5 text-violet-500" />
+                        <Repeat className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                       </span>
                     )}
                     {op.label}
@@ -420,7 +436,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
               <TableCell>
                 <Badge variant="secondary">{op.bankId?.label}</Badge>
               </TableCell>
-              <TableCell className={cn('text-right font-semibold', op.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
+              <TableCell className={cn('text-right font-semibold', amountClass(op.amount))}>
                 {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
               </TableCell>
               <TableCell className="text-center">
@@ -430,7 +446,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
                 <div className="flex justify-end gap-1">
                   {onMakeRecurring && (
                     <Button variant="ghost" size="icon" aria-label="convertir en récurrente"
-                      className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
+                      className="text-primary hover:bg-primary/10"
                       onClick={(e) => { e.stopPropagation(); onMakeRecurring(op); }}
                       title="Convertir en récurrente">
                       <Repeat2 className="h-3.5 w-3.5" />

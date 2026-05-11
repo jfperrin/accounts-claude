@@ -67,18 +67,19 @@ export default function CategoryColorPicker({ color, onChange, size = 'sm' }) {
           style={{ top: pos.top, left: pos.left }}
         >
           <div className="mb-3 grid grid-cols-6 gap-1.5">
-            {CATEGORY_COLORS.map((c) => (
+            {CATEGORY_COLORS.map(({ hex, name }) => (
               <button
-                key={c}
+                key={hex}
                 type="button"
-                onClick={() => apply(c)}
-                className="h-6 w-6 rounded-full transition-transform hover:scale-110"
+                onClick={() => apply(hex)}
+                className="h-6 w-6 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 style={{
-                  backgroundColor: c,
-                  outline: current.toLowerCase() === c.toLowerCase() ? `2px solid ${c}` : 'none',
+                  backgroundColor: hex,
+                  outline: current.toLowerCase() === hex.toLowerCase() ? `2px solid ${hex}` : 'none',
                   outlineOffset: '2px',
                 }}
-                aria-label={c}
+                aria-label={name}
+                aria-pressed={current.toLowerCase() === hex.toLowerCase()}
               />
             ))}
           </div>

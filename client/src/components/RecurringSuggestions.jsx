@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Sparkles, Plus, X, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { dismissSuggestion } from '@/api/recurringOperations';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import CategoryBadge from '@/components/CategoryBadge';
@@ -28,9 +28,9 @@ export default function RecurringSuggestions({
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 shadow-xs dark:border-indigo-900/50 dark:bg-indigo-950/20">
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-xs">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
           Analyse de l&apos;historique en cours…
         </div>
       </div>
@@ -51,9 +51,9 @@ export default function RecurringSuggestions({
   }
 
   return (
-    <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 shadow-xs dark:border-indigo-900/50 dark:bg-indigo-950/20">
+    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-xs">
       <div className="mb-3 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+        <Sparkles className="h-4 w-4 text-primary" />
         <h2 className="text-sm font-semibold">Suggestions de récurrentes</h2>
         <span className="text-xs text-muted-foreground">
           {suggestions.length} détectée{suggestions.length > 1 ? 's' : ''}
@@ -84,17 +84,14 @@ export default function RecurringSuggestions({
                     <button
                       type="button"
                       onClick={() => setExpanded((p) => ({ ...p, [s.key]: !isOpen }))}
-                      className="inline-flex items-center gap-0.5 text-indigo-600 hover:underline dark:text-indigo-400"
+                      className="inline-flex items-center gap-0.5 text-primary hover:underline"
                     >
                       {isOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                       détails
                     </button>
                   </div>
                 </div>
-                <span className={cn(
-                  'tabular-nums font-semibold whitespace-nowrap',
-                  s.amount >= 0 ? 'text-emerald-600' : 'text-rose-600',
-                )}>
+                <span className={cn('tabular-nums font-semibold whitespace-nowrap', amountClass(s.amount))}>
                   {s.amount > 0 ? '+' : ''}{formatEur(s.amount)}
                 </span>
                 <div className="flex gap-1">

@@ -6,10 +6,10 @@ import Footer from '@/components/layout/Footer';
 export default function ToSPage() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
-    <div className="flex-1 py-12 px-4">
+    <main className="flex-1 py-12 px-4">
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-md shadow-primary/30">
             <Wallet className="h-5 w-5 text-white" />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Gestion de Comptes</h1>
@@ -147,7 +147,7 @@ export default function ToSPage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
     <Footer />
     </div>
   );

@@ -9,3 +9,4 @@ server/dev.db-wal
 .worktrees/
 /server/uploads/avatars/
 /client/.eslintcache
+/*.png

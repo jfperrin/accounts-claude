@@ -90,7 +90,7 @@ export default function HomePage() {
       {banks.length > 0 && <BalanceSummary banks={banks} />}
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">
-        <CalendarDays className="h-5 w-5 text-indigo-600 shrink-0" />
+        <CalendarDays className="h-5 w-5 text-primary shrink-0" />
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -115,7 +115,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => setMonthOffset(0)}
-              className="ml-1 text-xs text-indigo-600 hover:underline"
+              className="ml-1 text-xs text-primary hover:underline"
             >
               Auj.
             </button>

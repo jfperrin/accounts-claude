@@ -33,7 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
-import { formatEur } from '@/lib/utils';
+import { formatEur, amountClass } from '@/lib/utils';
 
 const COOKIE_NAME = 'dash_date_range';
 const RANGE_MODES = [
@@ -287,14 +287,14 @@ export default function OperationsPage() {
   return (
     <div className="space-y-4">
       {banks.length > 1 && totalBadgeVisible && (
-        <div className="animate-fly-to-corner fixed top-4 right-4 z-50 flex items-center gap-2 rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 px-4 py-2 shadow-lg shadow-indigo-500/30">
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-200">Total</p>
-          <span className="text-sm font-extrabold text-white">{formatEur(totalProjected)}</span>
+        <div className="animate-fly-to-corner fixed top-4 right-4 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-2 shadow-lg shadow-primary/30">
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/70">Total</p>
+          <span className="text-sm font-extrabold text-primary-foreground">{formatEur(totalProjected)}</span>
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">
-        <CalendarDays className="h-5 w-5 text-indigo-600 shrink-0" />
+        <CalendarDays className="h-5 w-5 text-primary shrink-0" />
         <div className="flex rounded-lg border border-border overflow-hidden">
           {RANGE_MODES.map((m) => (
             <button
@@ -303,7 +303,7 @@ export default function OperationsPage() {
               onClick={() => setRangeMode(m.value)}
               className={`px-3 py-1.5 text-sm font-medium transition-colors ${
                 rangeMode === m.value
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'bg-card text-muted-foreground hover:bg-muted'
               }`}
             >
@@ -318,7 +318,7 @@ export default function OperationsPage() {
               value={customStart}
               max={customEnd}
               onChange={(e) => updateCustomStart(e.target.value)}
-              className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <span className="text-sm text-muted-foreground">→</span>
             <input
@@ -326,7 +326,7 @@ export default function OperationsPage() {
               value={customEnd}
               min={customStart}
               onChange={(e) => updateCustomEnd(e.target.value)}
-              className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </>
         )}
@@ -355,7 +355,7 @@ export default function OperationsPage() {
               <button
                 type="button"
                 onClick={() => setMonthOffset(0)}
-                className="ml-1 text-xs text-indigo-600 hover:underline"
+                className="ml-1 text-xs text-primary hover:underline"
               >
                 Auj.
               </button>
@@ -368,7 +368,7 @@ export default function OperationsPage() {
           aria-pressed={onlyUncategorized}
           className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
             onlyUncategorized
-              ? 'border-indigo-600 bg-indigo-600 text-white'
+              ? 'border-primary bg-primary text-primary-foreground'
               : 'border-border bg-card text-muted-foreground hover:bg-muted'
           }`}
           title="Afficher uniquement les opérations sans catégorie"
@@ -377,7 +377,7 @@ export default function OperationsPage() {
           <span className="hidden sm:inline">Sans catégorie</span>
           {uncategorizedCount > 0 && (
             <span className={`ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums ${
-              onlyUncategorized ? 'bg-white/20 text-white' : 'bg-muted text-foreground'
+              onlyUncategorized ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-foreground'
             }`}>
               {uncategorizedCount}
             </span>
@@ -456,7 +456,7 @@ export default function OperationsPage() {
               {tableFilter.active && (
                 <Badge
                   variant="outline"
-                  className={`tabular-nums ${tableFilter.sum >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}
+                  className={`tabular-nums ${amountClass(tableFilter.sum)}`}
                 >
                   {formatEur(tableFilter.sum)}
                 </Badge>
@@ -537,11 +537,11 @@ export default function OperationsPage() {
       <button
         type="button"
         onClick={() => { setEditOp(null); setFormOpen(true); }}
-        className={`animate-fly-to-corner fixed bottom-28 right-6 z-50 h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-indigo-600 shadow-lg shadow-indigo-500/40 transition-transform hover:bg-indigo-700 hover:scale-105 active:scale-95 md:bottom-8 md:right-8 flex ${fabVisible ? 'md:flex' : 'md:hidden'}`}
+        className={`animate-fly-to-corner fixed bottom-28 right-6 z-50 h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/40 transition-transform hover:bg-primary/90 hover:scale-105 active:scale-95 md:bottom-8 md:right-8 flex ${fabVisible ? 'md:flex' : 'md:hidden'}`}
         aria-label="Nouvelle opération"
         title="Nouvelle opération"
       >
-        <Plus className="h-6 w-6 text-white" strokeWidth={2.5} />
+        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
       </button>
     </div>
   );

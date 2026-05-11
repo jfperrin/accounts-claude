@@ -46,7 +46,7 @@ export default function ImportDialog({ open, banks, onSubmit, onCancel }) {
               type="file"
               accept=".qif,.ofx,.zip,application/zip"
               required
-              className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-white hover:file:bg-indigo-700"
+              className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-primary-foreground hover:file:bg-primary/90"
             />
           </div>
           <p className="text-xs text-muted-foreground">

@@ -87,7 +87,7 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
               type="checkbox"
               checked={form.emailVerified}
               onChange={(e) => setForm((f) => ({ ...f, emailVerified: e.target.checked }))}
-              className="h-4 w-4 rounded border-input text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
             />
             <span>Email vérifié</span>
           </label>

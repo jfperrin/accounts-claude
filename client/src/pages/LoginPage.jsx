@@ -27,6 +27,7 @@ export default function LoginPage() {
   const [unverifiedEmail, setUnverifiedEmail] = useState(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendDone, setResendDone] = useState(false);
+  const [formError, setFormError] = useState('');
   const { login, register } = useAuth();
   const [searchParams] = useSearchParams();
   const googleError = searchParams.get('error') === 'google';
@@ -44,12 +45,13 @@ export default function LoginPage() {
     setLoading(true);
     setUnverifiedEmail(null);
     setResendDone(false);
+    setFormError('');
     try {
       if (tab === 'login') {
         await login({ ...form, rememberDays });
       } else {
         if (!acceptedToS) {
-          toast.error('Vous devez accepter les conditions générales d\'utilisation');
+          setFormError('Vous devez accepter les conditions générales d\'utilisation.');
           setLoading(false);
           return;
         }
@@ -60,7 +62,9 @@ export default function LoginPage() {
       if (err.response?.status === 403) {
         setUnverifiedEmail(form.email);
       } else {
-        toast.error(err.response?.data?.message || err.message || 'Erreur de connexion');
+        const msg = err.response?.data?.message || err.message || 'Erreur de connexion';
+        setFormError(msg);
+        toast.error(msg);
       }
     } finally {
       setLoading(false);
@@ -69,9 +73,9 @@ export default function LoginPage() {
 
   if (registered) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900">
-        <div className="relative z-10 w-[420px] rounded-2xl bg-white p-12 shadow-2xl text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900">
+        <div className="relative z-10 w-full max-w-[420px] rounded-2xl bg-white p-12 shadow-2xl text-center">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
             <Mail className="h-6 w-6 text-white" />
           </div>
           <h1 className="mb-3 text-2xl font-extrabold tracking-tight text-slate-900">Vérifiez votre email</h1>
@@ -81,24 +85,23 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => { setRegistered(false); setTab('login'); }}
-            className="text-sm text-indigo-600 hover:underline"
+            className="text-sm text-primary hover:underline"
           >
             Retour à la connexion
           </button>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-slate-900">
       <div className="pointer-events-none absolute -right-20 -top-40 h-[700px] w-[700px] rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18)_0%,transparent_65%)]" />
-      <div className="pointer-events-none absolute -bottom-40 -left-20 h-[600px] w-[600px] rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.12)_0%,transparent_65%)]" />
-      <div className="flex flex-1 items-center justify-center px-4">
+      <main className="flex flex-1 items-center justify-center px-4">
 
-      <div className="relative z-10 w-[420px] rounded-2xl bg-white p-12 shadow-2xl">
+      <div className="relative z-10 w-full max-w-[420px] rounded-2xl bg-white p-12 shadow-2xl">
         <div className="mb-9 text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
             <Wallet className="h-6 w-6 text-white" />
           </div>
           <h1 className="mb-1.5 text-2xl font-extrabold tracking-tight text-slate-900">Gestion de Comptes</h1>
@@ -183,11 +186,11 @@ export default function LoginPage() {
             <button
               type="button"
               key={key}
-              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setRememberDays(30); }}
+              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setFormError(''); setRememberDays(30); }}
               className={cn(
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                 tab === key
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                  ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30'
                   : 'text-slate-500 hover:text-slate-700'
               )}
             >
@@ -203,8 +206,12 @@ export default function LoginPage() {
               id="email"
               type="email"
               autoFocus
+              required
+              autoComplete="email"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              aria-invalid={!!formError}
+              aria-describedby={formError ? 'login-form-error' : undefined}
               className="h-11 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
             />
           </div>
@@ -213,8 +220,12 @@ export default function LoginPage() {
             <Input
               id="password"
               type="password"
+              required
+              autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
               value={form.password}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              aria-invalid={!!formError}
+              aria-describedby={formError ? 'login-form-error' : undefined}
               className="h-11 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
             />
           </div>
@@ -224,7 +235,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={acceptedToS}
                 onChange={(e) => setAcceptedToS(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-primary focus:ring-ring"
               />
               <span>
                 J'accepte les{' '}
@@ -232,7 +243,7 @@ export default function LoginPage() {
                   href="/cgu"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-indigo-600 hover:underline"
+                  className="font-medium text-primary hover:underline"
                 >
                   conditions générales d'utilisation
                 </a>
@@ -256,7 +267,7 @@ export default function LoginPage() {
                     className={cn(
                       'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                       rememberDays === value
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30'
                         : 'text-slate-500 hover:text-slate-700'
                     )}
                   >
@@ -266,16 +277,21 @@ export default function LoginPage() {
               </div>
             </div>
           )}
+          {formError && (
+            <p id="login-form-error" role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {formError}
+            </p>
+          )}
           <Button
             type="submit"
-            className="mt-2 h-11 w-full text-base shadow-md shadow-indigo-500/30"
+            className="mt-2 h-11 w-full text-base shadow-md shadow-primary/30"
             disabled={loading || (tab === 'register' && !acceptedToS)}
           >
             {loading ? 'Chargement…' : tab === 'login' ? 'Se connecter' : "S'inscrire"}
           </Button>
         </form>
       </div>
-      </div>
+      </main>
       <Footer className="relative z-10 border-white/10 bg-transparent text-slate-500" />
     </div>
   );

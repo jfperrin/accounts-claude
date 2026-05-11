@@ -58,14 +58,14 @@ export default function MonthlyComparison({ operations, categories = [], monthOf
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <CalendarRange className="h-4 w-4 text-indigo-600" />
+          <CalendarRange className="h-4 w-4 text-primary" />
           <span className="capitalize">{currentLabel}</span>
           <span className="text-muted-foreground font-normal">vs</span>
           <span className="capitalize">{previousLabel}</span>
           <InfoTip>
             Comparaison du mois sélectionné avec le précédent. Sur le
             mois en cours, on s'arrête à aujourd'hui et on confronte au
-            même quantième du mois d'avant — sinon mois pleins. Les
+            même quantième du mois d'avant, sinon mois pleins. Les
             transferts internes sont exclus. La couleur de la variation
             indique si elle est favorable (vert) ou non (rose).
           </InfoTip>
@@ -94,8 +94,8 @@ function Cell({ label, current, previous, positiveIsGood, signed }) {
       <div className={cn(
         'text-[11px] tabular-nums',
         same && 'text-muted-foreground',
-        !same && better && 'text-emerald-600 dark:text-emerald-400',
-        !same && !better && 'text-rose-600 dark:text-rose-400',
+        !same && better && 'text-credit',
+        !same && !better && 'text-debit',
       )}>
         {same
           ? '='

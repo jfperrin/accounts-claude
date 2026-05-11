@@ -1,16 +1,16 @@
 export const CATEGORY_COLORS = [
-  '#ef4444', // rouge
-  '#f97316', // orange
-  '#eab308', // jaune
-  '#22c55e', // vert
-  '#14b8a6', // turquoise
-  '#3b82f6', // bleu
-  '#6366f1', // indigo
-  '#8b5cf6', // violet
-  '#ec4899', // rose
-  '#64748b', // gris
-  '#a16207', // marron
-  '#15803d', // vert foncé
+  { hex: '#ef4444', name: 'rouge' },
+  { hex: '#f97316', name: 'orange' },
+  { hex: '#eab308', name: 'jaune' },
+  { hex: '#22c55e', name: 'vert' },
+  { hex: '#14b8a6', name: 'turquoise' },
+  { hex: '#3b82f6', name: 'bleu' },
+  { hex: '#6366f1', name: 'indigo' },
+  { hex: '#8b5cf6', name: 'violet' },
+  { hex: '#ec4899', name: 'rose' },
+  { hex: '#64748b', name: 'gris' },
+  { hex: '#a16207', name: 'marron' },
+  { hex: '#15803d', name: 'vert foncé' },
 ];
 
 export const DEFAULT_COLOR = '#6366f1';

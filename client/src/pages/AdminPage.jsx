@@ -82,8 +82,8 @@ export default function AdminPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-indigo-600" />
-          <h1 className="text-xl font-bold">Administration — Utilisateurs</h1>
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <h1 className="text-xl font-bold">Administration des utilisateurs</h1>
         </div>
         <Button size="sm" onClick={() => { setEditing(null); setModalOpen(true); }}>
           <Plus className="h-4 w-4 mr-1" /> Nouvel utilisateur

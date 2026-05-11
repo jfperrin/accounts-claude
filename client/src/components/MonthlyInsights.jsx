@@ -412,7 +412,7 @@ export default function MonthlyInsights({
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-indigo-600" />
+          <Sparkles className="h-4 w-4 text-primary" />
           Analyse du mois
           <InfoTip>
             Synthèse automatique des points marquants de la période :
@@ -431,7 +431,7 @@ export default function MonthlyInsights({
       </div>
       {insights.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Rien à signaler — aucun point critique détecté sur la période.
+          Rien à signaler : aucun point critique détecté sur la période.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -446,7 +446,7 @@ function InsightItem({ severity, icon: Icon, title, message }) {
   const styles = {
     critical: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:border-rose-400/30 dark:text-rose-300',
     warning: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:text-amber-300',
-    info: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:border-indigo-400/30 dark:text-indigo-300',
+    info: 'border-primary/30 bg-primary/10 text-primary',
     positive: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/30 dark:text-emerald-300',
   };
   return (

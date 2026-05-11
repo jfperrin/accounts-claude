@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
@@ -312,7 +312,7 @@ export default function RecurringPage() {
                   )}
                 </TableCell>
                 <TableCell className="text-center text-muted-foreground">{item.dayOfMonth}</TableCell>
-                <TableCell className={cn('text-right font-semibold', item.amount < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                <TableCell className={cn('text-right font-semibold', amountClass(item.amount))}>
                   {item.amount > 0 ? '+' : ''}{formatEur(item.amount)}
                 </TableCell>
                 <TableCell className="text-right">

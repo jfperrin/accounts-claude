@@ -5,7 +5,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 
 // Modale de résolution des conflits d'import.
 // Affiche chaque ligne de fichier ambigüe avec ses candidats existants ;
@@ -58,7 +58,7 @@ export default function ImportResolveDialog({ open, pendingMatches, onResolve, o
 
         <p className="text-sm text-muted-foreground">
           Plusieurs opérations existantes correspondent au montant de ces lignes
-          du fichier. Coche celles à pointer — leur libellé sera enrichi du
+          du fichier. Coche celles à pointer : leur libellé sera enrichi du
           libellé du fichier entre parenthèses. Aucune coche = la ligne est
           ajoutée telle quelle.
         </p>
@@ -75,10 +75,7 @@ export default function ImportResolveDialog({ open, pendingMatches, onResolve, o
                       {dayjs(m.importedRow.date).format('DD/MM/YYYY')}
                     </span>
                   </div>
-                  <span className={cn(
-                    'text-sm font-bold tabular-nums',
-                    m.importedRow.amount < 0 ? 'text-rose-600' : 'text-emerald-600',
-                  )}>
+                  <span className={cn('text-sm font-bold tabular-nums', amountClass(m.importedRow.amount))}>
                     {m.importedRow.amount > 0 ? '+' : ''}{formatEur(m.importedRow.amount)}
                   </span>
                 </div>
@@ -94,7 +91,7 @@ export default function ImportResolveDialog({ open, pendingMatches, onResolve, o
                         className={cn(
                           'flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-sm transition',
                           checked
-                            ? 'border-indigo-500 bg-indigo-50'
+                            ? 'border-primary bg-primary/10'
                             : 'border-border bg-background hover:bg-accent',
                         )}
                       >
@@ -103,7 +100,7 @@ export default function ImportResolveDialog({ open, pendingMatches, onResolve, o
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggle(i, c._id)}
-                          className="h-4 w-4 accent-indigo-600"
+                          className="h-4 w-4 accent-primary"
                         />
                         <span className="flex-1 truncate">{c.label}</span>
                         <Badge variant="secondary" className="shrink-0">

@@ -1,0 +1,122 @@
+- generic [ref=e2]:
+  - generic [ref=e6]:
+    - complementary [ref=e7]:
+      - generic [ref=e8]:
+        - img [ref=e10]
+        - generic [ref=e13]: Comptes
+      - navigation [ref=e14]:
+        - button "Accueil" [ref=e15]:
+          - img [ref=e16]
+          - generic [ref=e19]: Accueil
+        - button "Opérations" [ref=e20]:
+          - img [ref=e21]
+          - generic [ref=e24]: Opérations
+        - button "Banques" [ref=e25]:
+          - img [ref=e26]
+          - generic [ref=e30]: Banques
+        - button "Opérations récurrentes" [ref=e31]:
+          - img [ref=e32]
+          - generic [ref=e37]: Opérations récurrentes
+        - button "Catégories" [ref=e38]:
+          - img [ref=e39]
+          - generic [ref=e42]: Catégories
+        - button "Aide" [ref=e43]:
+          - img [ref=e44]
+          - generic [ref=e47]: Aide
+        - button "Administration" [ref=e48]:
+          - img [ref=e49]
+          - generic [ref=e52]: Administration
+      - button [ref=e54]:
+        - img [ref=e55]
+    - generic [ref=e57]:
+      - banner [ref=e58]:
+        - generic "Backend de développement" [ref=e59]:
+          - img [ref=e60]
+          - button "sqlite" [ref=e64]
+          - button "mongo" [ref=e65]
+        - button "Passer en mode clair" [active] [ref=e169]:
+          - img [ref=e170]
+        - button "JF jf@atraxi.eu" [ref=e69] [cursor=pointer]:
+          - generic [ref=e71]: JF
+          - generic [ref=e72]: jf@atraxi.eu
+        - button "Déconnexion" [ref=e73]:
+          - img [ref=e74]
+          - text: Déconnexion
+      - main [ref=e77]:
+        - generic [ref=e78]:
+          - generic [ref=e79]:
+            - generic [ref=e80]:
+              - img [ref=e81]
+              - heading "Administration des utilisateurs" [level=1] [ref=e84]
+            - button "Nouvel utilisateur" [ref=e85]:
+              - img [ref=e86]
+              - text: Nouvel utilisateur
+          - table [ref=e88]:
+            - rowgroup [ref=e89]:
+              - row "Email Email Vérifié Rôle Actions" [ref=e90]:
+                - columnheader "Email" [ref=e91]
+                - columnheader "Email" [ref=e92]
+                - columnheader "Vérifié" [ref=e93]
+                - columnheader "Rôle" [ref=e94]
+                - columnheader "Actions" [ref=e95]
+            - rowgroup [ref=e96]:
+              - row "test@atraxi.eu test@atraxi.eu Utilisateur" [ref=e97]:
+                - cell "test@atraxi.eu" [ref=e98]
+                - cell "test@atraxi.eu" [ref=e99]
+                - cell [ref=e100]:
+                  - img [ref=e101]
+                - cell "Utilisateur" [ref=e104]:
+                  - generic [ref=e105]: Utilisateur
+                - cell [ref=e106]:
+                  - generic [ref=e107]:
+                    - button "Modifier" [ref=e108]:
+                      - img [ref=e109]
+                    - button "Réinitialiser le mot de passe" [ref=e112]:
+                      - img [ref=e113]
+                    - button "Vérifier l'email" [disabled]:
+                      - img
+                    - button "Supprimer" [ref=e116]:
+                      - img [ref=e117]
+              - row "jf@perrin.at jf@perrin.at Utilisateur" [ref=e120]:
+                - cell "jf@perrin.at" [ref=e121]
+                - cell "jf@perrin.at" [ref=e122]
+                - cell [ref=e123]:
+                  - img [ref=e124]
+                - cell "Utilisateur" [ref=e127]:
+                  - generic [ref=e128]: Utilisateur
+                - cell [ref=e129]:
+                  - generic [ref=e130]:
+                    - button "Modifier" [ref=e131]:
+                      - img [ref=e132]
+                    - button "Réinitialiser le mot de passe" [ref=e135]:
+                      - img [ref=e136]
+                    - button "Vérifier l'email" [disabled]:
+                      - img
+                    - button "Supprimer" [ref=e139]:
+                      - img [ref=e140]
+              - row "jf@atraxi.eu(vous) jf@atraxi.eu Admin" [ref=e143]:
+                - cell "jf@atraxi.eu(vous)" [ref=e144]
+                - cell "jf@atraxi.eu" [ref=e145]
+                - cell [ref=e146]:
+                  - img [ref=e147]
+                - cell "Admin" [ref=e150]:
+                  - generic [ref=e151]: Admin
+                - cell [ref=e152]:
+                  - generic [ref=e153]:
+                    - button "Modifier" [ref=e154]:
+                      - img [ref=e155]
+                    - button "Réinitialiser le mot de passe" [ref=e158]:
+                      - img [ref=e159]
+                    - button "Vérifier l'email" [disabled]:
+                      - img
+                    - button "Supprimer" [disabled]:
+                      - img
+      - contentinfo [ref=e162]:
+        - generic [ref=e163]:
+          - generic [ref=e164]: © 2026 Gestion de Comptes. Tous droits réservés.
+          - navigation [ref=e165]:
+            - link "Conditions Générales d'Utilisation" [ref=e166] [cursor=pointer]:
+              - /url: /cgu
+            - generic [ref=e167]: ·
+            - generic [ref=e168]: Les données affichées sont fournies à titre indicatif et n'engagent pas la responsabilité de l'éditeur.
+  - region "Notifications alt+T"

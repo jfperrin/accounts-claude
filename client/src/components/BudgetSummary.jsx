@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { HelpCircle, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import InfoTip from '@/components/InfoTip';
 
@@ -137,7 +137,7 @@ export default function BudgetSummary({
             somme des récurrentes assignées + complément mensuel
             (<em>maxAmount</em>), arrondi à la dizaine supérieure. Les
             transferts internes et les opérations sans catégorie ne
-            comptent pas dans Revenus / Dépenses / Solde — les non
+            comptent pas dans Revenus / Dépenses / Solde ; les non
             catégorisées sont totalisées séparément en bas.
           </InfoTip>
         </h2>
@@ -179,10 +179,7 @@ export default function BudgetSummary({
         <div className="mt-3 pt-3 border-t border-border/60 flex items-center gap-2 text-sm">
           <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="flex-1 truncate font-medium">Sans catégorie</span>
-          <span className={cn(
-            'tabular-nums font-semibold',
-            uncategorized.total >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-          )}>
+          <span className={cn('tabular-nums font-semibold', amountClass(uncategorized.total))}>
             {formatEur(uncategorized.total)}
           </span>
         </div>
@@ -201,7 +198,7 @@ function SummaryCell({ icon: Icon, label, actual, budget, tone, showSign }) {
       </div>
       <div className={cn(
         'mt-1 text-base font-bold tabular-nums',
-        tone === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+        tone === 'credit' ? 'text-credit' : 'text-debit',
       )}>
         {fmt(actual)}
       </div>
@@ -227,10 +224,7 @@ function BudgetRow({ cat, budget, actual, depth = 0 }) {
         {depth > 0 && <span className="text-muted-foreground text-xs shrink-0">↳</span>}
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <span className="flex-1 truncate font-medium">{cat.label}</span>
-        <span className={cn(
-          'tabular-nums font-semibold',
-          overrun && 'text-rose-600 dark:text-rose-400',
-        )}>
+        <span className={cn('tabular-nums font-semibold', overrun && 'text-debit')}>
           {formatEur(actual)}
         </span>
         <span className="text-xs text-muted-foreground tabular-nums">

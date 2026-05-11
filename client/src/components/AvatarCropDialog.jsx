@@ -81,6 +81,29 @@ export default function AvatarCropDialog({ open, file, onConfirm, onCancel }) {
     setOffset((o) => clampOffset(o.x, o.y, newScale));
   };
 
+  const onKeyDown = (e) => {
+    const PAN_STEP = 16;
+    const ZOOM_STEP = Math.max(0.01, (maxScale - minScale) / 20);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOffset((o) => {
+        const dx = e.key === 'ArrowLeft' ? -PAN_STEP : e.key === 'ArrowRight' ? PAN_STEP : 0;
+        const dy = e.key === 'ArrowUp' ? -PAN_STEP : e.key === 'ArrowDown' ? PAN_STEP : 0;
+        return clampOffset(o.x + dx, o.y + dy, scale);
+      });
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      const ns = Math.min(maxScale, scale + ZOOM_STEP);
+      setScale(ns);
+      setOffset((o) => clampOffset(o.x, o.y, ns));
+    } else if (e.key === '-' || e.key === '_') {
+      e.preventDefault();
+      const ns = Math.max(minScale, scale - ZOOM_STEP);
+      setScale(ns);
+      setOffset((o) => clampOffset(o.x, o.y, ns));
+    }
+  };
+
   const handleConfirm = () => {
     if (!imgSize.w || !imgSize.h || !imageUrl) return;
     // Coin haut-gauche du viewport en coordonnées image (px naturels)
@@ -120,7 +143,11 @@ export default function AvatarCropDialog({ open, file, onConfirm, onCancel }) {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            className="relative overflow-hidden rounded-full bg-slate-900 cursor-move select-none touch-none"
+            onKeyDown={onKeyDown}
+            tabIndex={0}
+            role="group"
+            aria-label="Zone de recadrage. Flèches pour déplacer l'image, plus et moins pour zoomer."
+            className="relative overflow-hidden rounded-full bg-slate-900 cursor-move select-none touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             style={{ width: VIEWPORT_SIZE, height: VIEWPORT_SIZE }}
           >
             {imageUrl && (
@@ -149,12 +176,12 @@ export default function AvatarCropDialog({ open, file, onConfirm, onCancel }) {
               step={(maxScale - minScale) / 100}
               value={scale}
               onChange={onScaleChange}
-              className="w-full accent-indigo-600"
+              className="w-full accent-primary"
               aria-label="Zoom"
             />
           )}
-          <p className="text-xs text-muted-foreground">
-            Glissez pour repositionner, utilisez le curseur pour zoomer.
+          <p className="text-xs text-muted-foreground text-center">
+            Glissez ou utilisez les flèches pour repositionner. Curseur ou +/− pour zoomer.
           </p>
         </div>
         <DialogFooter>

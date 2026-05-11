@@ -62,7 +62,7 @@ export default function AppShell() {
           'flex items-center gap-3 border-b border-white/10 py-4',
           collapsed ? 'justify-center px-0' : 'px-5'
         )}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary shadow-lg shadow-primary/40">
             <Wallet className="h-4 w-4 text-white" />
           </div>
           {!collapsed && (
@@ -79,7 +79,7 @@ export default function AppShell() {
               className={cn(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 pathname === key
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-slate-400 hover:bg-white/10 hover:text-white',
                 collapsed && 'justify-center px-0'
               )}
@@ -110,7 +110,7 @@ export default function AppShell() {
 
           {/* Logo — mobile uniquement */}
           <div className="flex items-center gap-2 md:hidden">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
               <Wallet className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="text-sm font-bold tracking-tight text-foreground">Comptes</span>
@@ -168,7 +168,7 @@ export default function AppShell() {
               onClick={() => navigate(key)}
               className={cn(
                 'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
-                active ? 'text-indigo-600' : 'text-slate-400'
+                active ? 'text-primary' : 'text-slate-400'
               )}
             >
               <Icon className={cn('h-5 w-5', active && 'stroke-[2.5]')} />
@@ -183,7 +183,7 @@ export default function AppShell() {
               type="button"
               className={cn(
                 'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
-                moreActive ? 'text-indigo-600' : 'text-slate-400'
+                moreActive ? 'text-primary' : 'text-slate-400'
               )}
             >
               <MoreHorizontal className={cn('h-5 w-5', moreActive && 'stroke-[2.5]')} />
@@ -208,7 +208,7 @@ export default function AppShell() {
               onClick={() => navigate(key)}
               className={cn(
                 'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
-                active ? 'text-indigo-600' : 'text-slate-400'
+                active ? 'text-primary' : 'text-slate-400'
               )}
             >
               <Icon className={cn('h-5 w-5', active && 'stroke-[2.5]')} />

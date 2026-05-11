@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Wallet } from 'lucide-react';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import InfoTip from '@/components/InfoTip';
 
 // Vue globale, indépendante de la période.
@@ -22,7 +22,7 @@ export default function BalanceSummary({ banks }) {
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <Wallet className="h-4 w-4 text-indigo-600" />
+          <Wallet className="h-4 w-4 text-primary" />
           Soldes
           <InfoTip>
             <strong>Actuel</strong> : somme des soldes courants saisis
@@ -49,10 +49,7 @@ function Cell({ label, value, signed }) {
   return (
     <div className="rounded-md border border-border/60 bg-muted/30 p-2">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn(
-        'mt-1 text-base font-bold tabular-nums',
-        value >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-      )}>
+      <div className={cn('mt-1 text-base font-bold tabular-nums', amountClass(value))}>
         {fmt(value)}
       </div>
     </div>

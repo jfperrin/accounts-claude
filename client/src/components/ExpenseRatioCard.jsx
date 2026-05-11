@@ -58,17 +58,17 @@ export default function ExpenseRatioCard({ operations, categories, history = [] 
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <Percent className="h-4 w-4 text-indigo-600" />
+          <Percent className="h-4 w-4 text-primary" />
           Taux de dépense
           <InfoTip>
             Part des revenus consommée par les dépenses sur la période
             sélectionnée. Sous 100&nbsp;% vous épargnez ; au-dessus, le
             mois est déficitaire. Le calcul ne prend en compte que les
             opérations dont la catégorie est de type revenu ou dépense
-            — transferts internes et opérations sans catégorie exclus.
+            (transferts internes et opérations sans catégorie exclus).
             Le second chiffre est la moyenne des taux sur les
             {' '}<strong>6 mois pleins glissants</strong> (mois courant
-            exclu) — un repère stable pour comparer le mois en cours à
+            exclu) : un repère stable pour comparer le mois en cours à
             ses habitudes.
           </InfoTip>
         </h2>
@@ -78,7 +78,7 @@ export default function ExpenseRatioCard({ operations, categories, history = [] 
         {hasIncome ? (
           <span className={cn(
             'text-6xl font-extrabold tabular-nums leading-none',
-            overrun ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400',
+            overrun ? 'text-debit' : 'text-credit',
           )}>
             {Math.round(ratio)}%
           </span>
@@ -90,7 +90,7 @@ export default function ExpenseRatioCard({ operations, categories, history = [] 
             Moyenne {monthsCounted} mois :{' '}
             <span className={cn(
               'font-semibold tabular-nums',
-              avgOverrun ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400',
+              avgOverrun ? 'text-debit' : 'text-credit',
             )}>
               {Math.round(avgRatio)}%
             </span>

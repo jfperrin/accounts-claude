@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import CategoryBadge from '@/components/CategoryBadge';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 
 // Modale qui propose d'appliquer une catégorie à des opérations similaires sans
 // catégorie. Toutes les cases sont cochées par défaut.
@@ -53,7 +53,7 @@ export default function BulkCategorizeDialog({
             <button
               type="button"
               onClick={toggleAll}
-              className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+              className="text-xs font-medium text-primary hover:underline"
             >
               {allChecked ? 'Tout décocher' : 'Tout cocher'}
             </button>
@@ -70,7 +70,7 @@ export default function BulkCategorizeDialog({
                   className={cn(
                     'flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-sm transition',
                     checked
-                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
+                      ? 'border-primary bg-primary/10'
                       : 'border-transparent bg-background hover:bg-accent',
                   )}
                 >
@@ -79,16 +79,13 @@ export default function BulkCategorizeDialog({
                     type="checkbox"
                     checked={checked}
                     onChange={() => toggle(c._id)}
-                    className="h-4 w-4 shrink-0 accent-indigo-600"
+                    className="h-4 w-4 shrink-0 accent-primary"
                   />
                   <span className="min-w-0 flex-1 truncate">{c.label}</span>
                   {c.categoryId && c.categoryId !== categoryId && (
                     <CategoryBadge categoryId={c.categoryId} categories={categories} />
                   )}
-                  <span className={cn(
-                    'tabular-nums shrink-0',
-                    c.amount < 0 ? 'text-rose-600' : 'text-emerald-600',
-                  )}>
+                  <span className={cn('tabular-nums shrink-0', amountClass(c.amount))}>
                     {c.amount > 0 ? '+' : ''}{formatEur(c.amount)}
                   </span>
                   <Badge variant="secondary" className="shrink-0">

@@ -107,7 +107,7 @@ export default function MonthlyTrendChart({
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <LineChartIcon className="h-4 w-4 text-indigo-600" />
+          <LineChartIcon className="h-4 w-4 text-primary" />
           Évolution du solde mensuel
           <InfoTip>
             Cumul jour par jour des opérations en partant de 0 le 1er du
@@ -154,10 +154,10 @@ export default function MonthlyTrendChart({
             {monthOffset === 0 && (
               <ReferenceLine
                 x={dayjs().date()}
-                stroke="#6366f1"
+                stroke="var(--primary)"
                 strokeDasharray="3 3"
                 strokeWidth={1}
-                label={{ value: "Auj.", position: 'top', fill: '#6366f1', fontSize: 11 }}
+                label={{ value: "Auj.", position: 'top', fill: 'var(--primary)', fontSize: 11 }}
               />
             )}
             <Tooltip content={<ChartTooltip />} />
@@ -165,16 +165,16 @@ export default function MonthlyTrendChart({
               wrapperStyle={{ fontSize: 12 }}
               iconType="line"
               payload={[
-                { value: prev2Label, type: 'line', color: '#f59e0b', id: 'prev2' },
-                { value: previousLabel, type: 'line', color: '#10b981', id: 'previous' },
-                { value: currentLabel, type: 'line', color: '#6366f1', id: 'current' },
+                { value: prev2Label, type: 'line', color: 'var(--muted-foreground)', id: 'prev2' },
+                { value: previousLabel, type: 'line', color: 'var(--credit)', id: 'previous' },
+                { value: currentLabel, type: 'line', color: 'var(--primary)', id: 'current' },
               ]}
             />
             <Line
               type="monotone"
               dataKey="prev2"
               name={prev2Label}
-              stroke="#f59e0b"
+              stroke="var(--muted-foreground)"
               strokeWidth={1.75}
               strokeDasharray="2 4"
               dot={false}
@@ -185,7 +185,7 @@ export default function MonthlyTrendChart({
               type="monotone"
               dataKey="previous"
               name={previousLabel}
-              stroke="#10b981"
+              stroke="var(--credit)"
               strokeWidth={2}
               strokeDasharray="4 3"
               dot={false}
@@ -196,7 +196,7 @@ export default function MonthlyTrendChart({
               type="monotone"
               dataKey="current"
               name={currentLabel}
-              stroke="#6366f1"
+              stroke="var(--primary)"
               strokeWidth={2.5}
               dot={false}
               connectNulls={false}

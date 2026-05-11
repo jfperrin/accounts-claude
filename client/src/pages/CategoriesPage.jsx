@@ -11,7 +11,7 @@ import { useCategories } from '@/hooks/useCategories';
 import { useRecurringOperations } from '@/hooks/useRecurringOperations';
 import { CATEGORY_COLORS, DEFAULT_COLOR } from '@/lib/categoryColors';
 import { sortCategoriesByHierarchy } from '@/lib/categoryHierarchy';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -380,7 +380,7 @@ export default function CategoriesPage() {
               </Select>
               {editingHasChildren && (
                 <p className="text-xs text-muted-foreground">
-                  Cette catégorie a des sous-catégories — elle ne peut pas devenir enfant.
+                  Cette catégorie a des sous-catégories ; elle ne peut pas devenir enfant.
                 </p>
               )}
               {!editingHasChildren && eligibleParents.length === 0 && (
@@ -393,14 +393,15 @@ export default function CategoriesPage() {
             <div className="space-y-1.5">
               <Label>Couleur</Label>
               <div className="flex flex-wrap items-center gap-2">
-                {CATEGORY_COLORS.map((c) => (
+                {CATEGORY_COLORS.map(({ hex, name }) => (
                   <button
-                    key={c}
+                    key={hex}
                     type="button"
-                    onClick={() => setColor(c)}
-                    className="h-7 w-7 rounded-full transition-transform hover:scale-110"
-                    style={{ backgroundColor: c, outline: color.toLowerCase() === c.toLowerCase() ? `2px solid ${c}` : 'none', outlineOffset: '2px' }}
-                    aria-label={c}
+                    onClick={() => setColor(hex)}
+                    className="h-7 w-7 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                    style={{ backgroundColor: hex, outline: color.toLowerCase() === hex.toLowerCase() ? `2px solid ${hex}` : 'none', outlineOffset: '2px' }}
+                    aria-label={name}
+                    aria-pressed={color.toLowerCase() === hex.toLowerCase()}
                   />
                 ))}
                 <label
@@ -483,10 +484,7 @@ function RecurringList({ ops }) {
           <span className="hidden sm:inline text-xs text-muted-foreground truncate">
             {r.bankId?.label}
           </span>
-          <span className={cn(
-            'tabular-nums font-medium',
-            r.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-          )}>
+          <span className={cn('tabular-nums font-medium', amountClass(r.amount))}>
             {formatEur(r.amount)}
           </span>
         </li>
@@ -623,7 +621,7 @@ function SummaryCell({ label, value, tone, showSign }) {
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className={cn(
         'tabular-nums font-semibold',
-        tone === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+        tone === 'credit' ? 'text-credit' : 'text-debit',
       )}>
         {text}
       </span>
