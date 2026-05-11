@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Download, Sparkles, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
@@ -252,6 +252,27 @@ export default function RecurringPage() {
         onChange={setSuggestions}
       />
 
+      {items.length === 0 ? (
+        <div className="mx-auto max-w-md py-16 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+            <RefreshCw className="h-6 w-6 text-primary" />
+          </div>
+          <h2 className="font-serif text-2xl font-semibold mb-2">Aucune opération récurrente</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            Les récurrentes (loyer, salaire, abonnements) sont rejouées chaque mois pour anticiper le prévisionnel. Clique sur Détecter pour les retrouver dans ton historique, ou ajoute-les à la main.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+            <Button variant="outline" size="sm" onClick={() => runDetection()} disabled={detecting}>
+              <Sparkles className="h-4 w-4" />
+              {detecting ? 'Analyse…' : 'Détecter automatiquement'}
+            </Button>
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="h-4 w-4" />
+              Ajouter manuellement
+            </Button>
+          </div>
+        </div>
+      ) : (
       <div className="rounded-xl border border-border bg-card shadow-xs">
         <Table>
           <TableHeader>
@@ -332,6 +353,7 @@ export default function RecurringPage() {
           </TableBody>
         </Table>
       </div>
+      )}
 
       <Dialog open={!!modal} onOpenChange={(o) => !o && setModal(null)}>
         <DialogContent>

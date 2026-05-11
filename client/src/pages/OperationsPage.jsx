@@ -289,7 +289,7 @@ export default function OperationsPage() {
       {banks.length > 1 && totalBadgeVisible && (
         <div className="animate-fly-to-corner fixed top-4 right-4 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-2 shadow-lg shadow-primary/30">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/70">Total</p>
-          <span className="text-sm font-extrabold text-primary-foreground">{formatEur(totalProjected)}</span>
+          <span className="text-sm font-extrabold tabular-nums text-primary-foreground">{formatEur(totalProjected)}</span>
         </div>
       )}
 
@@ -435,14 +435,39 @@ export default function OperationsPage() {
       )}
 
       {visibleOperations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <CalendarDays className="mb-3 h-10 w-10 opacity-30" />
-          <p className="text-sm">
-            {onlyUncategorized
-              ? 'Aucune opération sans catégorie sur cette période'
-              : 'Aucune opération sur cette période'}
-          </p>
-        </div>
+        onlyUncategorized ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <Tag className="mb-3 h-10 w-10 opacity-30" />
+            <p className="text-sm">Toutes les opérations de la période sont catégorisées.</p>
+          </div>
+        ) : banks.length === 0 ? (
+          <div className="mx-auto max-w-sm py-16 text-center">
+            <h3 className="font-serif text-2xl font-semibold mb-2">Pas encore de banque</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Avant d'ajouter des opérations, crée d'abord une banque pour suivre ses soldes.
+            </p>
+            <Button asChild size="sm">
+              <a href="/banks">Aller aux banques</a>
+            </Button>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-md py-16 text-center">
+            <h3 className="font-serif text-2xl font-semibold mb-2">Pas encore d'opération sur cette période</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Importe un relevé bancaire pour rapatrier les opérations en masse, ou ajoute une opération à la main.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <Button onClick={() => setImportOpen(true)} variant="outline" size="sm">
+                <Upload className="h-4 w-4" />
+                Importer un fichier
+              </Button>
+              <Button onClick={() => { setEditOp(null); setFormOpen(true); }} size="sm">
+                <Plus className="h-4 w-4" />
+                Nouvelle opération
+              </Button>
+            </div>
+          </div>
+        )
       ) : (
         <div className="sm:rounded-xl sm:border sm:border-border sm:bg-card sm:p-4 sm:shadow-xs">
           <div className="mb-3 flex items-center justify-between gap-3">

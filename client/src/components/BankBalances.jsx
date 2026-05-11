@@ -126,7 +126,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
 
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prévisionnel</p>
-          <span className={cn('text-2xl font-bold', amountClass(projected))}>
+          <span className={cn('text-2xl font-bold tabular-nums', amountClass(projected))}>
             {formatEur(projected)}
           </span>
         </div>
@@ -138,27 +138,43 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
 export default function BankBalances({ banks, onSaveBalance }) {
   // Total prévisionnel toutes banques confondues — somme des projectedBalance.
   const totalProjected = banks.reduce((s, b) => s + (b.projectedBalance ?? 0), 0);
+  const unpointed = banks.reduce((s, b) => s + ((b.projectedBalance ?? 0) - (b.currentBalance ?? 0)), 0);
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-      {banks.map((bank) => (
-        <BankCard key={bank._id} bank={bank} onSaveBalance={onSaveBalance} />
-      ))}
+    <div className="space-y-3 sm:space-y-4">
       {banks.length > 1 && (
         <div
           data-testid="total-card"
-          className="rounded-xl bg-primary shadow-lg shadow-primary/30"
+          className="rounded-xl bg-primary shadow-lg shadow-primary/30 px-5 py-4 sm:px-7 sm:py-6"
         >
-          <div className="sm:hidden flex items-center gap-2 px-3 py-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/70 flex-1">Total prévisionnel</span>
-            <span className="text-sm font-extrabold text-primary-foreground whitespace-nowrap">{formatEur(totalProjected)}</span>
-          </div>
-          <div className="hidden sm:block p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary-foreground/70">Total prévisionnel</p>
-            <span className="text-2xl font-extrabold text-primary-foreground">{formatEur(totalProjected)}</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
+                Total prévisionnel
+              </span>
+              <span className="text-xs text-primary-foreground/70">
+                sur {banks.length} banques
+                {Math.abs(unpointed) > 0.005 && (
+                  <>
+                    {' · '}
+                    <span className="tabular-nums">
+                      {unpointed > 0 ? '+' : ''}{formatEur(unpointed)} à pointer
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+            <span className="text-3xl sm:text-4xl font-extrabold tabular-nums leading-none text-primary-foreground">
+              {formatEur(totalProjected)}
+            </span>
           </div>
         </div>
       )}
+      <div className="grid grid-cols-1 gap-2 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {banks.map((bank) => (
+          <BankCard key={bank._id} bank={bank} onSaveBalance={onSaveBalance} />
+        ))}
+      </div>
     </div>
   );
 }

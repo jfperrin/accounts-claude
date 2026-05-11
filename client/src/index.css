@@ -25,8 +25,12 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Newsreader', 'Source Serif 4', Georgia, 'Times New Roman', serif;
 }
 
+/* Variables partagées tous thèmes — light. La marque (primary/ring) est
+   définie séparément ci-dessous par .theme-saffron / .theme-midnight /
+   .theme-verveine, avec saffron comme défaut. */
 :root {
   --background: oklch(0.984 0.003 247.858);
   --foreground: oklch(0.141 0.005 285.823);
@@ -36,9 +40,6 @@
   --popover-foreground: oklch(0.141 0.005 285.823);
   --border: oklch(0.922 0.006 264.532);
   --input: oklch(0.922 0.006 264.532);
-  --ring: oklch(0.66 0.13 70);
-  --primary: oklch(0.66 0.13 70);
-  --primary-foreground: oklch(0.18 0.02 70);
   --muted: oklch(0.968 0.007 264.542);
   --muted-foreground: oklch(0.495 0.046 257.417);
   --destructive: oklch(0.577 0.245 27.325);
@@ -47,6 +48,10 @@
   --credit: oklch(0.596 0.145 163);
   --debit: oklch(0.586 0.227 16);
   --radius: 0.5rem;
+  /* Défaut brand (saffron light) — surchargé par .theme-X au runtime. */
+  --primary: oklch(0.66 0.13 70);
+  --primary-foreground: oklch(0.18 0.02 70);
+  --ring: oklch(0.66 0.13 70);
 }
 
 .dark {
@@ -58,9 +63,6 @@
   --popover-foreground: oklch(0.984 0.003 247.858);
   --border: oklch(0.28 0.006 285.823);
   --input: oklch(0.28 0.006 285.823);
-  --ring: oklch(0.74 0.14 70);
-  --primary: oklch(0.74 0.14 70);
-  --primary-foreground: oklch(0.18 0.02 70);
   --muted: oklch(0.22 0.006 285.823);
   --muted-foreground: oklch(0.65 0.005 285.823);
   --destructive: oklch(0.65 0.245 27.325);
@@ -68,6 +70,70 @@
   --sidebar: oklch(0.10 0.005 285.823);
   --credit: oklch(0.764 0.177 163);
   --debit: oklch(0.708 0.187 22);
+  /* Défaut brand dark (saffron) — surchargé par .dark.theme-X au runtime. */
+  --primary: oklch(0.74 0.14 70);
+  --primary-foreground: oklch(0.18 0.02 70);
+  --ring: oklch(0.74 0.14 70);
+}
+
+/* ─── Thème Saffron (ocre safran, défaut) ──────────────────────────── */
+.theme-saffron {
+  --primary: oklch(0.66 0.13 70);
+  --primary-foreground: oklch(0.18 0.02 70);
+  --ring: oklch(0.66 0.13 70);
+}
+.dark.theme-saffron {
+  --primary: oklch(0.74 0.14 70);
+  --primary-foreground: oklch(0.18 0.02 70);
+  --ring: oklch(0.74 0.14 70);
+}
+
+/* ─── Thème Midnight (lime électrique, super moderne) ──────────────── */
+.theme-midnight {
+  --primary: oklch(0.78 0.20 130);
+  --primary-foreground: oklch(0.18 0.04 130);
+  --ring: oklch(0.78 0.20 130);
+}
+.dark.theme-midnight {
+  --primary: oklch(0.85 0.22 130);
+  --primary-foreground: oklch(0.16 0.04 130);
+  --ring: oklch(0.85 0.22 130);
+}
+
+/* ─── Thème Verveine (sage désaturé, apaisé) ───────────────────────── */
+.theme-verveine {
+  --primary: oklch(0.52 0.08 165);
+  --primary-foreground: oklch(0.98 0.01 165);
+  --ring: oklch(0.52 0.08 165);
+}
+.dark.theme-verveine {
+  --primary: oklch(0.66 0.09 165);
+  --primary-foreground: oklch(0.15 0.02 165);
+  --ring: oklch(0.66 0.09 165);
+}
+
+/* ─── Thème Lagon (bleu turquoise frais) ───────────────────────────── */
+.theme-lagon {
+  --primary: oklch(0.65 0.13 195);
+  --primary-foreground: oklch(0.18 0.03 195);
+  --ring: oklch(0.65 0.13 195);
+}
+.dark.theme-lagon {
+  --primary: oklch(0.75 0.14 195);
+  --primary-foreground: oklch(0.16 0.03 195);
+  --ring: oklch(0.75 0.14 195);
+}
+
+/* ─── Thème Indigo (le brand originel d'avant la migration) ────────── */
+.theme-indigo {
+  --primary: oklch(0.511 0.262 277);
+  --primary-foreground: oklch(0.984 0.003 247);
+  --ring: oklch(0.511 0.262 277);
+}
+.dark.theme-indigo {
+  --primary: oklch(0.58 0.24 277);
+  --primary-foreground: oklch(0.984 0.003 247);
+  --ring: oklch(0.58 0.24 277);
 }
 
 * {

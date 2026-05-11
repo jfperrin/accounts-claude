@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { list, create, update, remove } from '@/api/banks';
 import { Button } from '@/components/ui/button';
@@ -67,37 +67,53 @@ export default function BanksPage() {
         </Button>
       </div>
 
-      <div className="rounded-xl border border-border bg-card shadow-xs">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Libellé</TableHead>
-              <TableHead className="text-right">Solde actuel</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {banks.map((bank) => (
-              <TableRow key={bank._id}>
-                <TableCell className="font-medium">{bank.label}</TableCell>
-                <TableCell className="text-right text-muted-foreground">{formatEur(bank.currentBalance ?? 0)}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(bank)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" aria-label="supprimer"
-                      className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                      onClick={() => setDeleteTarget(bank._id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </TableCell>
+      {banks.length === 0 ? (
+        <div className="mx-auto max-w-md py-16 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+            <Building2 className="h-6 w-6 text-primary" />
+          </div>
+          <h2 className="font-serif text-2xl font-semibold mb-2">Aucune banque enregistrée</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            Une banque représente un compte que tu suis (courant, épargne, joint). Le solde actuel saisi ici sert de base au calcul du prévisionnel sur toutes tes opérations.
+          </p>
+          <Button onClick={openAdd} size="sm">
+            <Plus className="h-4 w-4" />
+            Ajouter ma première banque
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card shadow-xs">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Libellé</TableHead>
+                <TableHead className="text-right">Solde actuel</TableHead>
+                <TableHead />
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {banks.map((bank) => (
+                <TableRow key={bank._id}>
+                  <TableCell className="font-medium">{bank.label}</TableCell>
+                  <TableCell className="text-right text-muted-foreground tabular-nums">{formatEur(bank.currentBalance ?? 0)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" aria-label="éditer" onClick={() => openEdit(bank)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" aria-label="supprimer"
+                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50"
+                        onClick={() => setDeleteTarget(bank._id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       <Dialog open={!!modal} onOpenChange={(o) => !o && setModal(null)}>
         <DialogContent className="max-w-sm">

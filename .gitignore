@@ -10,3 +10,4 @@ server/dev.db-wal
 /server/uploads/avatars/
 /client/.eslintcache
 /*.png
+/.playwright-mcp/
