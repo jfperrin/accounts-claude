@@ -100,7 +100,7 @@ export default function MonthlyTrendChart({
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
           <LineChartIcon className="h-4 w-4 text-primary" />
-          Évolution du solde mensuel
+          Cumul mensuel des opérations
           <InfoTip>
             Cumul jour par jour des opérations en partant de 0 le 1er du
             mois. Trait plein pour le mois sélectionné (M), pointillé
