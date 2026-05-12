@@ -14,7 +14,7 @@ import MonthlyComparison from '@/components/MonthlyComparison';
 import ExpenseRatioCard from '@/components/ExpenseRatioCard';
 import BalanceSummary from '@/components/BalanceSummary';
 import MonthlyInsights from '@/components/MonthlyInsights';
-import MonthlyTrendChart from '@/components/MonthlyTrendChart';
+import RealBalanceChart from '@/components/RealBalanceChart';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
 import OnboardingSteps from '@/components/OnboardingSteps';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -169,13 +169,14 @@ export default function HomePage() {
         <ExpenseRatioCard operations={operations} categories={categories} history={history} />
       </div>
 
-      <MonthlyTrendChart
-        operations={operations}
-        comparisonOps={comparisonOps}
-        history={history}
-        categories={categories}
-        monthOffset={monthOffset}
-      />
+      {banks.length > 0 && (
+        <RealBalanceChart
+          banks={banks}
+          operations={operations}
+          history={history}
+          monthOffset={monthOffset}
+        />
+      )}
 
       <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
     </div>
