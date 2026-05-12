@@ -10,6 +10,7 @@ const requireAuth = require('../middleware/requireAuth');
 const upload = require('../middleware/upload');
 const { randomUUID } = require('crypto');
 const mailer = require('../utils/mailer');
+const { router: mfaRouter } = require('./mfa');
 
 // Helper : sérialise un user Mongoose ou SQLite en réponse JSON uniforme
 function serializeUser(u) {
@@ -298,5 +299,7 @@ router.get('/cancel-password-change/:token', wrap(async (req, res) => {
   await db.resetTokens.markUsed(record.token);
   res.redirect(`${CLIENT_URL}/login?password_cancelled=1`);
 }));
+
+router.use('/mfa', mfaRouter);
 
 module.exports = router;
