@@ -14,11 +14,13 @@ const OperationsPage = lazy(() => import('@/pages/OperationsPage'));
 const BanksPage = lazy(() => import('@/pages/BanksPage'));
 const RecurringPage = lazy(() => import('@/pages/RecurringPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 const CategoriesPage = lazy(() => import('@/pages/CategoriesPage'));
 const HelpPage = lazy(() => import('@/pages/HelpPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
 const ToSPage = lazy(() => import('@/pages/ToSPage'));
+const MfaChallengePage = lazy(() => import('@/pages/MfaChallengePage'));
 
 function PageLoader() {
   return (
@@ -49,6 +51,7 @@ export default function App() {
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+          <Route path="/login/mfa" element={user ? <Navigate to="/" replace /> : <MfaChallengePage />} />
           <Route path="/cgu" element={<ToSPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/" element={<PrivateRoute><AppShell /></PrivateRoute>}>
@@ -59,6 +62,7 @@ export default function App() {
             <Route path="categories" element={<CategoriesPage />} />
             <Route path="help" element={<HelpPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="settings" element={<SettingsPage />} />
             <Route path="admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
           </Route>
         </Routes>
