@@ -1,8 +1,6 @@
 import { useRef, useState } from 'react';
-import { Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
-import { useTheme } from '@/store/ThemeContext';
 import { updateProfile, updateEmail, uploadAvatar, changePassword } from '@/api/profile';
 import { resendVerification } from '@/api/auth';
 import { Button } from '@/components/ui/button';
@@ -11,54 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AvatarCropDialog from '@/components/AvatarCropDialog';
-import { cn } from '@/lib/utils';
+import MfaSection from '@/components/mfa/MfaSection';
 
 const TITLES = ['M.', 'Mme', 'Dr', 'Pr'];
 
-// Couleurs de preview affichées dans le sélecteur. On utilise des oklch
-// statiques (light + dark) plutôt que var(--primary) pour que chaque
-// vignette montre sa propre couleur, même quand le thème n'est pas actif.
-const THEMES = [
-  {
-    id: 'saffron',
-    name: 'Saffron',
-    subtitle: 'Ocre artisanal',
-    swatchLight: 'oklch(0.66 0.13 70)',
-    swatchDark: 'oklch(0.74 0.14 70)',
-  },
-  {
-    id: 'midnight',
-    name: 'Midnight',
-    subtitle: 'Lime électrique, moderne',
-    swatchLight: 'oklch(0.78 0.20 130)',
-    swatchDark: 'oklch(0.85 0.22 130)',
-  },
-  {
-    id: 'verveine',
-    name: 'Verveine',
-    subtitle: 'Sage apaisé',
-    swatchLight: 'oklch(0.52 0.08 165)',
-    swatchDark: 'oklch(0.66 0.09 165)',
-  },
-  {
-    id: 'lagon',
-    name: 'Lagon',
-    subtitle: 'Turquoise frais',
-    swatchLight: 'oklch(0.65 0.13 195)',
-    swatchDark: 'oklch(0.75 0.14 195)',
-  },
-  {
-    id: 'indigo',
-    name: 'Indigo',
-    subtitle: 'Originel',
-    swatchLight: 'oklch(0.511 0.262 277)',
-    swatchDark: 'oklch(0.58 0.24 277)',
-  },
-];
-
 export default function ProfilePage() {
   const { user, updateUser, logout } = useAuth();
-  const { theme, palette, setPalette } = useTheme();
   const fileRef = useRef(null);
 
   const [form, setForm] = useState({
@@ -272,6 +228,8 @@ export default function ProfilePage() {
         </Button>
       </form>
 
+      {!user?.googleId && <MfaSection />}
+
       {/* Profil */}
       <form onSubmit={onSave} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">
         <div className="space-y-1.5">
@@ -302,50 +260,6 @@ export default function ProfilePage() {
           {saving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       </form>
-
-      {/* Apparence — thème de couleur */}
-      <section className="space-y-3 rounded-xl border border-border bg-card p-6 shadow-xs">
-        <div>
-          <h2 className="text-base font-semibold">Apparence</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Couleur d'accent de l'interface. Le mode clair / sombre se règle dans la barre du haut.</p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          {THEMES.map((t) => {
-            const active = palette === t.id;
-            const swatch = theme === 'dark' ? t.swatchDark : t.swatchLight;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setPalette(t.id)}
-                aria-pressed={active}
-                className={cn(
-                  'group relative flex flex-col items-center gap-2 rounded-lg border p-3 text-left transition-colors',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                  active
-                    ? 'border-foreground/40 bg-muted/40'
-                    : 'border-border hover:bg-muted/30',
-                )}
-              >
-                <span
-                  className="h-10 w-10 rounded-full ring-1 ring-border"
-                  style={{ backgroundColor: swatch }}
-                  aria-hidden
-                />
-                <div className="w-full text-center">
-                  <div className="text-xs font-semibold">{t.name}</div>
-                  <div className="text-[10px] text-muted-foreground leading-tight">{t.subtitle}</div>
-                </div>
-                {active && (
-                  <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background">
-                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
       {/* Déconnexion */}
       <button
