@@ -14,6 +14,47 @@ pour les détails spécifiques.
 - Code : pas de commentaire qui décrit le QUOI (le code le fait). Commenter le POURQUOI quand non-évident.
 - Ne pas écrire de fichiers `.md` (plans, notes, résumés) sauf demande explicite — travailler dans la conversation.
 
+## Niveau d'exigence
+
+Écrire le code comme un développeur senior front-end **et** back-end :
+typage strict des contrats d'API, séparation claire des couches, gestion explicite
+des erreurs/cas limites, accessibilité de base (rôles ARIA, focus, contraste, états
+de chargement), responsive mobile-first, perfs (rendu inutile, requêtes redondantes,
+bundle size), sécurité (validation côté serveur même si déjà côté client, jamais
+de secret côté client, scoping `userId` systématique). Pas de "ça compile, ça suffit" —
+chaque diff doit être défendable en revue.
+
+## Skills à utiliser
+
+- **`impeccable`** — pour toute modification d'interface (composant, page, layout, formulaire,
+  états vides/erreurs, theming, micro-interactions, accessibilité, responsive). À invoquer
+  via le tool `Skill` avant d'écrire du code UI.
+- **`webapp-testing` (Playwright)** — après toute modification UI ou de flow utilisateur,
+  valider en lançant le client/serveur en local et en pilotant le navigateur via les outils
+  `mcp__playwright__*` : naviguer sur le scénario impacté, vérifier l'absence d'erreurs
+  console, screenshot si pertinent. Le lint et les tests unitaires ne remplacent pas cette
+  vérification — un build vert n'est pas une feature qui marche.
+- **Context7 MCP** — avant tout usage non-trivial d'une lib/framework (React, Vite,
+  Tailwind v4, shadcn/ui, Mongoose, Express 5, Vitest, otplib, Resend, etc.), interroger
+  Context7 (`resolve-library-id` puis `query-docs`) pour récupérer la doc à jour. Les
+  best practices React / Next bougent vite (concurrent features, hooks d'auth, Suspense,
+  Server Components côté Vite-React via libs tierces, etc.) — ne jamais se fier à la
+  mémoire entraînée. Préférer Context7 à WebSearch pour la doc d'API.
+
+## Tests obligatoires à chaque modification
+
+Avant de déclarer une tâche terminée, exécuter **systématiquement** :
+
+```bash
+yarn --cwd server lint && yarn --cwd server test
+yarn --cwd client lint && yarn --cwd client test --run
+```
+
+Objectif : 0 warning, 0 test échoué. Si la modif touche l'UI, **enchaîner avec une
+validation Playwright** (voir section Skills). Ne pas committer ni rendre la main
+sans avoir vu ces commandes passer dans leur intégralité — pas de "j'ai testé le
+fichier modifié, ça suffit".
+
 ## Commands
 
 ```bash
