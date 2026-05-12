@@ -17,6 +17,22 @@ const CODE_TTL_MS = 10 * 60 * 1000;
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
 const MAX_CHALLENGE_ATTEMPTS = 5;
 
+// Récupère le challenge depuis la session. Retourne null si absent, expiré,
+// ou trop d'échecs. Dans ce dernier cas, le challenge est purgé de la session.
+function getValidChallenge(req) {
+  const ch = req.session?.mfaChallenge;
+  if (!ch) return null;
+  if (Date.now() - ch.createdAt > CHALLENGE_TTL_MS) {
+    delete req.session.mfaChallenge;
+    return null;
+  }
+  if (ch.failedAttempts >= MAX_CHALLENGE_ATTEMPTS) {
+    delete req.session.mfaChallenge;
+    return null;
+  }
+  return ch;
+}
+
 // Rate limiter Express générique sur les routes MFA (30 req / 15min par IP).
 // Le rate-limit fin par user (1/60s sur send-email) est géré au cas par cas
 // via db.mfaCodes.countRecent dans chaque handler concerné.
@@ -250,6 +266,82 @@ router.post('/recovery/regenerate', requireAuth, wrap(async (req, res) => {
   await db.users.updateMfa(full._id, { recoveryCodes: hashes });
   res.json({ recoveryCodes: plain });
 }));
+
+// POST /mfa/challenge/send-email
+router.post('/challenge/send-email', wrap(async (req, res) => {
+  const ch = getValidChallenge(req);
+  if (!ch || !ch.methods.includes('email')) {
+    return res.status(401).json({ message: 'Aucun challenge en cours' });
+  }
+  const db = req.app.locals.db;
+  const recent60s = await db.mfaCodes.countRecent({ userId: ch.userId, purpose: 'login', sinceMs: 60_000 });
+  if (recent60s > 0) return res.status(429).json({ message: 'Attendez avant de redemander un code' });
+  const recent15min = await db.mfaCodes.countRecent({ userId: ch.userId, purpose: 'login', sinceMs: 15 * 60_000 });
+  if (recent15min >= 3) return res.status(429).json({ message: 'Trop de demandes, réessayez plus tard' });
+  const user = await db.users.findById(ch.userId);
+  if (!user) return res.status(401).json({ message: 'Aucun challenge en cours' });
+  const code = await issueEmailCode(db, ch.userId, 'login');
+  await mailer.sendMfaCodeEmail(user.email, code, 'login');
+  res.json({ message: 'Code envoyé' });
+}));
+
+// POST /mfa/challenge/verify
+// body { method, code }. method ∈ 'totp' | 'email' | 'recovery'.
+router.post('/challenge/verify', wrap(async (req, res, next) => {
+  const ch = getValidChallenge(req);
+  if (!ch) return res.status(401).json({ message: 'Challenge expiré' });
+  const { method, code } = req.body ?? {};
+  if (!method || !code) return res.status(400).json({ message: 'method et code requis' });
+
+  const db = req.app.locals.db;
+  const full = await db.users.findByIdWithHash(ch.userId);
+  if (!full) {
+    delete req.session.mfaChallenge;
+    return res.status(401).json({ message: 'Challenge expiré' });
+  }
+
+  let ok = false;
+  if (method === 'totp')          ok = verifyTotpCode(full, code);
+  else if (method === 'email')    ok = await verifyEmailCode(db, ch.userId, 'login', code);
+  else if (method === 'recovery') ok = await consumeRecoveryCode(db, full, code);
+
+  if (!ok) {
+    ch.failedAttempts = (ch.failedAttempts || 0) + 1;
+    if (ch.failedAttempts >= MAX_CHALLENGE_ATTEMPTS) {
+      delete req.session.mfaChallenge;
+    }
+    return res.status(401).json({ message: 'Code invalide' });
+  }
+
+  const { rememberDays } = ch;
+  delete req.session.mfaChallenge;
+  const userForLogin = await db.users.findById(ch.userId);
+  req.login(userForLogin, (err) => {
+    if (err) return next(err);
+    req.session.cookie.maxAge = rememberDays * 24 * 60 * 60 * 1000;
+    res.json({
+      _id:             userForLogin._id ?? userForLogin.id,
+      email:           userForLogin.email ?? null,
+      emailVerified:   userForLogin.emailVerified ?? false,
+      role:            userForLogin.role ?? 'user',
+      title:           userForLogin.title     ?? null,
+      firstName:       userForLogin.firstName ?? null,
+      lastName:        userForLogin.lastName  ?? null,
+      nickname:        userForLogin.nickname  ?? null,
+      avatarUrl:       userForLogin.avatarUrl ?? null,
+      acceptedToSAt:   userForLogin.acceptedToSAt ?? null,
+      totpEnabled:     !!userForLogin.totpEnabled,
+      emailMfaEnabled: !!userForLogin.emailMfaEnabled,
+      recoveryCodesRemaining: (userForLogin.recoveryCodes || []).length,
+    });
+  });
+}));
+
+// POST /mfa/challenge/cancel
+router.post('/challenge/cancel', (req, res) => {
+  if (req.session) delete req.session.mfaChallenge;
+  res.json({ message: 'Challenge annulé' });
+});
 
 module.exports = {
   router,
