@@ -51,6 +51,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
               <>
                 <input
                   type="number"
+                  inputMode="decimal"
                   autoFocus
                   step="0.01"
                   value={draft ?? ''}
@@ -95,6 +96,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
               <>
                 <input
                   type="number"
+                  inputMode="decimal"
                   autoFocus
                   role="spinbutton"
                   step="0.01"

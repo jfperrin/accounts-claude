@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn, formatEur, amountClass } from '@/lib/utils';
+import DebitCreditToggle from '@/components/DebitCreditToggle';
 import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
@@ -34,7 +35,7 @@ const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const CURRENT_YEAR = dayjs().year();
 const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
-const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '', categoryId: 'none' });
+const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '', kind: 'debit', categoryId: 'none' });
 
 export default function RecurringPage() {
   const [items, setItems] = useState([]);
@@ -117,7 +118,8 @@ export default function RecurringPage() {
       label: s.label,
       bankId: s.bankId,
       dayOfMonth: String(s.dayOfMonth),
-      amount: String(s.amount),
+      amount: String(Math.abs(s.amount)),
+      kind: s.amount < 0 ? 'debit' : 'credit',
       categoryId: s.categoryId ?? 'none',
     });
     setModal({});
@@ -127,7 +129,8 @@ export default function RecurringPage() {
       label: item.label,
       bankId: item.bankId?._id ?? item.bankId ?? '',
       dayOfMonth: String(item.dayOfMonth),
-      amount: String(item.amount),
+      amount: String(Math.abs(item.amount)),
+      kind: item.amount < 0 ? 'debit' : 'credit',
       categoryId: item.categoryId ?? 'none',
     });
     setModal({ item });
@@ -138,11 +141,12 @@ export default function RecurringPage() {
   const onSave = async (e) => {
     e.preventDefault();
     try {
+      const abs = Math.abs(parseFloat(form.amount));
       const payload = {
         label: form.label,
         bankId: form.bankId,
         dayOfMonth: Number(form.dayOfMonth),
-        amount: parseFloat(form.amount),
+        amount: form.kind === 'debit' ? -abs : abs,
         categoryId: (form.categoryId && form.categoryId !== 'none') ? form.categoryId : null,
       };
       const isCreate = !modal.item;
@@ -374,19 +378,24 @@ export default function RecurringPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Jour du mois</Label>
-                <Select value={form.dayOfMonth} onValueChange={set('dayOfMonth')}>
-                  <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="rec-amount">Montant (€)</Label>
-                <Input id="rec-amount" type="number" step="0.01" value={form.amount} onChange={set('amount')} required />
+            <div className="space-y-1.5">
+              <Label>Jour du mois</Label>
+              <Select value={form.dayOfMonth} onValueChange={set('dayOfMonth')}>
+                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {DAYS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-amount">Montant (€)</Label>
+              <div className="flex gap-2">
+                <DebitCreditToggle
+                  value={form.kind}
+                  onChange={(v) => setForm((f) => ({ ...f, kind: v }))}
+                  className="w-auto shrink-0"
+                />
+                <Input id="rec-amount" type="number" inputMode="decimal" min="0" step="0.01" value={form.amount} onChange={set('amount')} required />
               </div>
             </div>
             <div className="space-y-1.5">

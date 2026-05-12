@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Wallet, Globe, Mail } from 'lucide-react';
+import { Wallet, Globe, Mail, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
 import { config as fetchConfig, resendVerification } from '@/api/auth';
@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [form, setForm] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberDays, setRememberDays] = useState(30);
   const [acceptedToS, setAcceptedToS] = useState(false);
   const [registered, setRegistered] = useState(false);
@@ -186,7 +187,7 @@ export default function LoginPage() {
             <button
               type="button"
               key={key}
-              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setFormError(''); setRememberDays(30); }}
+              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setShowPassword(false); setUnverifiedEmail(null); setFormError(''); setRememberDays(30); }}
               className={cn(
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                 tab === key
@@ -217,17 +218,28 @@ export default function LoginPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="password" className="text-slate-700">Mot de passe</Label>
-            <Input
-              id="password"
-              type="password"
-              required
-              autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              aria-invalid={!!formError}
-              aria-describedby={formError ? 'login-form-error' : undefined}
-              className="h-11 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                aria-invalid={!!formError}
+                aria-describedby={formError ? 'login-form-error' : undefined}
+                className="h-11 pr-10 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                aria-pressed={showPassword}
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           {tab === 'register' && (
             <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer">

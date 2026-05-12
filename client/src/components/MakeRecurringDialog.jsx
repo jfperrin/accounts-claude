@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import CategorySelectItems from '@/components/CategorySelectItems';
+import DebitCreditToggle from '@/components/DebitCreditToggle';
 
 export default function MakeRecurringDialog({ open, form, banks, categories, onChange, onSubmit, onCancel }) {
   if (!form) return null;
@@ -24,28 +25,35 @@ export default function MakeRecurringDialog({ open, form, banks, categories, onC
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Jour du mois</Label>
-              <Select value={form.dayOfMonth} onValueChange={(v) => onChange('dayOfMonth', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 31 }, (_, i) => String(i + 1)).map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-amount">Montant (€)</Label>
+          <div className="space-y-1.5">
+            <Label>Jour du mois</Label>
+            <Select value={form.dayOfMonth} onValueChange={(v) => onChange('dayOfMonth', v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 31 }, (_, i) => String(i + 1)).map((d) => (
+                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="rec-amount">Montant (€)</Label>
+            <div className="flex gap-2">
+              <DebitCreditToggle
+                value={form.kind}
+                onChange={(v) => onChange('kind', v)}
+                className="w-auto shrink-0"
+              />
               <input
                 id="rec-amount"
                 type="number"
+                inputMode="decimal"
+                min="0"
                 step="0.01"
                 value={form.amount}
                 onChange={(e) => onChange('amount', e.target.value)}
                 required
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           </div>

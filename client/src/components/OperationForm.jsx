@@ -10,8 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import CategorySelectItems from '@/components/CategorySelectItems';
+import DebitCreditToggle from '@/components/DebitCreditToggle';
 
-const empty = () => ({ label: '', bankId: '', date: dayjs().format('YYYY-MM-DD'), amount: '', categoryId: '' });
+const empty = () => ({ label: '', bankId: '', date: dayjs().format('YYYY-MM-DD'), amount: '', kind: 'debit', categoryId: '' });
 
 export default function OperationForm({ open, operation, banks, categories = [], onFinish, onCancel }) {
   const [form, setForm] = useState(empty());
@@ -25,7 +26,8 @@ export default function OperationForm({ open, operation, banks, categories = [],
             label: operation.label,
             bankId: operation.bankId?._id ?? operation.bankId ?? '',
             date: dayjs(operation.date).format('YYYY-MM-DD'),
-            amount: String(operation.amount),
+            amount: String(Math.abs(operation.amount)),
+            kind: operation.amount < 0 ? 'debit' : 'credit',
             categoryId: operation.categoryId ?? '',
           }
         : empty()
@@ -48,11 +50,12 @@ export default function OperationForm({ open, operation, banks, categories = [],
     if (form.amount === '' || Number.isNaN(parseFloat(form.amount))) next.amount = 'Montant requis.';
     setErrors(next);
     if (Object.keys(next).length > 0) return;
+    const abs = Math.abs(parseFloat(form.amount));
     onFinish({
       label: form.label,
       bankId: form.bankId,
       date: new Date(form.date).toISOString(),
-      amount: parseFloat(form.amount),
+      amount: form.kind === 'debit' ? -abs : abs,
       categoryId: form.categoryId || null,
     });
   };
@@ -122,16 +125,25 @@ export default function OperationForm({ open, operation, banks, categories = [],
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="op-amount">Montant (€, négatif = débit)</Label>
-            <Input
-              id="op-amount"
-              type="number"
-              step="0.01"
-              value={form.amount}
-              onChange={set('amount')}
-              aria-invalid={!!errors.amount}
-              aria-describedby={errors.amount ? 'op-amount-error' : undefined}
-            />
+            <Label htmlFor="op-amount">Montant (€)</Label>
+            <div className="flex gap-2">
+              <DebitCreditToggle
+                value={form.kind}
+                onChange={(v) => setForm((f) => ({ ...f, kind: v }))}
+                className="w-auto shrink-0"
+              />
+              <Input
+                id="op-amount"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={form.amount}
+                onChange={set('amount')}
+                aria-invalid={!!errors.amount}
+                aria-describedby={errors.amount ? 'op-amount-error' : undefined}
+              />
+            </div>
             {errors.amount && (
               <p id="op-amount-error" role="alert" className="text-xs text-destructive">{errors.amount}</p>
             )}

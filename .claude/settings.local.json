@@ -133,7 +133,10 @@
       "Bash(grep -n \"stroke\\\\|#[0-9a-f]\\\\{3,6\\\\}\\\\|indigo\\\\|color\" client/src/components/MonthlyTrendChart.jsx)",
       "mcp__playwright__browser_close",
       "mcp__context7__resolve-library-id",
-      "mcp__context7__query-docs"
+      "mcp__context7__query-docs",
+      "mcp__playwright__browser_evaluate",
+      "Bash(grep -rn 'type=\"password\"\\\\|type={`password`}\\\\|type={.password.}' /data/git/github.com/accounts-claude/client/src --include='*.jsx')",
+      "Skill(impeccable)"
     ]
   }
 }

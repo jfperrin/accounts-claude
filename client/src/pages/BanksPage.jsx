@@ -130,6 +130,7 @@ export default function BanksPage() {
               <Input
                 id="bank-balance"
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 value={currentBalance}
                 onChange={(e) => setCurrentBalance(e.target.value)}

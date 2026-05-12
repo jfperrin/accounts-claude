@@ -245,7 +245,8 @@ export default function OperationsPage() {
   const openMakeRecurring = (op) => {
     setRecurringForm({
       label: op.label,
-      amount: String(op.amount),
+      amount: String(Math.abs(op.amount)),
+      kind: op.amount < 0 ? 'debit' : 'credit',
       dayOfMonth: String(dayjs(op.date).date()),
       bankId: op.bankId?._id ?? String(op.bankId ?? ''),
       categoryId: op.categoryId ?? 'none',
@@ -256,10 +257,11 @@ export default function OperationsPage() {
     e.preventDefault();
     const categoryId = recurringForm.categoryId !== 'none' ? recurringForm.categoryId : null;
     const { label, bankId } = recurringForm;
+    const abs = Math.abs(parseFloat(recurringForm.amount));
     try {
       await createRecurring({
         label,
-        amount: parseFloat(recurringForm.amount),
+        amount: recurringForm.kind === 'debit' ? -abs : abs,
         dayOfMonth: Number(recurringForm.dayOfMonth),
         bankId,
         categoryId,
