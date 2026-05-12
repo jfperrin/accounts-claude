@@ -361,7 +361,7 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_secret, totp_enabled, email_mfa_enabled, recovery_codes FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_enabled, email_mfa_enabled, recovery_codes FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
@@ -463,7 +463,7 @@ module.exports = function createSQLiteRepos() {
       if (sets.length === 0) return this.findById(id);
       params.push(uid(id));
       db.prepare(`UPDATE users SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params);
-      return this.findByIdWithHash(id);
+      return this.findById(id);
     },
   };
 
