@@ -25,6 +25,9 @@ function serializeUser(u) {
     nickname:      u.nickname  ?? null,
     avatarUrl:     u.avatarUrl ?? null,
     acceptedToSAt: u.acceptedToSAt ?? null,
+    totpEnabled:     !!u.totpEnabled,
+    emailMfaEnabled: !!u.emailMfaEnabled,
+    recoveryCodesRemaining: (u.recoveryCodes || []).length,
   };
 }
 
