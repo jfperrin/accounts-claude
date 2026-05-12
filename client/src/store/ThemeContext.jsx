@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 const ThemeContext = createContext(null);
 
@@ -78,13 +78,18 @@ export function ThemeProvider({ children }) {
     });
   }, []);
 
-  const setPalette = (p) => { if (PALETTES.includes(p)) setPaletteState(p); };
+  const setPalette = useCallback((p) => {
+    if (PALETTES.includes(p)) setPaletteState(p);
+  }, []);
 
-  return (
-    <ThemeContext.Provider value={{ theme, themeMode, toggleTheme, setThemeMode, palette, setPalette }}>
-      {children}
-    </ThemeContext.Provider>
+  // Mémoïser la value du context évite que tous les consumers re-rendent à chaque
+  // render du provider (le `{...}` inline serait neuf à chaque fois sinon).
+  const value = useMemo(
+    () => ({ theme, themeMode, toggleTheme, setThemeMode, palette, setPalette }),
+    [theme, themeMode, toggleTheme, setThemeMode, palette, setPalette],
   );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

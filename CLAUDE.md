@@ -29,6 +29,9 @@ chaque diff doit être défendable en revue.
 - **`impeccable`** — pour toute modification d'interface (composant, page, layout, formulaire,
   états vides/erreurs, theming, micro-interactions, accessibilité, responsive). À invoquer
   via le tool `Skill` avant d'écrire du code UI.
+- **`vercel-react-best-practices`** — à invoquer pour toute écriture/refacto de code React :
+  guide officiel Vercel sur les patterns de perf (mémoïsation, Suspense, data fetching,
+  bundle, hooks). À combiner avec Context7 pour la doc API à jour.
 - **`webapp-testing` (Playwright)** — après toute modification UI ou de flow utilisateur,
   valider en lançant le client/serveur en local et en pilotant le navigateur via les outils
   `mcp__playwright__*` : naviguer sur le scénario impacté, vérifier l'absence d'erreurs

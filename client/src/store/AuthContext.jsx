@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   me,
   login as apiLogin,
@@ -21,9 +21,9 @@ export function AuthProvider({ children }) {
     me().then(setUser).catch(() => setUser(null));
   }, []);
 
-  // Si la réponse est { mfaRequired }, on pose le challenge et renvoie cette valeur ;
-  // sinon comportement actuel (user complet + setUser).
-  const login = async (credentials) => {
+  // useCallback : les consumers passent ces handlers en deps de useEffect.
+  // Sans stabilisation, leurs effets re-run à chaque render du provider.
+  const login = useCallback(async (credentials) => {
     const res = await apiLogin(credentials);
     if (res && res.mfaRequired) {
       setMfaChallenge({ methods: res.methods, email: maskEmail(credentials.email) });
@@ -31,41 +31,44 @@ export function AuthProvider({ children }) {
     }
     setUser(res);
     return res;
-  };
+  }, []);
 
-  const register = async (credentials) => apiRegister(credentials);
+  const register = useCallback((credentials) => apiRegister(credentials), []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await apiLogout();
     setUser(null);
     setMfaChallenge(null);
-  };
+  }, []);
 
-  const updateUser = (u) => setUser(u);
+  const updateUser = useCallback((u) => setUser(u), []);
 
-  const verifyMfa = async (method, code) => {
+  const verifyMfa = useCallback(async (method, code) => {
     const u = await verifyChallenge(method, code);
     setMfaChallenge(null);
     setUser(u);
     return u;
-  };
+  }, []);
 
-  const cancelMfa = async () => {
+  const cancelMfa = useCallback(async () => {
     try { await cancelChallenge(); } catch { /* idempotent */ }
     setMfaChallenge(null);
-  };
+  }, []);
 
-  const sendMfaEmail = () => sendChallengeEmail();
+  const sendMfaEmail = useCallback(() => sendChallengeEmail(), []);
 
-  return (
-    <AuthContext.Provider value={{
+  // useMemo sur la value : sans ça, l'objet `{...}` est neuf à chaque render
+  // et tous les consumers de useAuth re-rendent — même ceux qui ne lisent que `user`.
+  const value = useMemo(
+    () => ({
       user, mfaChallenge,
       login, register, logout, updateUser,
       verifyMfa, cancelMfa, sendMfaEmail,
-    }}>
-      {children}
-    </AuthContext.Provider>
+    }),
+    [user, mfaChallenge, login, register, logout, updateUser, verifyMfa, cancelMfa, sendMfaEmail],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 function maskEmail(email) {

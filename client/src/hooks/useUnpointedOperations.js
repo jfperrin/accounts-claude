@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { list } from '@/api/operations';
 
 // Toutes les opérations non pointées (toutes dates confondues).
@@ -12,7 +12,8 @@ export function useUnpointedOperations() {
 
   const reload = useCallback(
     () => list({ startDate: ALL_START, endDate: ALL_END })
-      .then((all) => setOperations(all.filter((o) => !o.pointed))),
+      .then((all) => setOperations(all.filter((o) => !o.pointed)))
+      .catch(() => {}),
     [],
   );
 

@@ -144,7 +144,8 @@
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_wait_for",
       "Bash(CLAUDE_PROJECT_DIR=/data/git/github.com/accounts-claude bash -c 'node \"$CLAUDE_PROJECT_DIR/.claude/hooks/filter-verbose-bash.js\"')",
-      "Bash(echo \"exit=$?\")"
+      "Bash(echo \"exit=$?\")",
+      "Bash(curl -s http://localhost:5173)"
     ]
   }
 }
