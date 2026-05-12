@@ -10,6 +10,7 @@
 //  - findOneAndUpdate avec { returnDocument: 'after' } retourne le document mis à jour
 //  - Le code d'erreur 11000 (duplicate key) est natif MongoDB pour la contrainte d'unicité
 
+const { randomUUID } = require('crypto');
 const mongoose = require('mongoose');
 const Bank = require('../models/Bank');
 const User = require('../models/User');
@@ -19,6 +20,7 @@ const PasswordResetToken = require('../models/PasswordResetToken');
 const Category = require('../models/Category');
 const CategoryHint = require('../models/CategoryHint');
 const DismissedRecurringSuggestion = require('../models/DismissedRecurringSuggestion');
+const MfaEmailCode = require('../models/MfaEmailCode');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -67,6 +69,15 @@ const users = {
 
   acceptToS: (id) =>
     User.findByIdAndUpdate(id, { $set: { acceptedToSAt: new Date() } }, { new: true }).select('-passwordHash'),
+
+  updateMfa: (id, fields) => {
+    const $set = {};
+    if (Object.prototype.hasOwnProperty.call(fields, 'totpSecret'))     $set.totpSecret = fields.totpSecret;
+    if (Object.prototype.hasOwnProperty.call(fields, 'totpEnabled'))    $set.totpEnabled = fields.totpEnabled;
+    if (Object.prototype.hasOwnProperty.call(fields, 'emailMfaEnabled'))$set.emailMfaEnabled = fields.emailMfaEnabled;
+    if (Object.prototype.hasOwnProperty.call(fields, 'recoveryCodes'))  $set.recoveryCodes = fields.recoveryCodes;
+    return User.findByIdAndUpdate(id, { $set }, { new: true }).select('-passwordHash');
+  },
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────
@@ -109,9 +120,13 @@ const operations = {
       .populate('bankId', 'label').sort('-date');
   },
 
-  findByDateRange(start, end, userId) {
-    return Operation.find({ userId, date: { $gte: start, $lt: end } })
-      .populate('bankId', 'label').sort('-date');
+  findByDateRange(start, end, userId, filters = {}) {
+    const query = { userId, date: { $gte: start, $lt: end } };
+    if (filters.q) query.label = { $regex: filters.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    if (filters.categoryId === 'none') query.categoryId = null;
+    else if (filters.categoryId) query.categoryId = filters.categoryId;
+    if (filters.pointed === true || filters.pointed === false) query.pointed = filters.pointed;
+    return Operation.find(query).populate('bankId', 'label').sort('-date');
   },
 
   findByMonthMinimal(month, year, userId) {
@@ -125,7 +140,7 @@ const operations = {
   // Utilisée par l'import (CSV/QIF/OFX) pour dédup globale + réconciliation
   // par montant : besoin de _id pour le tracking et pointed pour filtrer.
   findAllMinimal(userId) {
-    return Operation.find({ userId }).select('label bankId amount date pointed categoryId');
+    return Operation.find({ userId }).select('label bankId amount date pointed categoryId transferId');
   },
 
   async sumUnpointedByBank(userId) {
@@ -150,6 +165,40 @@ const operations = {
   delete: (id, userId) => Operation.findOneAndDelete({ _id: id, userId }),
 
   findById: (id, userId) => Operation.findOne({ _id: id, userId }),
+
+  findByTransferId: (transferId, userId) =>
+    Operation.find({ transferId, userId }).populate('bankId', 'label'),
+
+  deleteByTransferId: (transferId, userId) =>
+    Operation.deleteMany({ transferId, userId }),
+
+  // Lie deux opérations en virement interne via un transferId commun.
+  // Validations strictes (banques différentes, montants opposés, pas déjà
+  // liées). On lit les deux ops, on vérifie, puis on écrit en parallèle.
+  async linkAsTransfer(idA, idB, userId) {
+    const [a, b] = await Promise.all([
+      Operation.findOne({ _id: idA, userId }),
+      Operation.findOne({ _id: idB, userId }),
+    ]);
+    if (!a || !b) return { error: 'NOT_FOUND' };
+    if (String(a._id) === String(b._id)) return { error: 'SAME_OP' };
+    if (a.transferId || b.transferId) return { error: 'ALREADY_LINKED' };
+    if (String(a.bankId) === String(b.bankId)) return { error: 'SAME_BANK' };
+    if (Math.round(a.amount * 100) !== -Math.round(b.amount * 100)) return { error: 'AMOUNT_MISMATCH' };
+
+    const transferId = randomUUID();
+    await Operation.updateMany({ _id: { $in: [idA, idB] }, userId }, { $set: { transferId } });
+    const [opA, opB] = await Promise.all([
+      Operation.findOne({ _id: idA }).populate('bankId', 'label'),
+      Operation.findOne({ _id: idB }).populate('bankId', 'label'),
+    ]);
+    return { transferId, opA, opB };
+  },
+
+  async unlinkTransfer(transferId, userId) {
+    const res = await Operation.updateMany({ transferId, userId }, { $set: { transferId: null } });
+    return res.modifiedCount ?? 0;
+  },
 
   togglePointed: async (id, userId) => {
     const op = await Operation.findOne({ _id: id, userId });
@@ -326,6 +375,27 @@ const dismissedRecurringSuggestions = {
     DismissedRecurringSuggestion.deleteOne({ userId, key }),
 };
 
+// ─── MFA EMAIL CODES ──────────────────────────────────────────────────────────
+const mfaCodes = {
+  create: ({ userId, codeHash, purpose, expiresAt }) =>
+    MfaEmailCode.create({ userId, codeHash, purpose, expiresAt }),
+
+  findLatestValid: ({ userId, purpose }) =>
+    MfaEmailCode.findOne({ userId, purpose, used: false, expiresAt: { $gt: new Date() } })
+      .sort({ createdAt: -1 }),
+
+  markUsed: (id) =>
+    MfaEmailCode.findByIdAndUpdate(id, { $set: { used: true } }),
+
+  countRecent: async ({ userId, purpose, sinceMs }) => {
+    const since = new Date(Date.now() - sinceMs);
+    return MfaEmailCode.countDocuments({ userId, purpose, createdAt: { $gt: since } });
+  },
+
+  deleteExpired: () =>
+    MfaEmailCode.deleteMany({ expiresAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
+};
+
 // ─── MIGRATION LEGACY : category (string) → categoryId (ObjectId) ────────────
 // One-shot au boot. Chaque appel parcourt les collections concernées et résout
 // le label texte vers l'_id de Category correspondant pour ce user. Idempotent :
@@ -376,10 +446,14 @@ async function migrateLegacyCategoryFields() {
     { excludedFromBudget: { $exists: true } },
     { $unset: { excludedFromBudget: '' } },
   );
+
+  // Migration : kind='transfer' supprimé au profit du transferId sur les opérations.
+  // Les anciennes catégories 'transfer' redeviennent 'debit'. Idempotent.
+  await Category.updateMany({ kind: 'transfer' }, { $set: { kind: 'debit' } });
 }
 
 module.exports = {
   users, banks, operations, recurringOps, resetTokens,
-  categories, categoryHints, dismissedRecurringSuggestions,
+  categories, categoryHints, dismissedRecurringSuggestions, mfaCodes,
   migrateLegacyCategoryFields,
 };
