@@ -67,12 +67,13 @@ router.post('/register', authLimiter, wrap(async (req, res) => {
 
 // POST /api/auth/login
 // Délègue à Passport LocalStrategy. Bloque les comptes locaux non-vérifiés.
+// Si le user a un 2FA actif (TOTP ou email), n'ouvre PAS la session : pose
+// un objet mfaChallenge en session et renvoie { mfaRequired, methods }.
 router.post('/login', authLimiter, (req, res, next) => {
   passport.authenticate('local', async (err, user, info) => {
     if (err) return next(err);
     if (!user) return res.status(401).json({ message: info?.message || 'Échec de connexion' });
     if (!user.googleId && !user.emailVerified) {
-      // Renvoie automatiquement un email de vérification à chaque tentative de connexion bloquée
       try {
         const db = req.app.locals.db;
         const token = randomUUID();
@@ -86,6 +87,23 @@ router.post('/login', authLimiter, (req, res, next) => {
     const days = ALLOWED_DAYS.includes(Number(req.body.rememberDays))
       ? Number(req.body.rememberDays)
       : 30;
+
+    // Si 2FA actif et compte local → on initie un challenge au lieu de logger.
+    const hasMfa = !user.googleId && (user.totpEnabled || user.emailMfaEnabled);
+    if (hasMfa) {
+      const methods = [];
+      if (user.totpEnabled) methods.push('totp');
+      if (user.emailMfaEnabled) methods.push('email');
+      req.session.mfaChallenge = {
+        userId: String(user._id ?? user.id),
+        rememberDays: days,
+        methods,
+        createdAt: Date.now(),
+        failedAttempts: 0,
+      };
+      return res.json({ mfaRequired: true, methods });
+    }
+
     req.login(user, (err) => {
       if (err) return next(err);
       req.session.cookie.maxAge = days * 24 * 60 * 60 * 1000;
