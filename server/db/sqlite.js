@@ -443,6 +443,28 @@ module.exports = function createSQLiteRepos() {
       ).run(now, uid(id));
       return this.findById(id);
     },
+
+    updateMfa(id, fields) {
+      const sets = [];
+      const params = [];
+      if (Object.prototype.hasOwnProperty.call(fields, 'totpSecret')) {
+        sets.push('totp_secret = ?'); params.push(fields.totpSecret ?? null);
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, 'totpEnabled')) {
+        sets.push('totp_enabled = ?'); params.push(fields.totpEnabled ? 1 : 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, 'emailMfaEnabled')) {
+        sets.push('email_mfa_enabled = ?'); params.push(fields.emailMfaEnabled ? 1 : 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, 'recoveryCodes')) {
+        sets.push('recovery_codes = ?');
+        params.push(fields.recoveryCodes ? JSON.stringify(fields.recoveryCodes) : null);
+      }
+      if (sets.length === 0) return this.findById(id);
+      params.push(uid(id));
+      db.prepare(`UPDATE users SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params);
+      return this.findByIdWithHash(id);
+    },
   };
 
   // ─────────────────────────────────────────────
@@ -895,8 +917,41 @@ module.exports = function createSQLiteRepos() {
     },
   };
 
+  const mfaCodes = {
+    create({ userId, codeHash, purpose, expiresAt }) {
+      const id = randomUUID();
+      db.prepare(
+        'INSERT INTO mfa_email_codes (id, user_id, code_hash, purpose, expires_at) VALUES (?, ?, ?, ?, ?)',
+      ).run(id, uid(userId), codeHash, purpose, expiresAt.toISOString());
+      return mapMfaCode(db.prepare('SELECT * FROM mfa_email_codes WHERE id = ?').get(id));
+    },
+
+    findLatestValid({ userId, purpose }) {
+      return mapMfaCode(db.prepare(
+        `SELECT * FROM mfa_email_codes
+         WHERE user_id = ? AND purpose = ? AND used = 0 AND expires_at > datetime('now')
+         ORDER BY created_at DESC LIMIT 1`,
+      ).get(uid(userId), purpose));
+    },
+
+    markUsed(id) {
+      db.prepare('UPDATE mfa_email_codes SET used = 1 WHERE id = ?').run(id);
+    },
+
+    countRecent({ userId, purpose, sinceMs }) {
+      const since = new Date(Date.now() - sinceMs).toISOString();
+      return db.prepare(
+        'SELECT COUNT(*) AS n FROM mfa_email_codes WHERE user_id = ? AND purpose = ? AND created_at > ?',
+      ).get(uid(userId), purpose, since).n;
+    },
+
+    deleteExpired() {
+      db.prepare(`DELETE FROM mfa_email_codes WHERE expires_at < datetime('now', '-1 day')`).run();
+    },
+  };
+
   return {
     users, banks, operations, recurringOps, resetTokens,
-    categories, categoryHints, dismissedRecurringSuggestions,
+    categories, categoryHints, dismissedRecurringSuggestions, mfaCodes,
   };
 };
