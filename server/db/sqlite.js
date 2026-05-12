@@ -98,6 +98,17 @@ function initSchema(db) {
       UNIQUE(user_id, key)
     );
     CREATE INDEX IF NOT EXISTS idx_dismissed_recur_user ON dismissed_recurring_suggestions(user_id);
+
+    CREATE TABLE IF NOT EXISTS mfa_email_codes (
+      id          TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL REFERENCES users(id),
+      code_hash   TEXT NOT NULL,
+      purpose     TEXT NOT NULL,
+      expires_at  TEXT NOT NULL,
+      used        INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mfa_codes_user ON mfa_email_codes(user_id);
   `);
 
   // Migration: drop username column if it exists (schema change from username to email)
@@ -165,6 +176,16 @@ function initSchema(db) {
     // du même utilisateur. ON DELETE SET NULL → l'enfant remonte en racine si le
     // parent disparaît. Validation "1 niveau" + "même kind" côté route.
     'ALTER TABLE categories ADD COLUMN parent_id TEXT REFERENCES categories(id) ON DELETE SET NULL',
+    // Virements internes : 2 ops liées par un même transfer_id (UUID).
+    // null pour les opérations normales.
+    'ALTER TABLE operations ADD COLUMN transfer_id TEXT',
+    // Virement interne récurrent : si to_bank_id est posé, la génération mensuelle
+    // crée 2 opérations liées au lieu d'1.
+    'ALTER TABLE recurring_operations ADD COLUMN to_bank_id TEXT REFERENCES banks(id) ON DELETE SET NULL',
+    'ALTER TABLE users ADD COLUMN totp_secret TEXT',
+    'ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN email_mfa_enabled INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN recovery_codes TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -205,6 +226,11 @@ function initSchema(db) {
     db.exec("UPDATE categories SET kind = 'transfer' WHERE excluded_from_budget = 1");
     db.exec('ALTER TABLE categories DROP COLUMN excluded_from_budget');
   } catch (_) { /* colonne déjà supprimée */ }
+
+  // Migration : kind='transfer' supprimé au profit du transferId sur les opérations.
+  // Les anciennes catégories 'transfer' redeviennent 'debit'. Idempotent.
+  try { db.exec("UPDATE categories SET kind = 'debit' WHERE kind = 'transfer'"); }
+  catch (_) { /* table inexistante */ }
 }
 
 // --- Fonctions de mapping SQLite row → objet métier ---
@@ -224,6 +250,10 @@ const mapUser = (row) => row && {
   nickname:     row.nickname ?? null,
   avatarUrl:    row.avatar_url ?? null,
   acceptedToSAt: row.accepted_tos_at ? new Date(row.accepted_tos_at) : null,
+  totpSecret:      row.totp_secret ?? null,
+  totpEnabled:     row.totp_enabled === 1,
+  emailMfaEnabled: row.email_mfa_enabled === 1,
+  recoveryCodes:   row.recovery_codes ? JSON.parse(row.recovery_codes) : [],
 };
 
 const mapBank = (row) => row && {
@@ -243,6 +273,7 @@ const mapOp = (row) => row && {
   date: row.date,
   pointed: row.pointed === 1,
   categoryId: row.category_id ?? null,
+  transferId: row.transfer_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
 };
@@ -254,6 +285,7 @@ const mapRecurring = (row) => row && {
   dayOfMonth: row.day_of_month,
   categoryId: row.category_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
+  toBankId: row.to_bank_id ?? null,
   userId: row.user_id,
 };
 
@@ -283,6 +315,15 @@ const mapResetToken = (row) => row && {
   type:            row.type ?? 'password_reset',
   pendingEmail:    row.pending_email ?? null,
   oldPasswordHash: row.old_password_hash ?? null,
+};
+
+const mapMfaCode = (row) => row && {
+  _id:        row.id,
+  userId:     row.user_id,
+  codeHash:   row.code_hash,
+  purpose:    row.purpose,
+  expiresAt:  new Date(row.expires_at),
+  used:       row.used === 1,
 };
 
 // Fragments SQL réutilisés pour les SELECT avec JOIN banks.
@@ -320,7 +361,7 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_secret, totp_enabled, email_mfa_enabled, recovery_codes FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
@@ -464,10 +505,26 @@ module.exports = function createSQLiteRepos() {
       ).all(uid(userId), prefix).map(mapOp);
     },
 
-    findByDateRange(start, end, userId) {
+    findByDateRange(start, end, userId, filters = {}) {
+      const where = ['o.user_id = ?', 'o.date >= ?', 'o.date < ?'];
+      const params = [uid(userId), start.toISOString(), end.toISOString()];
+      if (filters.q) {
+        where.push('LOWER(o.label) LIKE ?');
+        params.push(`%${String(filters.q).toLowerCase()}%`);
+      }
+      if (filters.categoryId === 'none') {
+        where.push('o.category_id IS NULL');
+      } else if (filters.categoryId) {
+        where.push('o.category_id = ?');
+        params.push(filters.categoryId);
+      }
+      if (filters.pointed === true || filters.pointed === false) {
+        where.push('o.pointed = ?');
+        params.push(filters.pointed ? 1 : 0);
+      }
       return db.prepare(
-        `${OPS_WITH_BANK} WHERE o.user_id = ? AND o.date >= ? AND o.date < ? ORDER BY o.date DESC`,
-      ).all(uid(userId), start.toISOString(), end.toISOString()).map(mapOp);
+        `${OPS_WITH_BANK} WHERE ${where.join(' AND ')} ORDER BY o.date DESC`,
+      ).all(...params).map(mapOp);
     },
 
     findByMonthMinimal(month, year, userId) {
@@ -484,7 +541,7 @@ module.exports = function createSQLiteRepos() {
     //     filtrer les candidats déjà rapprochés et éviter de consommer 2× la même).
     findAllMinimal(userId) {
       return db.prepare(
-        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category_id AS categoryId FROM operations WHERE user_id = ?',
+        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category_id AS categoryId, transfer_id AS transferId FROM operations WHERE user_id = ?',
       ).all(uid(userId)).map((r) => ({
         _id: r._id,
         label: r.label,
@@ -493,6 +550,7 @@ module.exports = function createSQLiteRepos() {
         date: r.date,
         pointed: r.pointed === 1,
         categoryId: r.categoryId ?? null,
+        transferId: r.transferId ?? null,
       }));
     },
 
@@ -505,13 +563,57 @@ module.exports = function createSQLiteRepos() {
       return out;
     },
 
-    create({ label, amount, date, pointed = false, categoryId = null, bankId, userId }) {
+    create({ label, amount, date, pointed = false, categoryId = null, transferId = null, bankId, userId }) {
       const id = randomUUID();
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, uid(bankId), uid(userId));
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, transferId ?? null, uid(bankId), uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
+    },
+
+    findByTransferId(transferId, userId) {
+      return db.prepare(
+        `${OPS_WITH_BANK} WHERE o.transfer_id = ? AND o.user_id = ?`,
+      ).all(transferId, uid(userId)).map(mapOp);
+    },
+
+    deleteByTransferId(transferId, userId) {
+      return db.prepare('DELETE FROM operations WHERE transfer_id = ? AND user_id = ?')
+        .run(transferId, uid(userId));
+    },
+
+    // Lie deux opérations en virement interne en leur attribuant un même
+    // transferId. Validations en série (banques différentes, montants opposés
+    // au centime près, pas déjà liées). Transactionnel : on n'écrit que si
+    // les deux ops passent les contrôles.
+    linkAsTransfer(idA, idB, userId) {
+      const u = uid(userId);
+      const stmt = db.prepare('SELECT * FROM operations WHERE id = ? AND user_id = ?');
+      const a = stmt.get(idA, u);
+      const b = stmt.get(idB, u);
+      if (!a || !b) return { error: 'NOT_FOUND' };
+      if (a.id === b.id) return { error: 'SAME_OP' };
+      if (a.transfer_id || b.transfer_id) return { error: 'ALREADY_LINKED' };
+      if (a.bank_id === b.bank_id) return { error: 'SAME_BANK' };
+      if (Math.round(a.amount * 100) !== -Math.round(b.amount * 100)) return { error: 'AMOUNT_MISMATCH' };
+
+      const transferId = randomUUID();
+      db.transaction(() => {
+        const upd = db.prepare("UPDATE operations SET transfer_id = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?");
+        upd.run(transferId, idA, u);
+        upd.run(transferId, idB, u);
+      })();
+      const get = db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`);
+      return { transferId, opA: mapOp(get.get(idA)), opB: mapOp(get.get(idB)) };
+    },
+
+    // Retire le transferId des deux jambes d'un virement (sans les supprimer).
+    // Sans effet si transferId est inconnu.
+    unlinkTransfer(transferId, userId) {
+      const info = db.prepare("UPDATE operations SET transfer_id = NULL, updated_at = datetime('now') WHERE transfer_id = ? AND user_id = ?")
+        .run(transferId, uid(userId));
+      return info.changes;
     },
 
     update(id, userId, body) {
@@ -550,13 +652,13 @@ module.exports = function createSQLiteRepos() {
     // Transaction : toutes les insertions réussissent ou aucune n'est commitée
     insertMany(items) {
       const stmt = db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       );
       db.transaction((ops) => {
         for (const op of ops) {
           const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
-            op.categoryId ? uid(op.categoryId) : null, uid(op.bankId), uid(op.userId));
+            op.categoryId ? uid(op.categoryId) : null, op.transferId ?? null, uid(op.bankId), uid(op.userId));
         }
       })(items);
     },
@@ -581,14 +683,15 @@ module.exports = function createSQLiteRepos() {
         dayOfMonth: r.day_of_month,
         categoryId: r.category_id ?? null,
         bankId: r.bank_id, // ID brut pour la déduplication
+        toBankId: r.to_bank_id ?? null,
         userId: r.user_id,
       })),
 
-    create({ label, amount, dayOfMonth, categoryId = null, bankId, userId }) {
+    create({ label, amount, dayOfMonth, categoryId = null, bankId, toBankId = null, userId }) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO recurring_operations (id, label, amount, day_of_month, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dayOfMonth, categoryId ? uid(categoryId) : null, uid(bankId), uid(userId));
+        'INSERT INTO recurring_operations (id, label, amount, day_of_month, category_id, bank_id, to_bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dayOfMonth, categoryId ? uid(categoryId) : null, uid(bankId), toBankId ? uid(toBankId) : null, uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
@@ -599,11 +702,14 @@ module.exports = function createSQLiteRepos() {
       const categoryId = body.categoryId !== undefined
         ? (body.categoryId ? uid(body.categoryId) : null)
         : (cur.category_id ?? null);
+      const toBankId = body.toBankId !== undefined
+        ? (body.toBankId ? uid(body.toBankId) : null)
+        : (cur.to_bank_id ?? null);
       db.prepare(`
         UPDATE recurring_operations
-        SET label = ?, amount = ?, day_of_month = ?, category_id = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, day_of_month = ?, category_id = ?, bank_id = ?, to_bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dayOfMonth, categoryId, uid(bankId), id, uid(userId));
+      `).run(label, amount, dayOfMonth, categoryId, uid(bankId), toBankId, id, uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
