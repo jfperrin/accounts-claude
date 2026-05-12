@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Wallet, Globe, Mail, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
@@ -30,6 +30,7 @@ export default function LoginPage() {
   const [resendDone, setResendDone] = useState(false);
   const [formError, setFormError] = useState('');
   const { login, register } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const googleError = searchParams.get('error') === 'google';
   const emailTaken = searchParams.get('error') === 'email_taken';
@@ -49,7 +50,11 @@ export default function LoginPage() {
     setFormError('');
     try {
       if (tab === 'login') {
-        await login({ ...form, rememberDays });
+        const res = await login({ ...form, rememberDays });
+        if (res && res.mfaRequired) {
+          navigate('/login/mfa');
+          return;
+        }
       } else {
         if (!acceptedToS) {
           setFormError('Vous devez accepter les conditions générales d\'utilisation.');
