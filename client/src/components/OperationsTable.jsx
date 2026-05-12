@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X, ArrowLeftRight, Link2, Unlink2 } from 'lucide-react';
+import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
@@ -12,8 +12,8 @@ import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
-const DELETE_REVEAL = 88;
-const EDIT_REVEAL = 160;
+const POINT_REVEAL = 88;
+const ACTION_WIDTH = 80;
 const DRAG_THRESHOLD = 6;
 
 function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, children }) {
@@ -24,6 +24,10 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
   const moved = useRef(false);
   const draggingRef = useRef(false);
   const axis = useRef(null);
+
+  const showRecurring = !!onMakeRecurring && !op.transferId;
+  const actionsCount = 2 + (showRecurring ? 1 : 0);
+  const actionsReveal = ACTION_WIDTH * actionsCount;
 
   const onPointerDown = (e) => {
     if (e.target.closest('button, [role="switch"], [role="combobox"]')) return;
@@ -44,15 +48,15 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
     }
     if (axis.current !== 'h') return;
     let next = startOffset.current + dx;
-    next = Math.max(-DELETE_REVEAL, Math.min(EDIT_REVEAL, next));
+    next = Math.max(-actionsReveal, Math.min(POINT_REVEAL, next));
     setOffset(next);
   };
   const onPointerUp = () => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     setDragging(false);
-    if (offset > EDIT_REVEAL / 2) setOffset(EDIT_REVEAL);
-    else if (offset < -DELETE_REVEAL / 2) setOffset(-DELETE_REVEAL);
+    if (offset > POINT_REVEAL / 2) setOffset(POINT_REVEAL);
+    else if (offset < -actionsReveal / 2) setOffset(-actionsReveal);
     else setOffset(0);
     setTimeout(() => { moved.current = false; }, 0);
   };
@@ -60,19 +64,13 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
   const handleClick = (e) => {
     if (moved.current) { e.stopPropagation(); return; }
     if (offset !== 0) { setOffset(0); e.stopPropagation(); return; }
-    if (!e.target.closest('button, [role="switch"], [role="combobox"]')) {
-      onPoint(op._id);
-    }
   };
 
-  // Clavier : Enter/Espace sur la ligne elle-même bascule pointed.
-  // On ignore les events qui remontent depuis un bouton/switch/select imbriqué.
   const handleKeyDown = (e) => {
     if (e.target !== e.currentTarget) return;
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (e.key === 'Escape' && offset !== 0) {
       e.preventDefault();
-      if (offset !== 0) { setOffset(0); return; }
-      onPoint(op._id);
+      setOffset(0);
     }
   };
 
@@ -83,40 +81,47 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
       <div className="absolute inset-y-0 left-0 flex">
         <button
           type="button"
+          onClick={() => { close(); onPoint(op._id); }}
+          className="flex flex-col items-center justify-center gap-0.5 bg-emerald-600 px-3 text-white text-[10px] font-medium"
+          style={{ width: POINT_REVEAL }}
+        >
+          <Check className="h-4 w-4" />
+          {op.pointed ? 'Dépointer' : 'Pointer'}
+        </button>
+      </div>
+      <div className="absolute inset-y-0 right-0 flex">
+        <button
+          type="button"
           onClick={() => { close(); onEdit(op); }}
           className="flex flex-col items-center justify-center gap-0.5 bg-primary px-3 text-primary-foreground text-[10px] font-medium"
-          style={{ width: EDIT_REVEAL / 2 }}
+          style={{ width: ACTION_WIDTH }}
         >
           <Pencil className="h-4 w-4" />
           Éditer
         </button>
-        {onMakeRecurring && (
+        {showRecurring && (
           <button
             type="button"
             onClick={() => { close(); onMakeRecurring(op); }}
             className="flex flex-col items-center justify-center gap-0.5 bg-slate-600 px-3 text-white text-[10px] font-medium"
-            style={{ width: EDIT_REVEAL / 2 }}
+            style={{ width: ACTION_WIDTH }}
           >
             <Repeat2 className="h-4 w-4" />
             Récurrente
           </button>
         )}
-      </div>
-      <div className="absolute inset-y-0 right-0 flex">
         <button
           type="button"
           onClick={() => { close(); onDelete(op._id); }}
           className="flex flex-col items-center justify-center gap-0.5 bg-rose-600 px-3 text-white text-[10px] font-medium"
-          style={{ width: DELETE_REVEAL }}
+          style={{ width: ACTION_WIDTH }}
         >
           <Trash2 className="h-4 w-4" />
           Supprimer
         </button>
       </div>
       <div
-        role="button"
         tabIndex={0}
-        aria-pressed={op.pointed}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         onPointerDown={onPointerDown}
@@ -129,7 +134,7 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
           touchAction: 'pan-y',
         }}
         className={cn(
-          'relative border border-border px-2 py-2 cursor-pointer',
+          'relative border border-border px-2 py-2',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
           op.pointed ? 'bg-muted text-muted-foreground' : 'bg-card',
         )}
@@ -358,7 +363,6 @@ export default function OperationsTable({ operations, categories = [], banks = [
                 </span>
               )}
               <span className="text-xs text-muted-foreground truncate min-w-0 flex-1">{op.label}</span>
-              <Switch checked={op.pointed} onCheckedChange={() => onPoint(op._id)} />
             </div>
           </SwipeableCard>
         ))}
@@ -392,13 +396,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
           {rows.map((op) => (
             <TableRow
               key={op._id}
-              className={cn(op.pointed && 'opacity-50', 'md:cursor-default cursor-pointer active:opacity-70')}
-              onClick={(e) => {
-                // Sur mobile uniquement : clic sur la ligne pointe/dépointe
-                if (window.innerWidth < 768 && !e.target.closest('button, [role="switch"], [role="combobox"]')) {
-                  onPoint(op._id);
-                }
-              }}
+              className={cn(op.pointed && 'opacity-50')}
             >
               <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
               <TableCell>

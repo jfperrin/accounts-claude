@@ -209,9 +209,91 @@ router.patch('/:id/point', wrap(async (req, res) => {
   res.json(op);
 }));
 
-// POST /api/operations/generate-recurring  body: { month, year }
+// Calcule la date cible et les "clés" (label|bankId|amount|YYYY-MM-DD) d'une
+// récurrente pour un mois donné. Renvoie aussi l'op (ou la paire d'ops pour
+// les transferts) à insérer. Utilisé par /generate-recurring et /recurring-preview.
+function planRecurring(r, month, year, bankLabelById, userId) {
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const day = Math.min(r.dayOfMonth, lastDay);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const keyOf = (label, bankId, amount, d) =>
+    `${label}|${bankId}|${amount}|${new Date(d).toISOString().slice(0, 10)}`;
+
+  if (r.toBankId) {
+    const abs = Math.abs(Number(r.amount));
+    const fromBank = String(r.bankId);
+    const toBank = String(r.toBankId);
+    const outLabel = r.label || `Virement → ${bankLabelById.get(toBank) || 'banque'}`;
+    const inLabel  = r.label || `Virement ← ${bankLabelById.get(fromBank) || 'banque'}`;
+    return {
+      date,
+      keys: [keyOf(outLabel, fromBank, -abs, date), keyOf(inLabel, toBank, abs, date)],
+      build: () => {
+        const transferId = randomUUID();
+        return [
+          { label: outLabel, amount: -abs, date, bankId: r.bankId,   userId, pointed: false, categoryId: null, transferId },
+          { label: inLabel,  amount:  abs, date, bankId: r.toBankId, userId, pointed: false, categoryId: null, transferId },
+        ];
+      },
+    };
+  }
+
+  return {
+    date,
+    keys: [keyOf(r.label, String(r.bankId), r.amount, date)],
+    build: () => [{
+      label: r.label,
+      amount: r.amount,
+      date,
+      bankId: r.bankId,
+      userId,
+      pointed: false,
+      categoryId: r.categoryId ?? null,
+    }],
+  };
+}
+
+async function buildRecurringContext(db, userId, month, year) {
+  const existing = await db.operations.findByMonthMinimal(month, year, userId);
+  const existingKeys = new Set(
+    existing.map((o) => {
+      const bId = o.bankId && o.bankId._id ? String(o.bankId._id) : String(o.bankId);
+      return `${o.label}|${bId}|${o.amount}|${new Date(o.date).toISOString().slice(0, 10)}`;
+    }),
+  );
+  const banksList = await db.banks.findByUser(userId);
+  const bankLabelById = new Map(banksList.map((b) => [String(b._id), b.label]));
+  return { existingKeys, bankLabelById };
+}
+
+// GET /api/operations/recurring-preview?month=M&year=YYYY
+// Aperçu : pour chaque récurrente, date cible + déjà-importée?
+router.get('/recurring-preview', wrap(async (req, res) => {
+  const month = Number(req.query.month);
+  const year = Number(req.query.year);
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return res.status(400).json({ message: 'month/year requis et valides' });
+  }
+  const { recurringOps } = req.app.locals.db;
+  const userId = req.user._id;
+  const recurring = await recurringOps.findByUserRaw(userId);
+  const { existingKeys, bankLabelById } = await buildRecurringContext(req.app.locals.db, userId, month, year);
+  const items = recurring.map((r) => {
+    const plan = planRecurring(r, month, year, bankLabelById, userId);
+    const alreadyImported = plan.keys.some((k) => existingKeys.has(k));
+    return {
+      recurringId: String(r._id),
+      date: plan.date.toISOString().slice(0, 10),
+      alreadyImported,
+    };
+  });
+  res.json({ items });
+}));
+
+// POST /api/operations/generate-recurring  body: { month, year, recurringIds? }
 // Génère les opérations issues des récurrents pour le mois cible.
 // Idempotent : on dédup par clé `label|bankId|amount|YYYY-MM-DD`.
+// Si recurringIds est fourni (tableau), on filtre la liste des récurrentes.
 router.post('/generate-recurring', wrap(async (req, res) => {
   const month = Number(req.body.month);
   const year = Number(req.body.year);
@@ -222,63 +304,24 @@ router.post('/generate-recurring', wrap(async (req, res) => {
   const { operations, recurringOps } = req.app.locals.db;
   const userId = req.user._id;
 
-  const recurring = await recurringOps.findByUserRaw(userId);
-  if (!recurring.length) return res.json({ imported: 0 });
+  const allRecurring = await recurringOps.findByUserRaw(userId);
+  if (!allRecurring.length) return res.json({ imported: 0 });
 
-  const existing = await operations.findByMonthMinimal(month, year, userId);
-  const keyOf = (label, bankId, amount, date) =>
-    `${label}|${bankId}|${amount}|${new Date(date).toISOString().slice(0, 10)}`;
-  const existingKeys = new Set(
-    existing.map((o) => {
-      const bId = o.bankId && o.bankId._id ? String(o.bankId._id) : String(o.bankId);
-      return keyOf(o.label, bId, o.amount, o.date);
-    }),
-  );
+  let recurring = allRecurring;
+  if (Array.isArray(req.body.recurringIds)) {
+    const ids = new Set(req.body.recurringIds.map(String));
+    recurring = allRecurring.filter((r) => ids.has(String(r._id)));
+    if (!recurring.length) return res.json({ imported: 0 });
+  }
 
-  // Banks pour résoudre les labels dans les libellés "Virement → X" / "← X".
-  const banksList = await req.app.locals.db.banks.findByUser(userId);
-  const bankLabelById = new Map(banksList.map((b) => [String(b._id), b.label]));
+  const { existingKeys, bankLabelById } = await buildRecurringContext(req.app.locals.db, userId, month, year);
 
-  // Pour chaque récurrent, on calcule le jour effectif (Math.min pour février),
-  // on construit l'op datée et on dédup avant insertion.
-  // Cas spécial transfert (toBankId posé) : on génère 2 ops liées par un transferId.
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const toInsert = [];
   for (const r of recurring) {
-    const day = Math.min(r.dayOfMonth, lastDay);
-    const date = new Date(Date.UTC(year, month - 1, day));
-
-    if (r.toBankId) {
-      const abs = Math.abs(Number(r.amount));
-      const fromBank = String(r.bankId);
-      const toBank = String(r.toBankId);
-      const outLabel = r.label || `Virement → ${bankLabelById.get(toBank) || 'banque'}`;
-      const inLabel  = r.label || `Virement ← ${bankLabelById.get(fromBank) || 'banque'}`;
-      const outKey = keyOf(outLabel, fromBank, -abs, date);
-      const inKey  = keyOf(inLabel, toBank,  abs, date);
-      if (existingKeys.has(outKey) || existingKeys.has(inKey)) continue;
-      existingKeys.add(outKey);
-      existingKeys.add(inKey);
-      const transferId = randomUUID();
-      toInsert.push(
-        { label: outLabel, amount: -abs, date, bankId: r.bankId,   userId, pointed: false, categoryId: null, transferId },
-        { label: inLabel,  amount:  abs, date, bankId: r.toBankId, userId, pointed: false, categoryId: null, transferId },
-      );
-      continue;
-    }
-
-    const key = keyOf(r.label, String(r.bankId), r.amount, date);
-    if (existingKeys.has(key)) continue;
-    existingKeys.add(key);
-    toInsert.push({
-      label: r.label,
-      amount: r.amount,
-      date,
-      bankId: r.bankId,
-      userId,
-      pointed: false,
-      categoryId: r.categoryId ?? null,
-    });
+    const plan = planRecurring(r, month, year, bankLabelById, userId);
+    if (plan.keys.some((k) => existingKeys.has(k))) continue;
+    for (const k of plan.keys) existingKeys.add(k);
+    toInsert.push(...plan.build());
   }
 
   if (toInsert.length) await operations.insertMany(toInsert);

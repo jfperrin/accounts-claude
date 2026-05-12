@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Download, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, ArrowLeftRight, ArrowRight, Search, X } from 'lucide-react';
-import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
   list as listRecurring,
@@ -30,13 +29,12 @@ import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import RecurringSuggestions from '@/components/RecurringSuggestions';
 import SubscriptionsCard from '@/components/SubscriptionsCard';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
+import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
 import EmptyState from '@/components/EmptyState';
 import { useCategories } from '@/hooks/useCategories';
 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-const CURRENT_YEAR = dayjs().year();
-const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
 const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '', kind: 'debit', categoryId: 'none', isTransfer: false, toBankId: '' });
 
 export default function RecurringPage() {
@@ -45,10 +43,8 @@ export default function RecurringPage() {
   const [modal, setModal] = useState(null); // null | { item? }
   const [form, setForm] = useState(empty());
   const [deleteTarget, setDeleteTarget] = useState(null);
-  // Boîte de dialogue de génération : on demande mois/année avant d'appeler le serveur.
+  // Boîte de dialogue de génération : checklist mois/année + sélection des récurrentes.
   const [genOpen, setGenOpen] = useState(false);
-  const [genMonth, setGenMonth] = useState(dayjs().month() + 1);
-  const [genYear, setGenYear] = useState(CURRENT_YEAR);
   // Suggestions de récurrentes : null tant que pas scanné, [] = aucune, [...] = liste.
   const [suggestions, setSuggestions] = useState(null);
   const [detecting, setDetecting] = useState(false);
@@ -262,11 +258,10 @@ export default function RecurringPage() {
     }
   };
 
-  const onGenerate = async (e) => {
-    e.preventDefault();
+  const onGenerate = async ({ month, year, recurringIds }) => {
     try {
-      const { imported } = await generateRecurring({ month: genMonth, year: genYear });
-      toast.success(`${imported} opération(s) générée(s) pour ${MONTHS[genMonth - 1]} ${genYear}`);
+      const { imported } = await generateRecurring({ month, year, recurringIds });
+      toast.success(`${imported} opération(s) générée(s) pour ${MONTHS[month - 1]} ${year}`);
       setGenOpen(false);
     } catch (err) {
       toast.error(err.message || 'Erreur lors de la génération');
@@ -582,45 +577,12 @@ export default function RecurringPage() {
         onCancel={() => setBulkCat(null)}
       />
 
-      <Dialog open={genOpen} onOpenChange={(o) => !o && setGenOpen(false)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Générer les récurrentes</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={onGenerate} className="space-y-4 pt-1">
-            <p className="text-sm text-muted-foreground">
-              Crée les opérations correspondant aux récurrentes ci-dessus pour le mois choisi.
-              Les doublons (même libellé, banque, montant, date) sont ignorés.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Mois</Label>
-                <Select value={String(genMonth)} onValueChange={(v) => setGenMonth(Number(v))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MONTHS.map((label, i) => (
-                      <SelectItem key={i + 1} value={String(i + 1)}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Année</Label>
-                <Select value={String(genYear)} onValueChange={(v) => setGenYear(Number(v))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {YEARS.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setGenOpen(false)}>Annuler</Button>
-              <Button type="submit">Générer</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <GenerateRecurringDialog
+        open={genOpen}
+        recurring={items}
+        onConfirm={onGenerate}
+        onCancel={() => setGenOpen(false)}
+      />
     </div>
   );
 }

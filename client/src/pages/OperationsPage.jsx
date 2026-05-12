@@ -162,9 +162,9 @@ export default function OperationsPage() {
 
   const handleGenerateRecurring = () => setGenerateRecurringOpen(true);
 
-  const handleConfirmGenerateRecurring = async ({ month, year }) => {
+  const handleConfirmGenerateRecurring = async ({ month, year, recurringIds }) => {
     try {
-      const { imported } = await generateRecurring({ month, year });
+      const { imported } = await generateRecurring({ month, year, recurringIds });
       toast.success(`${imported} opération(s) générée(s)`);
       setGenerateRecurringOpen(false);
       reloadOperations();
@@ -685,6 +685,7 @@ export default function OperationsPage() {
 
       <GenerateRecurringDialog
         open={generateRecurringOpen}
+        recurring={recurring}
         onConfirm={handleConfirmGenerateRecurring}
         onCancel={() => setGenerateRecurringOpen(false)}
       />

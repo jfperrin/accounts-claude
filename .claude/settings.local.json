@@ -142,7 +142,9 @@
       "Bash(sqlite3 -batch /home/jfperrin/.local/share/comptes.sqlite \"SELECT email, role FROM users LIMIT 5\")",
       "Bash(sqlite3 /data/git/github.com/accounts-claude/server/dev.db \"SELECT email, role, email_verified FROM users LIMIT 10\")",
       "mcp__playwright__browser_type",
-      "mcp__playwright__browser_wait_for"
+      "mcp__playwright__browser_wait_for",
+      "Bash(CLAUDE_PROJECT_DIR=/data/git/github.com/accounts-claude bash -c 'node \"$CLAUDE_PROJECT_DIR/.claude/hooks/filter-verbose-bash.js\"')",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

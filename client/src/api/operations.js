@@ -7,8 +7,10 @@ export const create = (data) => client.post('/operations', data);
 export const update = (id, data) => client.put(`/operations/${id}`, data);
 export const remove = (id) => client.delete(`/operations/${id}`);
 export const point = (id) => client.patch(`/operations/${id}/point`);
-export const generateRecurring = ({ month, year }) =>
-  client.post('/operations/generate-recurring', { month, year });
+export const generateRecurring = ({ month, year, recurringIds }) =>
+  client.post('/operations/generate-recurring', { month, year, recurringIds });
+export const previewRecurring = ({ month, year }) =>
+  client.get('/operations/recurring-preview', { params: { month, year } });
 // Upload d'un fichier QIF / OFX / ZIP pour la banque cible.
 // Le serveur réconcilie automatiquement avec les ops existantes (par montant)
 // et peut renvoyer `pendingMatches` à résoudre via resolveImport().

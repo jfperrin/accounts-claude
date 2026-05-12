@@ -92,7 +92,9 @@ router.post('/login', authLimiter, (req, res, next) => {
       : 30;
 
     // Si 2FA actif et compte local → on initie un challenge au lieu de logger.
-    const hasMfa = !user.googleId && (user.totpEnabled || user.emailMfaEnabled);
+    // En mode dev on bypass le challenge pour faciliter le développement local.
+    const isDev = process.env.NODE_ENV === 'development';
+    const hasMfa = !isDev && !user.googleId && (user.totpEnabled || user.emailMfaEnabled);
     if (hasMfa) {
       const methods = [];
       if (user.totpEnabled) methods.push('totp');

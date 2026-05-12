@@ -112,6 +112,56 @@ describe('POST /api/operations/generate-recurring', () => {
     expect((await agent.post('/api/operations/generate-recurring').send({ month: 13, year: 2025 })).status).toBe(400);
     expect((await agent.post('/api/operations/generate-recurring').send({})).status).toBe(400);
   });
+
+  it('ne génère que les récurrentes listées via recurringIds', async () => {
+    const list = (await agent.get('/api/recurring-operations')).body;
+    const loyerId = list.find((r) => r.label === 'Loyer')._id;
+    const res = await agent.post('/api/operations/generate-recurring').send({
+      month: 4, year: 2025, recurringIds: [loyerId],
+    });
+    expect(res.body.imported).toBe(1);
+    const ops = (await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' })).body;
+    expect(ops).toHaveLength(1);
+    expect(ops[0].label).toBe('Loyer');
+  });
+
+  it('recurringIds vide → aucune importée', async () => {
+    const res = await agent.post('/api/operations/generate-recurring').send({
+      month: 4, year: 2025, recurringIds: [],
+    });
+    expect(res.body.imported).toBe(0);
+  });
+});
+
+describe('GET /api/operations/recurring-preview', () => {
+  beforeEach(async () => {
+    await agent.post('/api/recurring-operations').send({
+      label: 'Loyer', amount: -800, dayOfMonth: 5, bankId,
+    });
+    await agent.post('/api/recurring-operations').send({
+      label: 'Salaire', amount: 2500, dayOfMonth: 28, bankId,
+    });
+  });
+
+  it('retourne la date cible et alreadyImported=false avant génération', async () => {
+    const res = await agent.get('/api/operations/recurring-preview').query({ month: 4, year: 2025 });
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(2);
+    expect(res.body.items.every((it) => it.alreadyImported === false)).toBe(true);
+    const loyer = res.body.items.find((it) => it.date === '2025-04-05');
+    expect(loyer).toBeTruthy();
+  });
+
+  it('marque alreadyImported=true après génération', async () => {
+    await agent.post('/api/operations/generate-recurring').send({ month: 4, year: 2025 });
+    const res = await agent.get('/api/operations/recurring-preview').query({ month: 4, year: 2025 });
+    expect(res.body.items.every((it) => it.alreadyImported === true)).toBe(true);
+  });
+
+  it('rejette month/year invalides', async () => {
+    expect((await agent.get('/api/operations/recurring-preview').query({ month: 0, year: 2025 })).status).toBe(400);
+    expect((await agent.get('/api/operations/recurring-preview')).status).toBe(400);
+  });
 });
 
 describe('POST /api/operations', () => {

@@ -400,7 +400,7 @@ module.exports = function createSQLiteRepos() {
 
     findAll() {
       return db.prepare(
-        'SELECT id, email, email_verified, role, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, created_at FROM users ORDER BY created_at DESC',
+        'SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_enabled, email_mfa_enabled, created_at FROM users ORDER BY created_at DESC',
       ).all().map(mapUser);
     },
 

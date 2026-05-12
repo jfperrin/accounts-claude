@@ -15,14 +15,17 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // Sérialise un user pour la liste admin (pas de passwordHash)
 function serializeAdminUser(u) {
   return {
-    _id:           u._id ?? u.id,
-    email:         u.email ?? null,
-    emailVerified: u.emailVerified ?? false,
-    role:          u.role ?? 'user',
-    firstName:     u.firstName ?? null,
-    lastName:      u.lastName ?? null,
-    nickname:      u.nickname ?? null,
-    createdAt:     u.createdAt ?? null,
+    _id:             u._id ?? u.id,
+    email:           u.email ?? null,
+    emailVerified:   u.emailVerified ?? false,
+    role:            u.role ?? 'user',
+    firstName:       u.firstName ?? null,
+    lastName:        u.lastName ?? null,
+    nickname:        u.nickname ?? null,
+    createdAt:       u.createdAt ?? null,
+    isGoogle:        !!u.googleId,
+    totpEnabled:     !!u.totpEnabled,
+    emailMfaEnabled: !!u.emailMfaEnabled,
   };
 }
 
@@ -136,6 +139,41 @@ router.post('/users/:id/verify-email', wrap(async (req, res) => {
   const user = await db.users.findById(req.params.id);
   if (!user) return res.status(404).json({ message: 'Utilisateur introuvable' });
   const updated = await db.users.setEmailVerified(req.params.id);
+  res.json(serializeAdminUser(updated));
+}));
+
+// Désactive un facteur MFA pour un user. Si l'autre facteur est lui aussi
+// inactif après l'opération, purge les recovery codes (cohérent avec
+// /api/auth/mfa/totp/disable et /api/auth/mfa/email/disable).
+// `factor` ∈ 'totp' | 'email'.
+async function disableMfaFactor(db, userId, factor) {
+  const user = await db.users.findByIdWithHash(userId);
+  if (!user) return null;
+  const updates = {};
+  if (factor === 'totp') {
+    updates.totpSecret = null;
+    updates.totpEnabled = false;
+    if (!user.emailMfaEnabled) updates.recoveryCodes = [];
+  } else {
+    updates.emailMfaEnabled = false;
+    if (!user.totpEnabled) updates.recoveryCodes = [];
+  }
+  return db.users.updateMfa(userId, updates);
+}
+
+// DELETE /api/admin/users/:id/mfa/totp — révoque le 2FA TOTP
+router.delete('/users/:id/mfa/totp', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const updated = await disableMfaFactor(db, req.params.id, 'totp');
+  if (!updated) return res.status(404).json({ message: 'Utilisateur introuvable' });
+  res.json(serializeAdminUser(updated));
+}));
+
+// DELETE /api/admin/users/:id/mfa/email — révoque le 2FA par email
+router.delete('/users/:id/mfa/email', wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const updated = await disableMfaFactor(db, req.params.id, 'email');
+  if (!updated) return res.status(404).json({ message: 'Utilisateur introuvable' });
   res.json(serializeAdminUser(updated));
 }));
 
