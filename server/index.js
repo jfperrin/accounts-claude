@@ -42,6 +42,13 @@ async function main() {
   }
 
   const app = createApp(db, mongoUri, { dualMode });
+
+  try {
+    await app.locals.db.mfaCodes.deleteExpired();
+  } catch (err) {
+    console.warn('[boot] mfaCodes.deleteExpired failed:', err?.message);
+  }
+
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`Server listening on :${PORT}`));
 }

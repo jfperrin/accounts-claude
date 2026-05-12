@@ -4,7 +4,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { generateSecret: totpGenerateSecret, generateSync: totpGenerate, verifySync: totpVerify, generateURI: totpURI } = require('otplib');
+const { generateSecret: totpGenerateSecret, verifySync: totpVerify, generateURI: totpURI } = require('otplib');
 const QRCode = require('qrcode');
 const wrap = require('../utils/asyncHandler');
 const requireAuth = require('../middleware/requireAuth');
