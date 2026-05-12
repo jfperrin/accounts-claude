@@ -4,7 +4,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { authenticator } = require('otplib');
+const { generateSecret: totpGenerateSecret, generateSync: totpGenerate, verifySync: totpVerify, generateURI: totpURI } = require('otplib');
 const QRCode = require('qrcode');
 const wrap = require('../utils/asyncHandler');
 const requireAuth = require('../middleware/requireAuth');
@@ -36,9 +36,10 @@ function getValidChallenge(req) {
 // Rate limiter Express générique sur les routes MFA (30 req / 15min par IP).
 // Le rate-limit fin par user (1/60s sur send-email) est géré au cas par cas
 // via db.mfaCodes.countRecent dans chaque handler concerné.
+// En test (RATE_LIMIT_MAX élevé), on aligne le max pour ne pas bloquer la suite.
 const mfaLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: parseInt(process.env.RATE_LIMIT_MAX ?? '30', 10) || 30,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -47,8 +48,10 @@ router.use(mfaLimiter);
 
 // Helpers ────────────────────────────────────────────────────────────────────
 
+// passwordHash est absent de req.user (exclu par findById via select('-passwordHash')).
+// On détecte un compte Google uniquement via googleId.
 function isLocalAccount(user) {
-  return !!user.passwordHash && !user.googleId;
+  return !user.googleId;
 }
 
 async function rejectIfGoogle(req, res) {
@@ -82,7 +85,7 @@ function verifyTotpCode(user, code) {
   if (!user.totpEnabled || !user.totpSecret) return false;
   try {
     const secret = cryptoBox.decrypt(user.totpSecret);
-    return authenticator.check(code, secret);
+    return totpVerify({ secret, token: code }).valid;
   } catch (_) {
     return false;
   }
@@ -106,13 +109,13 @@ async function consumeRecoveryCode(db, user, code) {
 router.post('/totp/setup', requireAuth, wrap(async (req, res) => {
   if (await rejectIfGoogle(req, res)) return;
   const db = req.app.locals.db;
-  const secret = authenticator.generateSecret();
+  const secret = totpGenerateSecret();
   const encrypted = cryptoBox.encrypt(secret);
   await db.users.updateMfa(req.user._id ?? req.user.id, {
     totpSecret: encrypted,
     totpEnabled: false,
   });
-  const otpauthUrl = authenticator.keyuri(req.user.email, MFA_ISSUER, secret);
+  const otpauthUrl = totpURI({ label: req.user.email, issuer: MFA_ISSUER, secret });
   const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
   res.json({ secret, otpauthUrl, qrCodeDataUrl });
 }));
@@ -127,7 +130,7 @@ router.post('/totp/enable', requireAuth, wrap(async (req, res) => {
   const full = await db.users.findByIdWithHash(req.user._id ?? req.user.id);
   if (!full.totpSecret) return res.status(400).json({ message: 'Aucun setup TOTP en attente' });
   const secret = cryptoBox.decrypt(full.totpSecret);
-  if (!authenticator.check(code, secret)) {
+  if (!totpVerify({ secret, token: code }).valid) {
     return res.status(401).json({ message: 'Code invalide' });
   }
   const recoveryPlain = generateRecoveryCodes();

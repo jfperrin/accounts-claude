@@ -1,3 +1,4 @@
+process.env.MFA_ENCRYPTION_KEY = process.env.MFA_ENCRYPTION_KEY || '0'.repeat(64);
 // Set a high rate limit so the test suite never hits the limiter.
 // Must be assigned before createApp() is called (rate limiter reads this at startup).
 process.env.RATE_LIMIT_MAX = '1000';
