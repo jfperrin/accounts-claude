@@ -109,6 +109,20 @@ function initSchema(db) {
       created_at  TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_mfa_codes_user ON mfa_email_codes(user_id);
+
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id           TEXT PRIMARY KEY,
+      user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash   TEXT NOT NULL UNIQUE,
+      user_agent   TEXT,
+      ip           TEXT,
+      created_at   TEXT DEFAULT (datetime('now')),
+      last_used_at TEXT DEFAULT (datetime('now')),
+      expires_at   TEXT NOT NULL,
+      revoked_at   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_refresh_expires ON refresh_tokens(expires_at);
   `);
 
   // Migration: drop username column if it exists (schema change from username to email)
@@ -328,6 +342,18 @@ const mapMfaCode = (row) => row && {
   purpose:    row.purpose,
   expiresAt:  new Date(row.expires_at),
   used:       row.used === 1,
+};
+
+const mapRefreshToken = (row) => row && {
+  _id:         row.id,
+  userId:      row.user_id,
+  tokenHash:   row.token_hash,
+  userAgent:   row.user_agent ?? null,
+  ip:          row.ip ?? null,
+  createdAt:   new Date(row.created_at),
+  lastUsedAt:  new Date(row.last_used_at),
+  expiresAt:   new Date(row.expires_at),
+  revokedAt:   row.revoked_at ? new Date(row.revoked_at) : null,
 };
 
 // Fragments SQL réutilisés pour les SELECT avec JOIN banks.
@@ -608,6 +634,13 @@ module.exports = function createSQLiteRepos() {
         categoryId: r.categoryId ?? null,
         transferId: r.transferId ?? null,
       }));
+    },
+
+    // Toutes les opérations non pointées de l'utilisateur (toutes dates confondues).
+    findUnpointed(userId) {
+      return db.prepare(
+        `${OPS_WITH_BANK} WHERE o.user_id = ? AND o.pointed = 0 ORDER BY o.date DESC`,
+      ).all(uid(userId)).map(mapOp);
     },
 
     sumUnpointedByBank(userId) {
@@ -984,8 +1017,67 @@ module.exports = function createSQLiteRepos() {
     },
   };
 
+  const refreshTokens = {
+    create({ userId, tokenHash, userAgent, ip, expiresAt }) {
+      const id = randomUUID();
+      db.prepare(
+        'INSERT INTO refresh_tokens (id, user_id, token_hash, user_agent, ip, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, uid(userId), tokenHash, userAgent ?? null, ip ?? null, new Date(expiresAt).toISOString());
+      return mapRefreshToken(db.prepare('SELECT * FROM refresh_tokens WHERE id = ?').get(id));
+    },
+
+    findByHash(tokenHash) {
+      return mapRefreshToken(db.prepare(
+        `SELECT * FROM refresh_tokens
+         WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > datetime('now')`,
+      ).get(tokenHash));
+    },
+
+    findActive(userId) {
+      return db.prepare(
+        `SELECT * FROM refresh_tokens
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > datetime('now')
+         ORDER BY last_used_at DESC`,
+      ).all(uid(userId)).map(mapRefreshToken);
+    },
+
+    touchAndRotate(id, newHash, newExpiresAt) {
+      db.prepare(
+        `UPDATE refresh_tokens
+         SET token_hash = ?, last_used_at = datetime('now'), expires_at = ?
+         WHERE id = ?`,
+      ).run(newHash, new Date(newExpiresAt).toISOString(), id);
+    },
+
+    revokeById(id, userId) {
+      const r = db.prepare(
+        `UPDATE refresh_tokens SET revoked_at = datetime('now')
+         WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
+      ).run(id, uid(userId));
+      return { modifiedCount: r.changes };
+    },
+
+    revokeOthers(userId, exceptId) {
+      db.prepare(
+        `UPDATE refresh_tokens SET revoked_at = datetime('now')
+         WHERE user_id = ? AND id != ? AND revoked_at IS NULL`,
+      ).run(uid(userId), exceptId);
+    },
+
+    revokeAll(userId) {
+      db.prepare(
+        `UPDATE refresh_tokens SET revoked_at = datetime('now')
+         WHERE user_id = ? AND revoked_at IS NULL`,
+      ).run(uid(userId));
+    },
+
+    deleteExpired() {
+      db.prepare(`DELETE FROM refresh_tokens WHERE expires_at < datetime('now', '-1 day') OR revoked_at < datetime('now', '-30 days')`).run();
+    },
+  };
+
   return {
     users, banks, operations, recurringOps, resetTokens,
-    categories, categoryHints, dismissedRecurringSuggestions, mfaCodes,
+    categories, categoryHints, dismissedRecurringSuggestions, mfaCodes, refreshTokens,
   };
 };

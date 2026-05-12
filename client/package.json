@@ -20,6 +20,7 @@
     "@radix-ui/react-separator": "latest",
     "@radix-ui/react-switch": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@tanstack/react-virtual": "^3.13.24",
     "axios": "latest",
     "class-variance-authority": "latest",
     "clsx": "latest",

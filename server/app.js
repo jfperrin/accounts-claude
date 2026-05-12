@@ -1,11 +1,19 @@
 // Fabrique de l'application Express.
 // Séparée de index.js pour pouvoir être importée dans les tests sans démarrer
 // le serveur HTTP (pattern "app factory").
+//
+// Auth : depuis la migration JWT, plus de session côté serveur. Trois cookies
+// httpOnly portent l'état :
+//   - access_token  (JWT, 15 min)
+//   - refresh_token (opaque, hashé en DB, path=/api/auth)
+//   - mfa_challenge (JWT court-vie, posé pendant le flow 2FA)
+// passport sert uniquement à la LocalStrategy pour vérifier le password (sans
+// session). Plus de passport.session(), plus de serializeUser/deserializeUser.
 
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
-const session = require('express-session');
+const cookieParser = require('cookie-parser');
 const passport = require('passport');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -13,19 +21,12 @@ const requireAuth = require('./middleware/requireAuth');
 const requireAdmin = require('./middleware/requireAdmin');
 const { dbMiddleware } = require('./db/dualDb');
 
-// mongoUri est null en développement (SQLite) → on utilise MemoryStore pour les sessions.
-// En production, mongoUri est fourni → sessions persistées dans MongoDB via connect-mongo.
-//
-// Quand `options.dualMode` est vrai, `db` doit être le proxy `createDualDb()`,
-// et un middleware en amont sélectionne SQLite ou MongoDB selon le cookie
-// `db_backend` (dev uniquement).
-module.exports = function createApp(db, mongoUri, options = {}) {
+module.exports = function createApp(db, _mongoUri, options = {}) {
   const { dualMode = false } = options;
   const app = express();
 
-  // Configure les stratégies Passport avec l'implémentation de base de données active.
-  // Doit être appelé avant app.use(passport.session()) pour que serializeUser/
-  // deserializeUser soient enregistrés au moment où les routes les utilisent.
+  // Configure les stratégies Passport (Local + éventuel Google) avec la DB.
+  // Plus de sérialisation : passport est utilisé en mode stateless via authenticate(...).
   require('./config/passport')(db);
 
   // Nécessaire pour que req.ip soit fiable derrière un reverse proxy (nginx, Render, etc.)
@@ -35,55 +36,30 @@ module.exports = function createApp(db, mongoUri, options = {}) {
   app.use(helmet());
 
   // CORS : autorise les requêtes cross-origin depuis le client Vite en dev.
-  // credentials:true est obligatoire pour que le cookie de session soit transmis.
+  // credentials:true est obligatoire pour que les cookies d'auth soient transmis.
   app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173', credentials: true }));
   app.use(express.json());
+  app.use(cookieParser());
 
-  // Doit être posé AVANT passport.session() — deserializeUser va lire le proxy db.
   if (dualMode) app.use(dbMiddleware);
 
-  // Sert les avatars en dev (stockage disque local)
-  if (!mongoUri) app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-  // Session store :
-  //   - MongoStore  → sessions survivent aux redémarrages (prod)
-  //   - MemoryStore → sessions perdues au redémarrage, acceptable en dev local
-  const store = mongoUri
-    ? require('connect-mongo').MongoStore.create({ mongoUrl: mongoUri })
-    : undefined;
-
-  const isProd = process.env.NODE_ENV === 'production';
-  if (isProd && !process.env.SESSION_SECRET) {
-    throw new Error('SESSION_SECRET environment variable is required in production');
+  // Sert les avatars en dev (stockage disque local) — détecté par l'absence de
+  // configuration MongoDB (les uploads partent en data URL Mongo en prod).
+  if (!process.env.MONGODB_URI) {
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
   }
 
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'dev_secret',
-    resave: false,
-    saveUninitialized: false,
-    store,
-    cookie: {
-      httpOnly: true,
-      secure: isProd,        // HTTPS uniquement en production
-      sameSite: 'strict',    // protection CSRF
-      // maxAge fixé par le handler login selon le choix de l'utilisateur (1j / 30j / 365j)
-    },
-  }));
-
   app.use(passport.initialize());
-  app.use(passport.session()); // restaure req.user depuis la session à chaque requête
 
-  // Les repos (users, banks, operations, periods, recurringOps) sont attachés à
-  // app.locals.db pour être accessibles dans toutes les routes via req.app.locals.db.
+  // Les repos sont attachés à app.locals.db pour être accessibles via req.app.locals.db.
   app.locals.db = db;
 
   // Routes publiques (pas de requireAuth)
   app.use('/api/auth', require('./routes/auth'));
 
-  // Endpoints de développement (introspection du backend actif).
   if (dualMode) app.use('/api/dev', require('./routes/dev'));
 
-  // Routes protégées : requireAuth renvoie 401 si la session est absente
+  // Routes protégées : requireAuth lit le cookie access_token (JWT) et pose req.user.
   app.use('/api/banks', requireAuth, require('./routes/banks'));
   app.use('/api/recurring-operations', requireAuth, require('./routes/recurringOperations'));
   app.use('/api/operations', requireAuth, require('./routes/operations'));
@@ -91,20 +67,14 @@ module.exports = function createApp(db, mongoUri, options = {}) {
   app.use('/api/category-hints', requireAuth, require('./routes/categoryHints'));
   app.use('/api/admin', requireAuth, requireAdmin, require('./routes/admin'));
 
-  // Sert le build Vite en production (client/dist copié dans server/public).
-  // En dev, Vite tourne sur son propre port et ce bloc est ignoré.
   const publicDir = path.join(__dirname, 'public');
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
-    // Toutes les routes non-API renvoient index.html pour que le routeur React prenne le relais
     app.get('/{*path}', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
   }
 
-  // Gestionnaire d'erreurs global : capte tout ce qui est passé à next(err)
-  // (notamment via asyncHandler) et renvoie une réponse JSON propre.
+  // Gestionnaire d'erreurs global
   app.use((err, _req, res, _next) => {
-    // Erreurs d'upload (multer) ou validation métier déclenchée par un middleware
-    // (file filter, parser CSV qui pose err.status = 400, etc.).
     if (err.name === 'MulterError'
       || err.message === 'Seules les images sont acceptées'
       || err.message === 'Seuls les fichiers .qif, .ofx ou .zip sont acceptés'

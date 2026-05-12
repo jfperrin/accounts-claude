@@ -12,10 +12,15 @@ const cryptoBox = require('../utils/cryptoBox');
 const { generateEmailCode, generateRecoveryCodes } = require('../utils/mfaCodes');
 const mailer = require('../utils/mailer');
 
+const { verifyMfaChallenge, authCookieOptions } = require('../utils/tokens');
+const { issueAuthCookies } = require('../utils/issueAuth');
+
 const MFA_ISSUER = process.env.MFA_ISSUER || 'Comptes';
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
 const MAX_CHALLENGE_ATTEMPTS = 5;
+const MFA_CHALLENGE_COOKIE = 'mfa_challenge';
+const MFA_COOKIE_PATH = '/api/auth';
 // Lockout par utilisateur : après N échecs cumulés, on bloque toute tentative MFA
 // pendant LOCKOUT_MS. Le compteur est persisté en base (atomique via $inc / UPDATE SQLite),
 // donc résistant aux requêtes concurrentes et aux re-logins répétés.
@@ -30,20 +35,22 @@ function isMfaLocked(user) {
   return user?.mfaLockedUntil && new Date(user.mfaLockedUntil).getTime() > Date.now();
 }
 
-// Récupère le challenge depuis la session. Retourne null si absent, expiré,
-// ou trop d'échecs. Dans ce dernier cas, le challenge est purgé de la session.
+// Lit le challenge depuis le cookie mfa_challenge (JWT signé court-vie).
+// Retourne { userId, methods, rememberDays } ou null si absent/invalide/expiré.
 function getValidChallenge(req) {
-  const ch = req.session?.mfaChallenge;
-  if (!ch) return null;
-  if (Date.now() - ch.createdAt > CHALLENGE_TTL_MS) {
-    delete req.session.mfaChallenge;
-    return null;
-  }
-  if (ch.failedAttempts >= MAX_CHALLENGE_ATTEMPTS) {
-    delete req.session.mfaChallenge;
-    return null;
-  }
-  return ch;
+  const token = req.cookies?.[MFA_CHALLENGE_COOKIE];
+  if (!token) return null;
+  const decoded = verifyMfaChallenge(token);
+  if (!decoded?.sub) return null;
+  return {
+    userId: decoded.sub,
+    methods: decoded.methods || [],
+    rememberDays: decoded.rememberDays || 30,
+  };
+}
+
+function clearChallengeCookie(res) {
+  res.clearCookie(MFA_CHALLENGE_COOKIE, authCookieOptions({ path: MFA_COOKIE_PATH }));
 }
 
 // Incrémente le compteur d'échecs en base, et pose un verrou temporaire si on dépasse le seuil.
@@ -334,7 +341,8 @@ router.post('/challenge/send-email', wrap(async (req, res) => {
 
 // POST /mfa/challenge/verify
 // body { method, code }. method ∈ 'totp' | 'email' | 'recovery'.
-router.post('/challenge/verify', wrap(async (req, res, next) => {
+// Succès → efface le cookie mfa_challenge, émet access+refresh, renvoie l'user.
+router.post('/challenge/verify', wrap(async (req, res) => {
   const ch = getValidChallenge(req);
   if (!ch) return res.status(401).json({ message: 'Challenge expiré' });
   const { method, code } = req.body ?? {};
@@ -345,7 +353,7 @@ router.post('/challenge/verify', wrap(async (req, res, next) => {
   const db = req.app.locals.db;
   const full = await db.users.findByIdWithHash(ch.userId);
   if (!full) {
-    delete req.session.mfaChallenge;
+    clearChallengeCookie(res);
     return res.status(401).json({ message: 'Challenge expiré' });
   }
 
@@ -363,42 +371,39 @@ router.post('/challenge/verify', wrap(async (req, res, next) => {
   else if (method === 'recovery') ok = await consumeRecoveryCode(db, full, code);
 
   if (!ok) {
-    ch.failedAttempts = (ch.failedAttempts || 0) + 1;
-    if (ch.failedAttempts >= MAX_CHALLENGE_ATTEMPTS) {
-      delete req.session.mfaChallenge;
+    const count = await db.users.incrementMfaFailures(ch.userId);
+    if (count >= 10) {
+      await db.users.setMfaLock(ch.userId, new Date(Date.now() + 60 * 60 * 1000));
     }
-    await recordMfaFailure(db, ch.userId);
+    // En cas d'échec répété, on purge le cookie pour forcer un nouveau login.
+    if (count % MAX_CHALLENGE_ATTEMPTS === 0) clearChallengeCookie(res);
     return res.status(401).json({ message: 'Code invalide' });
   }
 
-  const { rememberDays } = ch;
-  delete req.session.mfaChallenge;
+  clearChallengeCookie(res);
   await db.users.resetMfaFailures(ch.userId);
   const userForLogin = await db.users.findById(ch.userId);
-  req.login(userForLogin, (err) => {
-    if (err) return next(err);
-    req.session.cookie.maxAge = rememberDays * 24 * 60 * 60 * 1000;
-    res.json({
-      _id:             userForLogin._id ?? userForLogin.id,
-      email:           userForLogin.email ?? null,
-      emailVerified:   userForLogin.emailVerified ?? false,
-      role:            userForLogin.role ?? 'user',
-      title:           userForLogin.title     ?? null,
-      firstName:       userForLogin.firstName ?? null,
-      lastName:        userForLogin.lastName  ?? null,
-      nickname:        userForLogin.nickname  ?? null,
-      avatarUrl:       userForLogin.avatarUrl ?? null,
-      acceptedToSAt:   userForLogin.acceptedToSAt ?? null,
-      totpEnabled:     !!userForLogin.totpEnabled,
-      emailMfaEnabled: !!userForLogin.emailMfaEnabled,
-      recoveryCodesRemaining: (userForLogin.recoveryCodes || []).length,
-    });
+  await issueAuthCookies(req, res, userForLogin, { rememberDays: ch.rememberDays });
+  res.json({
+    _id:             userForLogin._id ?? userForLogin.id,
+    email:           userForLogin.email ?? null,
+    emailVerified:   userForLogin.emailVerified ?? false,
+    role:            userForLogin.role ?? 'user',
+    title:           userForLogin.title     ?? null,
+    firstName:       userForLogin.firstName ?? null,
+    lastName:        userForLogin.lastName  ?? null,
+    nickname:        userForLogin.nickname  ?? null,
+    avatarUrl:       userForLogin.avatarUrl ?? null,
+    acceptedToSAt:   userForLogin.acceptedToSAt ?? null,
+    totpEnabled:     !!userForLogin.totpEnabled,
+    emailMfaEnabled: !!userForLogin.emailMfaEnabled,
+    recoveryCodesRemaining: (userForLogin.recoveryCodes || []).length,
   });
 }));
 
 // POST /mfa/challenge/cancel
-router.post('/challenge/cancel', (req, res) => {
-  if (req.session) delete req.session.mfaChallenge;
+router.post('/challenge/cancel', (_req, res) => {
+  clearChallengeCookie(res);
   res.json({ message: 'Challenge annulé' });
 });
 

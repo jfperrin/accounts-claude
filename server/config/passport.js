@@ -54,25 +54,7 @@ module.exports = function configurePassport(db) {
     }));
   }
 
-  // --- Sérialisation de session ---
-  // serializeUser : stocke uniquement l'ID en session (payload minimal dans le cookie).
-  // deserializeUser : à chaque requête, recharge l'objet user complet depuis la DB
-  //   → req.user est disponible dans toutes les routes protégées.
-  // String(user._id) unifie ObjectId (MongoDB) et UUID string (SQLite).
-  passport.serializeUser((user, done) => done(null, String(user._id)));
-  passport.deserializeUser(async (id, done) => {
-    try {
-      const user = await db.users.findById(id); // retourne sans passwordHash
-      // Passport lance "Failed to deserialize user" si on lui passe undefined.
-      // SQLite renvoie undefined pour un id inexistant (Mongoose renvoie null) :
-      // on normalise en false → invalide proprement la session.
-      done(null, user || false);
-    } catch (err) {
-      // En dual mode dev, l'id sérialisé peut venir d'un autre backend
-      // (CastError Mongoose sur un UUID, ou autre lookup raté) → user absent,
-      // pas une erreur 500.
-      if (err?.name === 'CastError') return done(null, false);
-      done(err);
-    }
-  });
+  // Pas de serializeUser / deserializeUser : auth stateless via JWT.
+  // On utilise passport.authenticate(...) avec { session: false } dans /login
+  // pour profiter de LocalStrategy sans poser de session.
 };

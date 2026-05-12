@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { Pencil, Trash2, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
@@ -145,13 +146,16 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
   );
 }
 
-const PAGE_SIZES = [20, 50, 100, 200];
-const DEFAULT_PAGE_SIZE = 50;
+// Hauteur estimée d'une row desktop (px). Le virtualizer mesure ensuite la
+// hauteur réelle de chaque row rendue via ref → ResizeObserver.
+const ROW_ESTIMATE = 56;
+// Hauteur max du container scrollable de la table desktop. Au-delà, on scrolle
+// à l'intérieur de la table (header sticky). 60vh laisse de la place pour les
+// filtres au-dessus et le footer en bas.
+const TABLE_MAX_HEIGHT = 'min(60vh, 720px)';
 
 export default function OperationsTable({ operations, categories = [], banks = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onLinkTransfer, onUnlinkTransfer, onFilterStateChange }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [bankFilter, setBankFilter] = useState('all');
@@ -165,7 +169,6 @@ export default function OperationsTable({ operations, categories = [], banks = [
       setSortKey(key);
       setSortDir(key === 'label' ? 'asc' : 'desc');
     }
-    setPage(1);
   };
 
   const filtered = useMemo(() => {
@@ -195,8 +198,6 @@ export default function OperationsTable({ operations, categories = [], banks = [
     });
     return arr;
   }, [filtered, sortKey, sortDir]);
-
-  useEffect(() => { setPage(1); }, [query, categoryFilter, bankFilter]);
 
   // Remonte au parent l'état des filtres (count + somme signée) pour qu'il
   // puisse compléter le titre de la table quand un filtre est actif.
@@ -233,16 +234,26 @@ export default function OperationsTable({ operations, categories = [], banks = [
   };
 
   const total = sorted.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // Si la page courante dépasse le nombre de pages (après suppression d'op,
-  // changement de mois, ou augmentation de pageSize), on revient à la dernière.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const start = (page - 1) * pageSize;
-  const rows = sorted.slice(start, start + pageSize);
+  // Virtualisation desktop : on rend uniquement les rows visibles dans le viewport
+  // de la table. Le parent <div> scrollable doit avoir une hauteur bornée.
+  const tableScrollRef = useRef(null);
+  // TanStack Virtual expose des fonctions non-mémoïsables : React Compiler
+  // refuse de compiler ce composant sinon. C'est documenté côté lib (cf. README).
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const rowVirtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => tableScrollRef.current,
+    estimateSize: () => ROW_ESTIMATE,
+    overscan: 8,
+    getItemKey: (i) => sorted[i]._id,
+  });
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+  const paddingTop = virtualItems[0]?.start ?? 0;
+  const paddingBottom = virtualItems.length > 0
+    ? totalSize - (virtualItems[virtualItems.length - 1].end ?? 0)
+    : 0;
 
   const confirmDelete = () => {
     onDelete(deleteTarget);
@@ -298,7 +309,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
           </Select>
         )}
         <div className="md:hidden flex items-center gap-1">
-          <Select value={sortKey} onValueChange={(v) => { setSortKey(v); setPage(1); }}>
+          <Select value={sortKey} onValueChange={setSortKey}>
             <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="date">Date</SelectItem>
@@ -311,7 +322,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
             size="icon"
             className="h-9 w-9"
             aria-label={sortDir === 'asc' ? 'Croissant' : 'Décroissant'}
-            onClick={() => { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); setPage(1); }}
+            onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
           >
             {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
           </Button>
@@ -319,7 +330,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
       </div>
 
       <div className="md:hidden flex flex-col gap-2">
-        {rows.map((op) => (
+        {sorted.map((op) => (
           <SwipeableCard
             key={op._id}
             op={op}
@@ -368,9 +379,13 @@ export default function OperationsTable({ operations, categories = [], banks = [
         ))}
       </div>
 
-      <div className="hidden md:block">
+      <div
+        ref={tableScrollRef}
+        className="hidden md:block overflow-auto rounded-md border border-border"
+        style={{ maxHeight: TABLE_MAX_HEIGHT }}
+      >
       <Table>
-        <TableHeader>
+        <TableHeader className="sticky top-0 z-10 bg-card">
           <TableRow>
             <TableHead>
               <button type="button" onClick={() => toggleSort('date')} className="inline-flex items-center gap-1 hover:text-foreground">
@@ -393,9 +408,16 @@ export default function OperationsTable({ operations, categories = [], banks = [
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((op) => (
+          {paddingTop > 0 && (
+            <tr aria-hidden="true"><td colSpan={6} style={{ height: paddingTop, padding: 0, border: 0 }} /></tr>
+          )}
+          {virtualItems.map((virtualRow) => {
+            const op = sorted[virtualRow.index];
+            return (
             <TableRow
               key={op._id}
+              ref={rowVirtualizer.measureElement}
+              data-index={virtualRow.index}
               className={cn(op.pointed && 'opacity-50')}
             >
               <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
@@ -481,57 +503,20 @@ export default function OperationsTable({ operations, categories = [], banks = [
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
+          {paddingBottom > 0 && (
+            <tr aria-hidden="true"><td colSpan={6} style={{ height: paddingBottom, padding: 0, border: 0 }} /></tr>
+          )}
         </TableBody>
       </Table>
       </div>
 
-      {/* Pagination — toujours visible (le sélecteur de taille reste utile même
-          quand il n'y a qu'une seule page). */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span>Lignes par page</span>
-          <Select
-            value={String(pageSize)}
-            onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
-          >
-            <SelectTrigger className="h-8 w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZES.map((n) => (
-                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {total > 0 && (
+        <div className="mt-2 text-right text-xs text-muted-foreground tabular-nums">
+          {total} opération{total > 1 ? 's' : ''}
         </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-muted-foreground">
-            {total === 0 ? '0' : `${start + 1}–${Math.min(start + pageSize, total)} sur ${total}`}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="page précédente"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="page suivante"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
+      )}
 
       <DeleteConfirmDialog
         open={!!deleteTarget}

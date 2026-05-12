@@ -21,6 +21,7 @@ const Category = require('../models/Category');
 const CategoryHint = require('../models/CategoryHint');
 const DismissedRecurringSuggestion = require('../models/DismissedRecurringSuggestion');
 const MfaEmailCode = require('../models/MfaEmailCode');
+const RefreshToken = require('../models/RefreshToken');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -155,6 +156,15 @@ const operations = {
     else if (filters.categoryId) query.categoryId = filters.categoryId;
     if (filters.pointed === true || filters.pointed === false) query.pointed = filters.pointed;
     return Operation.find(query).populate('bankId', 'label').sort('-date');
+  },
+
+  // Toutes les opérations non pointées de l'utilisateur (toutes dates confondues).
+  // Endpoint dédié pour HomePage.UnpointedOperationsList — évite de rapatrier
+  // l'historique complet et de filtrer côté client.
+  findUnpointed(userId) {
+    return Operation.find({ userId, pointed: false })
+      .populate('bankId', 'label')
+      .sort('-date');
   },
 
   findByMonthMinimal(month, year, userId) {
@@ -424,6 +434,45 @@ const mfaCodes = {
     MfaEmailCode.deleteMany({ expiresAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
 };
 
+// ─── REFRESH TOKENS ───────────────────────────────────────────────────────────
+const refreshTokens = {
+  create: ({ userId, tokenHash, userAgent, ip, expiresAt }) =>
+    RefreshToken.create({ userId, tokenHash, userAgent, ip, expiresAt }),
+
+  findByHash: (tokenHash) =>
+    RefreshToken.findOne({ tokenHash, revokedAt: null, expiresAt: { $gt: new Date() } }),
+
+  findActive: (userId) =>
+    RefreshToken.find({ userId, revokedAt: null, expiresAt: { $gt: new Date() } })
+      .sort({ lastUsedAt: -1 }),
+
+  touchAndRotate: (id, newHash, newExpiresAt) =>
+    RefreshToken.findByIdAndUpdate(
+      id,
+      { $set: { tokenHash: newHash, lastUsedAt: new Date(), expiresAt: newExpiresAt } },
+    ),
+
+  revokeById: (id, userId) =>
+    RefreshToken.updateOne({ _id: id, userId, revokedAt: null }, { $set: { revokedAt: new Date() } }),
+
+  revokeOthers: (userId, exceptId) =>
+    RefreshToken.updateMany(
+      { userId, _id: { $ne: exceptId }, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    ),
+
+  revokeAll: (userId) =>
+    RefreshToken.updateMany({ userId, revokedAt: null }, { $set: { revokedAt: new Date() } }),
+
+  deleteExpired: () =>
+    RefreshToken.deleteMany({
+      $or: [
+        { expiresAt: { $lt: new Date() } },
+        { revokedAt: { $lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+      ],
+    }),
+};
+
 // ─── MIGRATION LEGACY : category (string) → categoryId (ObjectId) ────────────
 // One-shot au boot. Chaque appel parcourt les collections concernées et résout
 // le label texte vers l'_id de Category correspondant pour ce user. Idempotent :
@@ -482,6 +531,6 @@ async function migrateLegacyCategoryFields() {
 
 module.exports = {
   users, banks, operations, recurringOps, resetTokens,
-  categories, categoryHints, dismissedRecurringSuggestions, mfaCodes,
+  categories, categoryHints, dismissedRecurringSuggestions, mfaCodes, refreshTokens,
   migrateLegacyCategoryFields,
 };

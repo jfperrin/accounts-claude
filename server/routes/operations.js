@@ -54,6 +54,14 @@ function parseDateRange(query) {
   return { start, end };
 }
 
+// GET /api/operations/unpointed
+// Liste les opérations non pointées de l'utilisateur (toutes dates confondues).
+// Sert HomePage.UnpointedOperationsList — évite de rapatrier l'historique
+// complet (1900–2099) puis de filtrer côté client.
+router.get('/unpointed', wrap(async (req, res) => {
+  res.json(await req.app.locals.db.operations.findUnpointed(req.user._id));
+}));
+
 // GET /api/operations?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 // Liste les opérations dans la plage donnée. Sans param → 30 derniers jours.
 router.get('/', wrap(async (req, res) => {

@@ -61,6 +61,34 @@ describe('GET /api/operations', () => {
   });
 });
 
+describe('GET /api/operations/unpointed', () => {
+  it('retourne 401 sans auth', async () => {
+    expect((await request(app).get('/api/operations/unpointed')).status).toBe(401);
+  });
+
+  it('renvoie uniquement les opérations non pointées, toutes dates confondues', async () => {
+    const { body: op2024 } = await agent.post('/api/operations').send(makeOp({ date: '2024-01-15T00:00:00.000Z', label: 'Vieux' }));
+    await agent.post('/api/operations').send(makeOp({ date: '2025-04-05T00:00:00.000Z', label: 'Récent' }));
+    await agent.patch(`/api/operations/${op2024._id}/point`); // pointe le vieux
+
+    const res = await agent.get('/api/operations/unpointed');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].label).toBe('Récent');
+  });
+
+  it("n'expose pas les non pointées des autres utilisateurs", async () => {
+    const bob = request.agent(app);
+    await createVerifiedUser(app, 'bob@test.com', 'pass1234');
+    await bob.post('/api/auth/login').send({ email: 'bob@test.com', password: 'pass1234' });
+    const bobBank = (await bob.post('/api/banks').send({ label: 'Bob', currentBalance: 0 })).body._id;
+    await bob.post('/api/operations').send({ label: 'Bob', amount: -10, date: '2025-04-05T00:00:00.000Z', bankId: bobBank });
+
+    const res = await agent.get('/api/operations/unpointed');
+    expect(res.body).toHaveLength(0);
+  });
+});
+
 describe('PATCH /api/operations/:id/point', () => {
   it('bascule le statut pointé', async () => {
     const { body: op } = await agent.post('/api/operations').send(makeOp());

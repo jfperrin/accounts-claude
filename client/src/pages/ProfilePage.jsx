@@ -10,6 +10,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AvatarCropDialog from '@/components/AvatarCropDialog';
 import MfaSection from '@/components/mfa/MfaSection';
+import SessionsSection from '@/components/SessionsSection';
 
 const TITLES = ['M.', 'Mme', 'Dr', 'Pr'];
 
@@ -229,6 +230,8 @@ export default function ProfilePage() {
       </form>
 
       {!user?.googleId && <MfaSection />}
+
+      <SessionsSection />
 
       {/* Profil */}
       <form onSubmit={onSave} className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-xs">

@@ -3,7 +3,15 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Wallet, Globe, Mail, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
-import { config as fetchConfig, resendVerification } from '@/api/auth';
+import { config as fetchConfig, resendVerification, requestPasswordReset } from '@/api/auth';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +37,10 @@ export default function LoginPage() {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendDone, setResendDone] = useState(false);
   const [formError, setFormError] = useState('');
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const { login, register } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -306,10 +318,75 @@ export default function LoginPage() {
           >
             {loading ? 'Chargement…' : tab === 'login' ? 'Se connecter' : "S'inscrire"}
           </Button>
+          {tab === 'login' && (
+            <button
+              type="button"
+              onClick={() => { setForgotEmail(form.email); setForgotSent(false); setForgotOpen(true); }}
+              className="block w-full text-center text-xs text-slate-500 hover:text-slate-700 hover:underline"
+            >
+              Mot de passe oublié ?
+            </button>
+          )}
         </form>
       </div>
       </main>
       <Footer className="relative z-10 border-white/10 bg-transparent text-slate-500" />
+
+      <Dialog open={forgotOpen} onOpenChange={(v) => { if (!v) { setForgotOpen(false); setForgotSent(false); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mot de passe oublié</DialogTitle>
+            <DialogDescription>
+              Saisissez votre adresse email. Si un compte existe, un lien de réinitialisation y sera envoyé.
+            </DialogDescription>
+          </DialogHeader>
+          {forgotSent ? (
+            <div className="space-y-3">
+              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                Si un compte existe pour cette adresse, un email vient d'être envoyé. Vérifiez votre boîte (et les spams).
+              </p>
+              <DialogFooter>
+                <Button type="button" onClick={() => setForgotOpen(false)}>Fermer</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setForgotLoading(true);
+                try {
+                  await requestPasswordReset(forgotEmail.trim().toLowerCase());
+                  setForgotSent(true);
+                } catch {
+                  setForgotSent(true); // réponse neutre quoi qu'il arrive
+                } finally {
+                  setForgotLoading(false);
+                }
+              }}
+              className="space-y-3"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="forgot-email">Adresse email</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  autoFocus
+                  required
+                  autoComplete="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Annuler</Button>
+                <Button type="submit" disabled={forgotLoading || !forgotEmail}>
+                  {forgotLoading ? 'Envoi…' : 'Envoyer le lien'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

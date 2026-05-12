@@ -3,6 +3,10 @@ import client from './client';
 // Sans paramètre, le serveur renvoie les 30 derniers jours.
 export const list = ({ startDate, endDate, q, categoryId, pointed } = {}) =>
   client.get('/operations', { params: { startDate, endDate, q, categoryId, pointed } });
+
+// Toutes les opérations non pointées (toutes dates confondues). Endpoint dédié
+// pour éviter de rapatrier 200 ans d'opérations et de filtrer côté client.
+export const listUnpointed = () => client.get('/operations/unpointed');
 export const create = (data) => client.post('/operations', data);
 export const update = (id, data) => client.put(`/operations/${id}`, data);
 export const remove = (id) => client.delete(`/operations/${id}`);

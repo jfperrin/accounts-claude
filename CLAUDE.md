@@ -78,20 +78,23 @@ yarn --cwd server start
 yarn --cwd server lint
 yarn --cwd server test    # vitest run
 
-# Mobile (reactNative/)
-cd reactNative
-yarn start                # Expo dev server
+# E2E (e2e/, Playwright)
+cd e2e && yarn install         # une fois — install + télécharge les navigateurs
+cd e2e && yarn test            # run en mode headless
+cd e2e && yarn test:ui         # mode interactif
 ```
+
+E2E lance automatiquement `yarn dev` à la racine (server + client) si rien ne tourne déjà. Variables d'env hardcodées dans `e2e/playwright.config.js` : `ADMIN_EMAIL=e2e-admin@test.local`, `ADMIN_PASSWORD=e2eAdminPass123`, `MFA_ENCRYPTION_KEY=000…` (64×0), `RATE_LIMIT_MAX=1000`. Le compte admin est seedé au boot par `ensureAdmin` — les tests s'y connectent directement.
 
 ## Architecture
 
-Trois packages indépendants partageant le même modèle de domaine :
+Deux packages applicatifs + tests E2E, partageant le même modèle de domaine :
 
 | Package | Stack | Port |
 |---------|-------|------|
 | `server/` | Node.js / Express 5 / Mongoose ou SQLite | 3001 |
 | `client/` | Vite + React / shadcn/ui + Tailwind CSS v4 | 5173 |
-| `reactNative/` | Expo / React Native | — |
+| `e2e/` | Playwright | — |
 
 ### Modèle de domaine
 
@@ -138,20 +141,9 @@ MFA_ENCRYPTION_KEY=<64 hex chars>
 MFA_ISSUER=Comptes
 ```
 
-### `reactNative/.env` (gitignored)
-
-```
-EXPO_PUBLIC_API_URL=
-EXPO_PUBLIC_USE_LOCAL_DB=
-```
-
 ## Conventions cross-cutting
 
 - **Imports nommés** : utiliser `import { fn1, fn2 } from '@/api/...'` plutôt que `import * as ns`. Si conflit (plusieurs API avec `list`/`create`/etc.) → aliaser par ressource (`createOp`, `updateBank`, `listRecurring`...).
 - **Backport SQLite** : toute nouvelle colonne du modèle doit avoir un `ALTER TABLE ADD COLUMN` dans le bloc de migrations idempotentes de `server/db/sqlite.js` (try/catch).
 - **WSL + OneDrive** : HMR Vite avec `usePolling: true, interval: 100` ; nodemon avec `legacyWatch: true`.
 - **Lint à 0 warning** : objectif sur les deux workspaces.
-
-## Mobile
-
-⚠ **Non migré** vers le modèle actuel (pas de `currentBalance`, pas de `categories`, pas de `category_hints`). Cassé en l'état. Le code décrit une architecture précédente avec dual data source (SQLite local en `__DEV__`, HTTP API en prod).
