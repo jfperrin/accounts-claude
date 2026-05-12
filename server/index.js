@@ -43,11 +43,22 @@ async function main() {
 
   const app = createApp(db, mongoUri, { dualMode });
 
+  if (process.env.MFA_BYPASS_DEV === '1') {
+    console.warn('[security] MFA_BYPASS_DEV=1 : le second facteur est court-circuité au login. À NE JAMAIS utiliser en production.');
+  }
+
+  // Purge initiale + récurrente (1h) des codes MFA expirés.
+  // .unref() pour ne pas empêcher le process de s'arrêter proprement en dev.
   try {
     await app.locals.db.mfaCodes.deleteExpired();
   } catch (err) {
     console.warn('[boot] mfaCodes.deleteExpired failed:', err?.message);
   }
+  setInterval(() => {
+    Promise.resolve(app.locals.db.mfaCodes.deleteExpired()).catch((err) =>
+      console.warn('[purge] mfaCodes.deleteExpired failed:', err?.message),
+    );
+  }, 60 * 60 * 1000).unref();
 
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`Server listening on :${PORT}`));

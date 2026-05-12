@@ -12,10 +12,12 @@ const schema = new Schema({
   nickname:        { type: String, trim: true },
   avatarUrl:       { type: String, trim: true },
   acceptedToSAt:   { type: Date, default: null },
-  totpSecret:      { type: String, default: null },
-  totpEnabled:     { type: Boolean, default: false },
-  emailMfaEnabled: { type: Boolean, default: false },
-  recoveryCodes:   { type: [String], default: [] },
+  totpSecret:        { type: String, default: null },
+  totpEnabled:       { type: Boolean, default: false },
+  emailMfaEnabled:   { type: Boolean, default: false },
+  recoveryCodes:     { type: [String], default: [] },
+  mfaFailedAttempts: { type: Number, default: 0 },
+  mfaLockedUntil:    { type: Date, default: null },
 }, { timestamps: true });
 
 schema.index({ googleId: 1 }, { unique: true, sparse: true });

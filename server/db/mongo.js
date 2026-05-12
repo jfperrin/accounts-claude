@@ -78,6 +78,34 @@ const users = {
     if (Object.prototype.hasOwnProperty.call(fields, 'recoveryCodes'))  $set.recoveryCodes = fields.recoveryCodes;
     return User.findByIdAndUpdate(id, { $set }, { new: true }).select('-passwordHash');
   },
+
+  // Retrait atomique d'un hash de recovery code. Retourne true si retiré, false si déjà absent.
+  // Empêche la consommation concurrente d'un même code par 2 requêtes parallèles.
+  pullRecoveryCode: async (id, hash) => {
+    const result = await User.updateOne(
+      { _id: id, recoveryCodes: hash },
+      { $pull: { recoveryCodes: hash } },
+    );
+    return result.modifiedCount > 0;
+  },
+
+  // Incrémente atomiquement le compteur d'échecs MFA et renvoie la nouvelle valeur.
+  incrementMfaFailures: async (id) => {
+    const u = await User.findByIdAndUpdate(
+      id,
+      { $inc: { mfaFailedAttempts: 1 } },
+      { new: true, select: 'mfaFailedAttempts' },
+    );
+    return u ? u.mfaFailedAttempts : 0;
+  },
+
+  // Pose un verrou temporaire (date) sur le MFA. Conserve mfaFailedAttempts pour suivi.
+  setMfaLock: (id, until) =>
+    User.findByIdAndUpdate(id, { $set: { mfaLockedUntil: until } }),
+
+  // Remet à zéro le compteur et le lock (utilisé après un succès).
+  resetMfaFailures: (id) =>
+    User.findByIdAndUpdate(id, { $set: { mfaFailedAttempts: 0, mfaLockedUntil: null } }),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────

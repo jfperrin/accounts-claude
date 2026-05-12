@@ -1,6 +1,6 @@
 import client from './client';
 
-export const setupTotp        = ()                 => client.post('/auth/mfa/totp/setup');
+export const setupTotp        = (password)         => client.post('/auth/mfa/totp/setup', { password });
 export const enableTotp       = (code)             => client.post('/auth/mfa/totp/enable', { code });
 export const disableTotp      = (password, code)   => client.post('/auth/mfa/totp/disable', { password, code });
 

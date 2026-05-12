@@ -186,6 +186,8 @@ function initSchema(db) {
     'ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE users ADD COLUMN email_mfa_enabled INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE users ADD COLUMN recovery_codes TEXT',
+    'ALTER TABLE users ADD COLUMN mfa_failed_attempts INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN mfa_locked_until TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -250,10 +252,12 @@ const mapUser = (row) => row && {
   nickname:     row.nickname ?? null,
   avatarUrl:    row.avatar_url ?? null,
   acceptedToSAt: row.accepted_tos_at ? new Date(row.accepted_tos_at) : null,
-  totpSecret:      row.totp_secret ?? null,
-  totpEnabled:     row.totp_enabled === 1,
-  emailMfaEnabled: row.email_mfa_enabled === 1,
-  recoveryCodes:   row.recovery_codes ? JSON.parse(row.recovery_codes) : [],
+  totpSecret:        row.totp_secret ?? null,
+  totpEnabled:       row.totp_enabled === 1,
+  emailMfaEnabled:   row.email_mfa_enabled === 1,
+  recoveryCodes:     row.recovery_codes ? JSON.parse(row.recovery_codes) : [],
+  mfaFailedAttempts: row.mfa_failed_attempts ?? 0,
+  mfaLockedUntil:    row.mfa_locked_until ? new Date(row.mfa_locked_until) : null,
 };
 
 const mapBank = (row) => row && {
@@ -361,7 +365,7 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_enabled, email_mfa_enabled, recovery_codes FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_enabled, email_mfa_enabled, recovery_codes, mfa_failed_attempts, mfa_locked_until FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
@@ -464,6 +468,36 @@ module.exports = function createSQLiteRepos() {
       params.push(uid(id));
       db.prepare(`UPDATE users SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params);
       return this.findById(id);
+    },
+
+    // Retrait atomique d'un hash de recovery code (better-sqlite3 = synchrone,
+    // donc l'event loop garantit l'atomicité sans transaction explicite).
+    pullRecoveryCode(id, hash) {
+      const row = db.prepare('SELECT recovery_codes FROM users WHERE id = ?').get(uid(id));
+      if (!row) return false;
+      const codes = row.recovery_codes ? JSON.parse(row.recovery_codes) : [];
+      const idx = codes.indexOf(hash);
+      if (idx === -1) return false;
+      codes.splice(idx, 1);
+      db.prepare('UPDATE users SET recovery_codes = ?, updated_at = datetime(\'now\') WHERE id = ?')
+        .run(JSON.stringify(codes), uid(id));
+      return true;
+    },
+
+    incrementMfaFailures(id) {
+      db.prepare('UPDATE users SET mfa_failed_attempts = mfa_failed_attempts + 1 WHERE id = ?').run(uid(id));
+      const row = db.prepare('SELECT mfa_failed_attempts FROM users WHERE id = ?').get(uid(id));
+      return row ? row.mfa_failed_attempts : 0;
+    },
+
+    setMfaLock(id, until) {
+      db.prepare('UPDATE users SET mfa_locked_until = ? WHERE id = ?')
+        .run(until ? new Date(until).toISOString() : null, uid(id));
+    },
+
+    resetMfaFailures(id) {
+      db.prepare('UPDATE users SET mfa_failed_attempts = 0, mfa_locked_until = NULL WHERE id = ?')
+        .run(uid(id));
     },
   };
 

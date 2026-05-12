@@ -10,7 +10,7 @@ const requireAuth = require('../middleware/requireAuth');
 const upload = require('../middleware/upload');
 const { randomUUID } = require('crypto');
 const mailer = require('../utils/mailer');
-const { router: mfaRouter } = require('./mfa');
+const { router: mfaRouter, helpers: mfaHelpers } = require('./mfa');
 
 // Helper : sérialise un user Mongoose ou SQLite en réponse JSON uniforme
 function serializeUser(u) {
@@ -92,10 +92,18 @@ router.post('/login', authLimiter, (req, res, next) => {
       : 30;
 
     // Si 2FA actif et compte local → on initie un challenge au lieu de logger.
-    // En mode dev on bypass le challenge pour faciliter le développement local.
-    const isDev = process.env.NODE_ENV === 'development';
-    const hasMfa = !isDev && !user.googleId && (user.totpEnabled || user.emailMfaEnabled);
+    // MFA_BYPASS_DEV=1 (opt-in explicite) court-circuite le challenge pour le dev.
+    // Couplé à un warning bruyant au boot pour éviter le footgun en prod.
+    const bypassMfa = process.env.MFA_BYPASS_DEV === '1';
+    const hasMfa = !bypassMfa && !user.googleId && (user.totpEnabled || user.emailMfaEnabled);
     if (hasMfa) {
+      // Lockout MFA persistant : ne crée pas de challenge si le user est verrouillé.
+      if (mfaHelpers.isMfaLocked(user)) {
+        return res.status(423).json({
+          message: 'Trop de tentatives, compte temporairement verrouillé',
+          lockedUntil: user.mfaLockedUntil,
+        });
+      }
       const methods = [];
       if (user.totpEnabled) methods.push('totp');
       if (user.emailMfaEnabled) methods.push('email');
@@ -138,8 +146,17 @@ router.get('/google/callback',
 );
 
 // POST /api/auth/logout
+// Détruit la session (efface aussi un éventuel mfaChallenge en cours) puis efface le cookie.
 router.post('/logout', (req, res) => {
-  req.logout(() => res.json({ message: 'Déconnecté' }));
+  req.logout((err) => {
+    if (err) return res.status(500).json({ message: 'Erreur logout' });
+    const finish = () => {
+      res.clearCookie('connect.sid');
+      res.json({ message: 'Déconnecté' });
+    };
+    if (req.session) req.session.destroy(finish);
+    else finish();
+  });
 });
 
 // GET /api/auth/me

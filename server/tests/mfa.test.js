@@ -18,8 +18,8 @@ async function loginAlice(agent) {
   return agent.post('/api/auth/login').send(ALICE);
 }
 
-async function setupTotp(agent) {
-  const res = await agent.post('/api/auth/mfa/totp/setup').send();
+async function setupTotp(agent, password = ALICE.password) {
+  const res = await agent.post('/api/auth/mfa/totp/setup').send({ password });
   return res.body;
 }
 
@@ -68,8 +68,20 @@ describe('MFA setup', () => {
     });
     const agent = request.agent(app);
     await agent.post('/api/auth/login').send({ email: 'g2@test.com', password: 'pwd' });
-    const res = await agent.post('/api/auth/mfa/totp/setup').send();
+    const res = await agent.post('/api/auth/mfa/totp/setup').send({ password: 'pwd' });
     expect(res.status).toBe(400);
+  });
+
+  it('/totp/setup rejette si mot de passe absent ou incorrect', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await loginAlice(agent);
+
+    const noPwd = await agent.post('/api/auth/mfa/totp/setup').send({});
+    expect(noPwd.status).toBe(400);
+
+    const wrongPwd = await agent.post('/api/auth/mfa/totp/setup').send({ password: 'nope' });
+    expect(wrongPwd.status).toBe(401);
   });
 });
 
@@ -142,6 +154,27 @@ describe('MFA login flow', () => {
     await agent.post('/api/auth/login').send(ALICE);
     const v2 = await agent.post('/api/auth/mfa/challenge/verify').send({ method: 'recovery', code: recovery });
     expect(v2.status).toBe(401);
+  });
+
+  it('lockout persistant après 10 échecs cumulés bloque /challenge/verify et /login', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await loginAlice(agent);
+    await activateTotp(agent);
+    await agent.post('/api/auth/logout').send();
+
+    // 2 cycles login + 5 échecs → 10 échecs cumulés → lockout
+    for (let cycle = 0; cycle < 2; cycle++) {
+      await agent.post('/api/auth/login').send(ALICE);
+      for (let i = 0; i < 5; i++) {
+        await agent.post('/api/auth/mfa/challenge/verify').send({ method: 'totp', code: '000000' });
+      }
+    }
+
+    // Le prochain login doit être verrouillé (423).
+    const blocked = await agent.post('/api/auth/login').send(ALICE);
+    expect(blocked.status).toBe(423);
+    expect(blocked.body.lockedUntil).toBeTruthy();
   });
 
   it('challenge/cancel efface le challenge', async () => {

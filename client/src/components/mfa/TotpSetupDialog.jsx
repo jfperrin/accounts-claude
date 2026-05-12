@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import RecoveryCodesDialog from './RecoveryCodesDialog';
 
 export default function TotpSetupDialog({ open, onClose, onSuccess }) {
-  const [step, setStep] = useState('init'); // 'init' | 'confirm' | 'done'
+  const [step, setStep] = useState('password'); // 'password' | 'confirm' | 'done'
+  const [password, setPassword] = useState('');
   const [data, setData] = useState(null);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,7 +20,7 @@ export default function TotpSetupDialog({ open, onClose, onSuccess }) {
   const start = async () => {
     setLoading(true);
     try {
-      const res = await setupTotp();
+      const res = await setupTotp(password);
       setData(res);
       setStep('confirm');
     } catch (e) {
@@ -44,32 +45,55 @@ export default function TotpSetupDialog({ open, onClose, onSuccess }) {
 
   const finishAll = () => {
     setRecoveryCodes(null);
-    setStep('init');
+    setStep('password');
+    setPassword('');
     setData(null);
     setCode('');
     onSuccess?.();
     onClose();
   };
 
+  const close = () => {
+    setPassword('');
+    setData(null);
+    setCode('');
+    setStep('password');
+    onClose();
+  };
+
   return (
     <>
-      <Dialog open={open && step !== 'done'} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <Dialog open={open && step !== 'done'} onOpenChange={(v) => { if (!v) close(); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Configurer l'application d'authentification</DialogTitle>
             <DialogDescription>
-              {step === 'init' && "Un secret va être généré et associé à votre compte."}
+              {step === 'password' && 'Confirmez votre mot de passe pour générer un secret 2FA.'}
               {step === 'confirm' && "Scannez le QR code dans votre application, puis saisissez un code généré."}
             </DialogDescription>
           </DialogHeader>
 
-          {step === 'init' && (
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
-              <Button type="button" disabled={loading} onClick={start}>
-                {loading ? 'Génération…' : 'Commencer'}
-              </Button>
-            </DialogFooter>
+          {step === 'password' && (
+            <form onSubmit={(e) => { e.preventDefault(); if (password) start(); }} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="totp-setup-pwd">Mot de passe</Label>
+                <Input
+                  id="totp-setup-pwd"
+                  type="password"
+                  autoComplete="current-password"
+                  autoFocus
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={close}>Annuler</Button>
+                <Button type="submit" disabled={loading || !password}>
+                  {loading ? 'Génération…' : 'Continuer'}
+                </Button>
+              </DialogFooter>
+            </form>
           )}
 
           {step === 'confirm' && data && (
@@ -92,7 +116,7 @@ export default function TotpSetupDialog({ open, onClose, onSuccess }) {
                 />
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
+                <Button type="button" variant="outline" onClick={close}>Annuler</Button>
                 <Button type="button" disabled={loading || code.length !== 6} onClick={confirm}>
                   {loading ? 'Vérification…' : 'Activer'}
                 </Button>

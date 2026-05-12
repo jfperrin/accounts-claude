@@ -16,6 +16,19 @@ const MFA_ISSUER = process.env.MFA_ISSUER || 'Comptes';
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
 const MAX_CHALLENGE_ATTEMPTS = 5;
+// Lockout par utilisateur : après N échecs cumulés, on bloque toute tentative MFA
+// pendant LOCKOUT_MS. Le compteur est persisté en base (atomique via $inc / UPDATE SQLite),
+// donc résistant aux requêtes concurrentes et aux re-logins répétés.
+const USER_MAX_FAILURES = 10;
+const USER_LOCKOUT_MS = 60 * 60 * 1000;
+
+function isString(v, max = 256) {
+  return typeof v === 'string' && v.length > 0 && v.length <= max;
+}
+
+function isMfaLocked(user) {
+  return user?.mfaLockedUntil && new Date(user.mfaLockedUntil).getTime() > Date.now();
+}
 
 // Récupère le challenge depuis la session. Retourne null si absent, expiré,
 // ou trop d'échecs. Dans ce dernier cas, le challenge est purgé de la session.
@@ -31,6 +44,14 @@ function getValidChallenge(req) {
     return null;
   }
   return ch;
+}
+
+// Incrémente le compteur d'échecs en base, et pose un verrou temporaire si on dépasse le seuil.
+async function recordMfaFailure(db, userId) {
+  const count = await db.users.incrementMfaFailures(userId);
+  if (count >= USER_MAX_FAILURES) {
+    await db.users.setMfaLock(userId, new Date(Date.now() + USER_LOCKOUT_MS));
+  }
 }
 
 // Rate limiter Express générique sur les routes MFA (30 req / 15min par IP).
@@ -62,6 +83,15 @@ async function rejectIfGoogle(req, res) {
   return false;
 }
 
+// Vérifie un mot de passe. Renvoie l'objet user complet (avec hash) si OK, null sinon.
+async function verifyPassword(db, userId, password) {
+  if (!isString(password, 256)) return null;
+  const full = await db.users.findByIdWithHash(userId);
+  if (!full || !full.passwordHash) return null;
+  const ok = await bcrypt.compare(password, full.passwordHash);
+  return ok ? full : null;
+}
+
 // Génère un code 6 chiffres, le hash, l'insère, renvoie le code en clair pour envoi.
 async function issueEmailCode(db, userId, purpose) {
   const code = generateEmailCode();
@@ -75,6 +105,7 @@ async function issueEmailCode(db, userId, purpose) {
 
 // Vérifie un code email. Marque le record `used` quoi qu'il arrive (un code = un essai).
 async function verifyEmailCode(db, userId, purpose, code) {
+  if (!isString(code, 32)) return false;
   const record = await db.mfaCodes.findLatestValid({ userId, purpose });
   if (!record) return false;
   await db.mfaCodes.markUsed(record._id);
@@ -82,6 +113,7 @@ async function verifyEmailCode(db, userId, purpose, code) {
 }
 
 function verifyTotpCode(user, code) {
+  if (!isString(code, 32)) return false;
   if (!user.totpEnabled || !user.totpSecret) return false;
   try {
     const secret = cryptoBox.decrypt(user.totpSecret);
@@ -91,27 +123,33 @@ function verifyTotpCode(user, code) {
   }
 }
 
-// Vérifie + consomme un recovery code. Retourne true et retire le hash utilisé.
+// Vérifie + consomme un recovery code via une opération atomique côté DB.
+// Empêche la double consommation par 2 requêtes parallèles avec le même code.
 async function consumeRecoveryCode(db, user, code) {
+  if (!isString(code, 32)) return false;
   for (const hash of user.recoveryCodes || []) {
     if (await bcrypt.compare(code, hash)) {
-      const remaining = user.recoveryCodes.filter((h) => h !== hash);
-      await db.users.updateMfa(user._id, { recoveryCodes: remaining });
-      return true;
+      return db.users.pullRecoveryCode(user._id ?? user.id, hash);
     }
   }
   return false;
 }
 
 // POST /mfa/totp/setup
-// Génère un secret TOTP, le stocke chiffré (totpEnabled reste false jusqu'à
-// confirmation par /enable), renvoie le QR code et le secret pour saisie manuelle.
+// Step-up : exige le mot de passe pour empêcher un attaquant ayant hijacké la
+// session de reconfigurer/désactiver le TOTP sans connaître les credentials.
 router.post('/totp/setup', requireAuth, wrap(async (req, res) => {
   if (await rejectIfGoogle(req, res)) return;
+  const { password } = req.body ?? {};
+  if (!isString(password, 256)) return res.status(400).json({ message: 'Mot de passe requis' });
   const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
+
   const secret = totpGenerateSecret();
   const encrypted = cryptoBox.encrypt(secret);
-  await db.users.updateMfa(req.user._id ?? req.user.id, {
+  await db.users.updateMfa(userId, {
     totpSecret: encrypted,
     totpEnabled: false,
   });
@@ -125,7 +163,7 @@ router.post('/totp/setup', requireAuth, wrap(async (req, res) => {
 router.post('/totp/enable', requireAuth, wrap(async (req, res) => {
   if (await rejectIfGoogle(req, res)) return;
   const { code } = req.body ?? {};
-  if (!code) return res.status(400).json({ message: 'Code requis' });
+  if (!isString(code, 32)) return res.status(400).json({ message: 'Code requis' });
   const db = req.app.locals.db;
   const full = await db.users.findByIdWithHash(req.user._id ?? req.user.id);
   if (!full.totpSecret) return res.status(400).json({ message: 'Aucun setup TOTP en attente' });
@@ -147,15 +185,17 @@ router.post('/totp/enable', requireAuth, wrap(async (req, res) => {
 router.post('/totp/disable', requireAuth, wrap(async (req, res) => {
   if (await rejectIfGoogle(req, res)) return;
   const { password, code } = req.body ?? {};
-  if (!password || !code) return res.status(400).json({ message: 'Mot de passe et code requis' });
+  if (!isString(password, 256) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'Mot de passe et code requis' });
+  }
   const db = req.app.locals.db;
-  const full = await db.users.findByIdWithHash(req.user._id ?? req.user.id);
-  const validPwd = await bcrypt.compare(password, full.passwordHash);
-  if (!validPwd) return res.status(401).json({ message: 'Mot de passe incorrect' });
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
 
   let codeOk = verifyTotpCode(full, code);
   if (!codeOk && full.emailMfaEnabled) {
-    codeOk = await verifyEmailCode(db, full._id, 'login', code);
+    codeOk = await verifyEmailCode(db, full._id, 'disable', code);
   }
   if (!codeOk) {
     codeOk = await consumeRecoveryCode(db, full, code);
@@ -189,7 +229,7 @@ router.post('/email/setup', requireAuth, wrap(async (req, res) => {
 router.post('/email/enable', requireAuth, wrap(async (req, res) => {
   if (await rejectIfGoogle(req, res)) return;
   const { code } = req.body ?? {};
-  if (!code) return res.status(400).json({ message: 'Code requis' });
+  if (!isString(code, 32)) return res.status(400).json({ message: 'Code requis' });
   const db = req.app.locals.db;
   const userId = req.user._id ?? req.user.id;
   const ok = await verifyEmailCode(db, userId, 'setup', code);
@@ -210,11 +250,13 @@ router.post('/email/enable', requireAuth, wrap(async (req, res) => {
 router.post('/email/disable', requireAuth, wrap(async (req, res) => {
   if (await rejectIfGoogle(req, res)) return;
   const { password, code } = req.body ?? {};
-  if (!password || !code) return res.status(400).json({ message: 'Mot de passe et code requis' });
+  if (!isString(password, 256) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'Mot de passe et code requis' });
+  }
   const db = req.app.locals.db;
-  const full = await db.users.findByIdWithHash(req.user._id ?? req.user.id);
-  const validPwd = await bcrypt.compare(password, full.passwordHash);
-  if (!validPwd) return res.status(401).json({ message: 'Mot de passe incorrect' });
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
 
   let codeOk = verifyTotpCode(full, code);
   if (!codeOk && full.emailMfaEnabled) {
@@ -249,14 +291,16 @@ router.post('/email/disable/send', requireAuth, wrap(async (req, res) => {
 router.post('/recovery/regenerate', requireAuth, wrap(async (req, res) => {
   if (await rejectIfGoogle(req, res)) return;
   const { password, code } = req.body ?? {};
-  if (!password || !code) return res.status(400).json({ message: 'Mot de passe et code requis' });
+  if (!isString(password, 256) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'Mot de passe et code requis' });
+  }
   const db = req.app.locals.db;
-  const full = await db.users.findByIdWithHash(req.user._id ?? req.user.id);
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
   if (!full.totpEnabled && !full.emailMfaEnabled) {
     return res.status(400).json({ message: 'Aucun 2FA actif' });
   }
-  const validPwd = await bcrypt.compare(password, full.passwordHash);
-  if (!validPwd) return res.status(401).json({ message: 'Mot de passe incorrect' });
 
   let codeOk = verifyTotpCode(full, code);
   if (!codeOk && full.emailMfaEnabled) {
@@ -294,13 +338,23 @@ router.post('/challenge/verify', wrap(async (req, res, next) => {
   const ch = getValidChallenge(req);
   if (!ch) return res.status(401).json({ message: 'Challenge expiré' });
   const { method, code } = req.body ?? {};
-  if (!method || !code) return res.status(400).json({ message: 'method et code requis' });
+  if (!isString(method, 16) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'method et code requis' });
+  }
 
   const db = req.app.locals.db;
   const full = await db.users.findByIdWithHash(ch.userId);
   if (!full) {
     delete req.session.mfaChallenge;
     return res.status(401).json({ message: 'Challenge expiré' });
+  }
+
+  // Vérouillage persistant (résiste aux re-logins consécutifs).
+  if (isMfaLocked(full)) {
+    return res.status(423).json({
+      message: 'Trop de tentatives, compte temporairement verrouillé',
+      lockedUntil: full.mfaLockedUntil,
+    });
   }
 
   let ok = false;
@@ -313,11 +367,13 @@ router.post('/challenge/verify', wrap(async (req, res, next) => {
     if (ch.failedAttempts >= MAX_CHALLENGE_ATTEMPTS) {
       delete req.session.mfaChallenge;
     }
+    await recordMfaFailure(db, ch.userId);
     return res.status(401).json({ message: 'Code invalide' });
   }
 
   const { rememberDays } = ch;
   delete req.session.mfaChallenge;
+  await db.users.resetMfaFailures(ch.userId);
   const userForLogin = await db.users.findById(ch.userId);
   req.login(userForLogin, (err) => {
     if (err) return next(err);
@@ -350,7 +406,8 @@ module.exports = {
   router,
   helpers: {
     isLocalAccount, rejectIfGoogle, issueEmailCode, verifyEmailCode,
-    verifyTotpCode, consumeRecoveryCode,
+    verifyTotpCode, consumeRecoveryCode, isMfaLocked, recordMfaFailure,
     CODE_TTL_MS, CHALLENGE_TTL_MS, MAX_CHALLENGE_ATTEMPTS,
+    USER_MAX_FAILURES, USER_LOCKOUT_MS,
   },
 };
