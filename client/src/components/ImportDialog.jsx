@@ -1,25 +1,57 @@
 import { useRef, useState } from 'react';
-import { Upload } from 'lucide-react';
+import { FileText, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+
+const ACCEPTED_EXT = /\.(qif|ofx|zip)$/i;
 
 export default function ImportDialog({ open, banks, onSubmit, onCancel }) {
   const [bankId, setBankId] = useState('');
+  const [file, setFile] = useState(null);
+  const [error, setError] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
+
+  const acceptFile = (f) => {
+    if (!f) return;
+    if (!ACCEPTED_EXT.test(f.name)) {
+      setError('Format non supporté : .qif, .ofx ou .zip uniquement.');
+      setFile(null);
+      return;
+    }
+    setError('');
+    setFile(f);
+  };
+
+  const handleInputChange = (e) => acceptFile(e.target.files?.[0]);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    acceptFile(e.dataTransfer.files?.[0]);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const file = fileRef.current?.files?.[0];
     if (!file || !bankId) return;
     onSubmit(file, bankId);
   };
 
   const handleCancel = () => {
     setBankId('');
+    setFile(null);
+    setError('');
     if (fileRef.current) fileRef.current.value = '';
     onCancel();
+  };
+
+  const clearFile = () => {
+    setFile(null);
+    setError('');
+    if (fileRef.current) fileRef.current.value = '';
   };
 
   return (
@@ -38,17 +70,67 @@ export default function ImportDialog({ open, banks, onSubmit, onCancel }) {
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="import-file">Fichier QIF, OFX ou ZIP</Label>
-            <input
-              id="import-file"
-              ref={fileRef}
-              type="file"
-              accept=".qif,.ofx,.zip,application/zip"
-              required
-              className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-primary-foreground hover:file:bg-primary/90"
-            />
+
+            {/* Zone drop : clic ouvre le picker natif, drop accepte un fichier.
+                État visuel distinct quand un fichier est sélectionné OU qu'un
+                fichier est en cours de drag-over. */}
+            <label
+              htmlFor="import-file"
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              className={cn(
+                'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors',
+                dragOver
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : file
+                  ? 'border-credit/40 bg-credit/5'
+                  : 'border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/50',
+              )}
+            >
+              {file ? (
+                <>
+                  <FileText className="h-6 w-6 text-credit" aria-hidden />
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <span className="truncate max-w-[20ch]">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); clearFile(); }}
+                      className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label="Retirer le fichier"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {(file.size / 1024).toFixed(1)} Ko · Clique pour remplacer
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-6 w-6 text-muted-foreground" aria-hidden />
+                  <div className="text-sm font-medium">
+                    {dragOver ? 'Dépose le fichier ici' : 'Glisse un fichier ou clique pour parcourir'}
+                  </div>
+                  <span className="text-xs text-muted-foreground">.qif, .ofx ou .zip — 1 Mo max</span>
+                </>
+              )}
+              <input
+                id="import-file"
+                ref={fileRef}
+                type="file"
+                accept=".qif,.ofx,.zip,application/zip"
+                onChange={handleInputChange}
+                className="sr-only"
+              />
+            </label>
+
+            {error && <p className="text-xs font-medium text-debit">{error}</p>}
           </div>
+
           <p className="text-xs text-muted-foreground">
             QIF ou OFX direct, ou ZIP contenant un de ces formats.
             Toutes les opérations du fichier sont importées (toutes dates),
@@ -56,7 +138,7 @@ export default function ImportDialog({ open, banks, onSubmit, onCancel }) {
           </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleCancel}>Annuler</Button>
-            <Button type="submit" disabled={!bankId}>
+            <Button type="submit" disabled={!bankId || !file}>
               <Upload className="h-4 w-4 mr-2" />
               Importer
             </Button>

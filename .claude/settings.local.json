@@ -136,7 +136,13 @@
       "mcp__context7__query-docs",
       "mcp__playwright__browser_evaluate",
       "Bash(grep -rn 'type=\"password\"\\\\|type={`password`}\\\\|type={.password.}' /data/git/github.com/accounts-claude/client/src --include='*.jsx')",
-      "Skill(impeccable)"
+      "Skill(impeccable)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/)",
+      "Bash(grep -v \"^#\\\\|^$\")",
+      "Bash(sqlite3 -batch /home/jfperrin/.local/share/comptes.sqlite \"SELECT email, role FROM users LIMIT 5\")",
+      "Bash(sqlite3 /data/git/github.com/accounts-claude/server/dev.db \"SELECT email, role, email_verified FROM users LIMIT 10\")",
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_wait_for"
     ]
   }
 }

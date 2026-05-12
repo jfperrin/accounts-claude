@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { CircleDashed, ChevronDown } from 'lucide-react';
+import { Check, CircleDashed, ChevronDown } from 'lucide-react';
 import { cn, formatEur, amountClass } from '@/lib/utils';
+import EmptyState from '@/components/EmptyState';
 
 // Liste compacte des opérations non pointées (toutes dates).
 // Les opérations futures sont surlignées (date > aujourd'hui).
@@ -31,7 +32,12 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Opérations non pointées</h2>
         </div>
-        <p className="text-sm text-muted-foreground">Tout est pointé.</p>
+        <EmptyState
+          variant="card"
+          icon={Check}
+          title="Tout est pointé"
+          description="Les opérations passées sont rapprochées du relevé bancaire."
+        />
       </div>
     );
   }

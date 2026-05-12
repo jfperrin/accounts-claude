@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, ListOrdered, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal, HelpCircle } from 'lucide-react';
+import { Home, ListOrdered, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal, HelpCircle, Settings } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ export default function AppShell() {
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
     { key: '/categories', icon: Tag, label: 'Catégories' },
+    { key: '/settings', icon: Settings, label: 'Réglages' },
     { key: '/help', icon: HelpCircle, label: 'Aide' },
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Administration' }] : []),
   ];
@@ -38,6 +39,7 @@ export default function AppShell() {
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
     { key: '/categories', icon: Tag, label: 'Catégories' },
+    { key: '/settings', icon: Settings, label: 'Réglages' },
     { key: '/help', icon: HelpCircle, label: 'Aide' },
   ];
   const moreActive = BOTTOM_MORE.some((t) => t.key === pathname);
@@ -49,6 +51,14 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-background">
+
+      {/* Skip-to-content : caché par défaut, visible au focus clavier. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg"
+      >
+        Aller au contenu principal
+      </a>
 
       {/* ── Sidebar desktop uniquement ── */}
       <aside
@@ -150,7 +160,7 @@ export default function AppShell() {
         </header>
 
         {/* Contenu — padding bas extra sur mobile pour éviter la bottom nav */}
-        <main className="flex-1 p-2 pb-24 sm:p-4 md:p-6 md:pb-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 p-2 pb-24 sm:p-4 md:p-6 md:pb-6 focus:outline-none">
           <Outlet />
         </main>
 

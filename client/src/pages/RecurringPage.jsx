@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Download, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, Sparkles, ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, ArrowLeftRight, ArrowRight, Search, X } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
@@ -28,14 +28,16 @@ import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import RecurringSuggestions from '@/components/RecurringSuggestions';
+import SubscriptionsCard from '@/components/SubscriptionsCard';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
+import EmptyState from '@/components/EmptyState';
 import { useCategories } from '@/hooks/useCategories';
 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
 const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const CURRENT_YEAR = dayjs().year();
 const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i);
-const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '', kind: 'debit', categoryId: 'none' });
+const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '', kind: 'debit', categoryId: 'none', isTransfer: false, toBankId: '' });
 
 export default function RecurringPage() {
   const [items, setItems] = useState([]);
@@ -80,6 +82,13 @@ export default function RecurringPage() {
   const load = () => Promise.all([listRecurring(), listBanks()]).then(([ops, b]) => { setItems(ops); setBanks(b); });
   useEffect(() => { load(); }, []);
 
+  const [searchInput, setSearchInput] = useState('');
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(searchInput.trim().toLowerCase()), 200);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
   const [sortKey, setSortKey] = useState('dayOfMonth');
   const [sortDir, setSortDir] = useState('asc');
   const toggleSort = (key) => {
@@ -98,7 +107,23 @@ export default function RecurringPage() {
     const dir = sortDir === 'asc' ? 1 : -1;
     const cmpStr = (a, b) => (a ?? '').localeCompare(b ?? '', 'fr', { sensitivity: 'base' });
     const catLabel = (id) => categories.find((c) => c._id === id)?.label ?? '';
-    const arr = [...items];
+    // Filtre recherche : libellé, banque(s), catégorie. Insensible à la casse,
+    // sans accent (NFD + suppression des marques) pour matcher « epargne »
+    // contre « Épargne ».
+    const norm = (s) => (s ?? '').toString().toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '');
+    const needle = norm(q);
+    const matches = (item) => {
+      if (!needle) return true;
+      const toBank = item.toBankId ? banks.find((b) => String(b._id) === String(item.toBankId)) : null;
+      const haystack = [
+        item.label,
+        item.bankId?.label,
+        toBank?.label,
+        catLabel(item.categoryId),
+      ].map(norm).join(' ');
+      return haystack.includes(needle);
+    };
+    const arr = items.filter(matches);
     arr.sort((a, b) => {
       switch (sortKey) {
         case 'label': return cmpStr(a.label, b.label) * dir;
@@ -110,7 +135,7 @@ export default function RecurringPage() {
       }
     });
     return arr;
-  }, [items, sortKey, sortDir, categories]);
+  }, [items, sortKey, sortDir, categories, q, banks]);
 
   const openAdd = () => { setForm(empty()); setModal({}); };
   const openFromSuggestion = (s) => {
@@ -121,17 +146,22 @@ export default function RecurringPage() {
       amount: String(Math.abs(s.amount)),
       kind: s.amount < 0 ? 'debit' : 'credit',
       categoryId: s.categoryId ?? 'none',
+      isTransfer: false,
+      toBankId: '',
     });
     setModal({});
   };
   const openEdit = (item) => {
+    const isTransfer = !!item.toBankId;
     setForm({
       label: item.label,
       bankId: item.bankId?._id ?? item.bankId ?? '',
       dayOfMonth: String(item.dayOfMonth),
       amount: String(Math.abs(item.amount)),
-      kind: item.amount < 0 ? 'debit' : 'credit',
-      categoryId: item.categoryId ?? 'none',
+      kind: isTransfer ? 'debit' : (item.amount < 0 ? 'debit' : 'credit'),
+      categoryId: isTransfer ? 'none' : (item.categoryId ?? 'none'),
+      isTransfer,
+      toBankId: item.toBankId ?? '',
     });
     setModal({ item });
   };
@@ -142,13 +172,28 @@ export default function RecurringPage() {
     e.preventDefault();
     try {
       const abs = Math.abs(parseFloat(form.amount));
-      const payload = {
-        label: form.label,
-        bankId: form.bankId,
-        dayOfMonth: Number(form.dayOfMonth),
-        amount: form.kind === 'debit' ? -abs : abs,
-        categoryId: (form.categoryId && form.categoryId !== 'none') ? form.categoryId : null,
-      };
+      let payload;
+      if (form.isTransfer) {
+        if (!form.bankId || !form.toBankId) { toast.error('Banques source et destination requises'); return; }
+        if (String(form.bankId) === String(form.toBankId)) { toast.error('Source et destination doivent différer'); return; }
+        payload = {
+          label: form.label,
+          bankId: form.bankId,
+          toBankId: form.toBankId,
+          dayOfMonth: Number(form.dayOfMonth),
+          amount: abs,
+          categoryId: null,
+        };
+      } else {
+        payload = {
+          label: form.label,
+          bankId: form.bankId,
+          dayOfMonth: Number(form.dayOfMonth),
+          amount: form.kind === 'debit' ? -abs : abs,
+          categoryId: (form.categoryId && form.categoryId !== 'none') ? form.categoryId : null,
+          toBankId: null,
+        };
+      }
       const isCreate = !modal.item;
       isCreate ? await createRecurring(payload) : await updateRecurring(modal.item._id, payload);
       toast.success('Enregistré');
@@ -256,28 +301,58 @@ export default function RecurringPage() {
         onChange={setSuggestions}
       />
 
+      <SubscriptionsCard items={items} categories={categories} />
+
       {items.length === 0 ? (
-        <div className="mx-auto max-w-md py-16 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <RefreshCw className="h-6 w-6 text-primary" />
-          </div>
-          <h2 className="font-serif text-2xl font-semibold mb-2">Aucune opération récurrente</h2>
-          <p className="text-sm text-muted-foreground mb-6">
-            Les récurrentes (loyer, salaire, abonnements) sont rejouées chaque mois pour anticiper le prévisionnel. Clique sur Détecter pour les retrouver dans ton historique, ou ajoute-les à la main.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2 justify-center">
-            <Button variant="outline" size="sm" onClick={() => runDetection()} disabled={detecting}>
-              <Sparkles className="h-4 w-4" />
-              {detecting ? 'Analyse…' : 'Détecter automatiquement'}
-            </Button>
-            <Button size="sm" onClick={openAdd}>
-              <Plus className="h-4 w-4" />
-              Ajouter manuellement
-            </Button>
-          </div>
-        </div>
+        <EmptyState
+          icon={RefreshCw}
+          title="Aucune opération récurrente"
+          description="Les récurrentes (loyer, salaire, abonnements) sont rejouées chaque mois pour anticiper le prévisionnel. Clique sur Détecter pour les retrouver dans ton historique, ou ajoute-les à la main."
+          actions={
+            <>
+              <Button variant="outline" size="sm" onClick={() => runDetection()} disabled={detecting}>
+                <Sparkles className="h-4 w-4" />
+                {detecting ? 'Analyse…' : 'Détecter automatiquement'}
+              </Button>
+              <Button size="sm" onClick={openAdd}>
+                <Plus className="h-4 w-4" />
+                Ajouter manuellement
+              </Button>
+            </>
+          }
+        />
       ) : (
+      <div className="space-y-2">
+        {items.length >= 5 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Rechercher (libellé, banque, catégorie)"
+              className="pl-9 pr-9"
+              aria-label="Rechercher dans les récurrentes"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                aria-label="Effacer la recherche"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
       <div className="rounded-xl border border-border bg-card shadow-xs">
+        {q && sortedItems.length === 0 && (
+          <div className="p-6 text-center text-sm text-muted-foreground">
+            Aucune récurrente ne correspond à « {q} ».
+          </div>
+        )}
+        {sortedItems.length > 0 && (
         <Table>
           <TableHeader>
             <TableRow>
@@ -310,12 +385,33 @@ export default function RecurringPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedItems.map((item) => (
+            {sortedItems.map((item) => {
+              const toBank = item.toBankId ? banks.find((b) => String(b._id) === String(item.toBankId)) : null;
+              return (
               <TableRow key={item._id}>
-                <TableCell className="font-medium">{item.label}</TableCell>
-                <TableCell><Badge variant="secondary">{item.bankId?.label}</Badge></TableCell>
+                <TableCell className="font-medium">
+                  <span className="inline-flex items-center gap-1.5">
+                    {item.toBankId && (
+                      <span title="Virement interne récurrent" className="shrink-0">
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-primary" />
+                      </span>
+                    )}
+                    {item.label || (item.toBankId ? `Virement → ${toBank?.label ?? '…'}` : '')}
+                  </span>
+                </TableCell>
                 <TableCell>
-                  {item.categoryId ? (
+                  <Badge variant="secondary">{item.bankId?.label}</Badge>
+                  {item.toBankId && toBank && (
+                    <>
+                      <ArrowRight className="inline mx-1 h-3 w-3 text-muted-foreground" aria-hidden />
+                      <Badge variant="secondary">{toBank.label}</Badge>
+                    </>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {item.toBankId ? (
+                    <span className="text-xs text-muted-foreground italic">virement</span>
+                  ) : item.categoryId ? (
                     <CategoryBadge
                       categoryId={item.categoryId}
                       categories={categories}
@@ -353,9 +449,12 @@ export default function RecurringPage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
+        )}
+      </div>
       </div>
       )}
 
@@ -365,19 +464,66 @@ export default function RecurringPage() {
             <DialogTitle>{modal?.item ? 'Modifier' : 'Nouvelle opération récurrente'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={onSave} className="space-y-4 pt-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-label">Libellé</Label>
-              <Input id="rec-label" autoFocus value={form.label} onChange={set('label')} required />
+            <div className="inline-flex w-full rounded-md border border-input bg-muted p-0.5" role="radiogroup" aria-label="Type de récurrente">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!form.isTransfer}
+                onClick={() => setForm((f) => ({ ...f, isTransfer: false, toBankId: '' }))}
+                className={cn('flex-1 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors', !form.isTransfer ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+              >
+                Opération
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={form.isTransfer}
+                onClick={() => setForm((f) => ({ ...f, isTransfer: true, kind: 'debit', categoryId: 'none' }))}
+                className={cn('flex-1 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors inline-flex items-center justify-center gap-1.5', form.isTransfer ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" /> Virement
+              </button>
             </div>
+
             <div className="space-y-1.5">
-              <Label>Banque</Label>
-              <Select value={form.bankId} onValueChange={set('bankId')}>
-                <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                <SelectContent>
-                  {banks.map((b) => <SelectItem key={b._id} value={b._id}>{b.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="rec-label">Libellé{form.isTransfer && <span className="text-muted-foreground"> (optionnel)</span>}</Label>
+              <Input id="rec-label" autoFocus value={form.label} onChange={set('label')} placeholder={form.isTransfer ? 'Virement automatique selon les banques' : undefined} required={!form.isTransfer} />
             </div>
+
+            {form.isTransfer ? (
+              <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                <div className="space-y-1.5">
+                  <Label>De</Label>
+                  <Select value={form.bankId} onValueChange={set('bankId')}>
+                    <SelectTrigger><SelectValue placeholder="Source" /></SelectTrigger>
+                    <SelectContent>
+                      {banks.map((b) => <SelectItem key={b._id} value={b._id}>{b.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ArrowRight className="mb-2 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
+                <div className="space-y-1.5">
+                  <Label>Vers</Label>
+                  <Select value={form.toBankId} onValueChange={set('toBankId')}>
+                    <SelectTrigger><SelectValue placeholder="Destination" /></SelectTrigger>
+                    <SelectContent>
+                      {banks.filter((b) => String(b._id) !== String(form.bankId)).map((b) => <SelectItem key={b._id} value={b._id}>{b.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Banque</Label>
+                <Select value={form.bankId} onValueChange={set('bankId')}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                  <SelectContent>
+                    {banks.map((b) => <SelectItem key={b._id} value={b._id}>{b.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label>Jour du mois</Label>
               <Select value={form.dayOfMonth} onValueChange={set('dayOfMonth')}>
@@ -390,24 +536,28 @@ export default function RecurringPage() {
             <div className="space-y-1.5">
               <Label htmlFor="rec-amount">Montant (€)</Label>
               <div className="flex gap-2">
-                <DebitCreditToggle
-                  value={form.kind}
-                  onChange={(v) => setForm((f) => ({ ...f, kind: v }))}
-                  className="w-auto shrink-0"
-                />
+                {!form.isTransfer && (
+                  <DebitCreditToggle
+                    value={form.kind}
+                    onChange={(v) => setForm((f) => ({ ...f, kind: v }))}
+                    className="w-auto shrink-0"
+                  />
+                )}
                 <Input id="rec-amount" type="number" inputMode="decimal" min="0" step="0.01" value={form.amount} onChange={set('amount')} required />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Catégorie</Label>
-              <Select value={form.categoryId || 'none'} onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v === 'none' ? '' : v }))}>
-                <SelectTrigger><SelectValue placeholder="Sans catégorie" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— Sans catégorie</SelectItem>
-                  <CategorySelectItems categories={categories} />
-                </SelectContent>
-              </Select>
-            </div>
+            {!form.isTransfer && (
+              <div className="space-y-1.5">
+                <Label>Catégorie</Label>
+                <Select value={form.categoryId || 'none'} onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v === 'none' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Sans catégorie" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Sans catégorie</SelectItem>
+                    <CategorySelectItems categories={categories} />
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setModal(null)}>Annuler</Button>
               <Button type="submit">Enregistrer</Button>

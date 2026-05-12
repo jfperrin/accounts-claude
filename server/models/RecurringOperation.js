@@ -17,6 +17,9 @@ const schema = new Schema({
   dayOfMonth: { type: Number, required: true, min: 1, max: 31 },
   categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
   bankId:     { type: Schema.Types.ObjectId, ref: 'Bank', required: true },
+  // Virement interne récurrent : si toBankId est posé, la génération mensuelle
+  // crée 2 opérations liées (−amount sur bankId, +amount sur toBankId) au lieu d'1.
+  toBankId:   { type: Schema.Types.ObjectId, ref: 'Bank', default: null },
   userId:     { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
 

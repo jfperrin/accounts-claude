@@ -160,3 +160,71 @@ body {
 .animate-fly-to-corner {
   animation: fly-to-corner 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* ───────────────────────────────────────────────────────────────
+   Print : rapport imprimable propre.
+   - Sidebar, header, bottom-nav, footer, toasts, FAB, dialogs masqués.
+   - Couleurs neutralisées (fond blanc, texte noir) pour économiser l'encre
+     tout en gardant les couleurs d'amount (rouge dépense / vert revenu)
+     via les classes text-debit / text-credit.
+   - Le main passe en pleine largeur sans padding.
+   - Les cartes perdent leur ombre et bordure colorée.
+   ─────────────────────────────────────────────────────────────── */
+@media print {
+  /* On force le rendu clair pour ne pas imprimer un fond sombre. */
+  :root, .dark {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --muted: #f5f5f5;
+    --muted-foreground: #555555;
+    --border: #d4d4d4;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  aside,
+  header,
+  footer,
+  nav,
+  [role='dialog'],
+  [data-sonner-toaster],
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Cartes : enlève ombres et arrondis prononcés pour économiser l'encre. */
+  .shadow-xs,
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Force les liens et boutons à ne pas montrer leurs interactions. */
+  button[aria-label='éditer'],
+  button[aria-label='supprimer'] {
+    display: none !important;
+  }
+
+  /* Évite les coupures laides au milieu d'une carte ou d'une ligne de table. */
+  .rounded-xl,
+  table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Les graphes Recharts sont en SVG : assure qu'ils soient imprimables. */
+  .recharts-surface {
+    overflow: visible !important;
+  }
+}

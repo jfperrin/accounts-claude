@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { HelpCircle, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { HelpCircle, PiggyBank, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { cn, formatEur, amountClass } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import InfoTip from '@/components/InfoTip';
+import EmptyState from '@/components/EmptyState';
 
 // Budget mensuel d'une catégorie = somme des récurrentes assignées (en valeur
 // directionnelle selon kind) + maxAmount complémentaire. Identique au calcul
@@ -41,9 +42,8 @@ export default function BudgetSummary({
   }, [operations]);
 
   const rows = useMemo(() => {
-    // 1. Calcule budget/actual pour chaque catégorie non-transfer.
+    // 1. Calcule budget/actual pour chaque catégorie.
     const computed = categories
-      .filter((c) => c.kind !== 'transfer')
       .map((c) => {
         const recurringSum = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
         const rawBudget = recurringSum + (c.maxAmount ?? 0);
@@ -103,7 +103,7 @@ export default function BudgetSummary({
     for (const o of operations) {
       if (!o.categoryId) continue;
       const cat = catById.get(String(o.categoryId));
-      if (!cat || cat.kind === 'transfer') continue;
+      if (!cat) continue;
       if (cat.kind === 'credit') actualCredit += Math.max(0, o.amount);
       else actualDebit += Math.max(0, -o.amount);
     }
@@ -118,9 +118,17 @@ export default function BudgetSummary({
     return (
       <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
         <h2 className="mb-1 text-sm font-semibold">Budget</h2>
-        <p className="text-sm text-muted-foreground">
-          Aucune catégorie avec budget ou opération sur la période. Définissez un budget mensuel depuis la page Catégories.
-        </p>
+        <EmptyState
+          variant="card"
+          icon={PiggyBank}
+          title="Aucun budget défini"
+          description="Définis un budget mensuel par catégorie (récurrentes assignées + complément) pour visualiser le réel vs le prévu."
+          actions={
+            <a href="/categories" className="text-xs font-medium text-primary hover:underline">
+              Aller aux catégories →
+            </a>
+          }
+        />
       </div>
     );
   }

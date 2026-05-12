@@ -4,11 +4,10 @@ import { CalendarRange } from 'lucide-react';
 import { cn, formatEur } from '@/lib/utils';
 import InfoTip from '@/components/InfoTip';
 
-function aggregate(operations, start, end, transferCatIds) {
+function aggregate(operations, start, end) {
   let revenues = 0;
   let expenses = 0;
   for (const o of operations) {
-    if (o.categoryId && transferCatIds.has(String(o.categoryId?._id ?? o.categoryId))) continue;
     const d = dayjs(o.date);
     if (d.isBefore(start) || d.isAfter(end)) continue;
     if (o.amount >= 0) revenues += o.amount;
@@ -17,13 +16,10 @@ function aggregate(operations, start, end, transferCatIds) {
   return { revenues, expenses, net: revenues - expenses };
 }
 
-export default function MonthlyComparison({ operations, categories = [], monthOffset = 0 }) {
+export default function MonthlyComparison({ operations, monthOffset = 0 }) {
   const {
     current, previous, currentLabel, previousLabel, rangeLabel,
   } = useMemo(() => {
-    const transferCatIds = new Set(
-      categories.filter((c) => c.kind === 'transfer').map((c) => String(c._id)),
-    );
     const sel = dayjs().add(monthOffset, 'month');
     const prev = sel.subtract(1, 'month');
     const today = dayjs().endOf('day');
@@ -46,13 +42,13 @@ export default function MonthlyComparison({ operations, categories = [], monthOf
     }
 
     return {
-      current: aggregate(operations, curStart, curEnd, transferCatIds),
-      previous: aggregate(operations, prevStart, prevEnd, transferCatIds),
+      current: aggregate(operations, curStart, curEnd),
+      previous: aggregate(operations, prevStart, prevEnd),
       currentLabel: sel.format('MMM YYYY'),
       previousLabel: prev.format('MMM YYYY'),
       rangeLabel: isCurrentMonth ? `du 1 au ${today.date()}` : 'mois plein',
     };
-  }, [operations, categories, monthOffset]);
+  }, [operations, monthOffset]);
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">

@@ -16,6 +16,7 @@ import BalanceSummary from '@/components/BalanceSummary';
 import MonthlyInsights from '@/components/MonthlyInsights';
 import MonthlyTrendChart from '@/components/MonthlyTrendChart';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
+import OnboardingSteps from '@/components/OnboardingSteps';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 // Cookie propre à HomePage (désynchronisé de OperationsPage). Stocke juste
@@ -54,7 +55,7 @@ export default function HomePage() {
   }, [monthOffset]);
 
   // Operations sur le mois sélectionné — alimente Budget, graphe et ratio.
-  const { operations } = useOperations({ startDate, endDate });
+  const { operations: rawOperations } = useOperations({ startDate, endDate });
 
   // 6 mois pleins glissants pour calculer la moyenne ponctuelle historique
   // utilisée par MonthlyInsights. Range stable au montage.
@@ -62,7 +63,7 @@ export default function HomePage() {
     startDate: dayjs().subtract(6, 'month').startOf('month').format('YYYY-MM-DD'),
     endDate: dayjs().endOf('day').format('YYYY-MM-DD'),
   }), []);
-  const { operations: history } = useOperations(historyRange);
+  const { operations: rawHistory } = useOperations(historyRange);
 
   // Opérations du mois précédent du sélectionné (pour MonthlyComparison).
   const comparisonRange = useMemo(() => {
@@ -73,7 +74,14 @@ export default function HomePage() {
       endDate: sel.endOf('month').format('YYYY-MM-DD'),
     };
   }, [monthOffset]);
-  const { operations: comparisonOps } = useOperations(comparisonRange);
+  const { operations: rawComparisonOps } = useOperations(comparisonRange);
+
+  // Exclut les virements internes des agrégations dépense/revenu : ils sont
+  // neutres au global (une banque sort, l'autre rentre) et fausseraient les
+  // graphes/budgets s'ils étaient comptés comme dépenses ou revenus.
+  const operations = useMemo(() => rawOperations.filter((o) => !o.transferId), [rawOperations]);
+  const history = useMemo(() => rawHistory.filter((o) => !o.transferId), [rawHistory]);
+  const comparisonOps = useMemo(() => rawComparisonOps.filter((o) => !o.transferId), [rawComparisonOps]);
 
   const handlePoint = async (id) => {
     try {
@@ -87,6 +95,8 @@ export default function HomePage() {
   return (
     <TooltipProvider delayDuration={150}>
     <div className="space-y-4">
+      <OnboardingSteps banks={banks} operations={rawOperations} categories={categories} recurring={recurring} />
+
       {banks.length > 0 && <BalanceSummary banks={banks} />}
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">

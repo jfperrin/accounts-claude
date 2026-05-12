@@ -12,7 +12,7 @@ export default function ExpenseRatioCard({ operations, categories, history = [] 
       for (const o of ops) {
         if (!o.categoryId) continue;
         const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
-        if (!cat || cat.kind === 'transfer') continue;
+        if (!cat) continue;
         if (start || end) {
           const d = dayjs(o.date);
           if (start && d.isBefore(start)) continue;

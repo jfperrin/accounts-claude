@@ -12,16 +12,9 @@ import InfoTip from '@/components/InfoTip';
 // (M-2). Les transferts internes sont exclus pour rester homogène avec les
 // autres analyses. Sur le mois en cours, la courbe M s'arrête à aujourd'hui.
 export default function MonthlyTrendChart({
-  operations = [], comparisonOps = [], history = [], categories = [], monthOffset = 0,
+  operations = [], comparisonOps = [], history = [], monthOffset = 0,
 }) {
   const { data, currentLabel, previousLabel, prev2Label } = useMemo(() => {
-    const catById = new Map(categories.map((c) => [String(c._id), c]));
-    const isTransfer = (o) => {
-      if (!o.categoryId) return false;
-      const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
-      return cat && cat.kind === 'transfer';
-    };
-
     const sel = dayjs().add(monthOffset, 'month');
     const prev = sel.subtract(1, 'month');
     const prev2 = sel.subtract(2, 'month');
@@ -40,7 +33,6 @@ export default function MonthlyTrendChart({
       const days = end.date();
       const byDay = new Array(days + 1).fill(0);
       for (const o of ops) {
-        if (isTransfer(o)) continue;
         const d = dayjs(o.date);
         if (d.isBefore(start) || d.isAfter(end)) continue;
         byDay[d.date()] += o.amount;
@@ -77,7 +69,7 @@ export default function MonthlyTrendChart({
       previousLabel: prev.format('MMM YYYY'),
       prev2Label: prev2.format('MMM YYYY'),
     };
-  }, [operations, comparisonOps, history, categories, monthOffset]);
+  }, [operations, comparisonOps, history, monthOffset]);
 
   // Ticks Y tous les 500 € de part et d'autre de 0, calés sur la plage
   // effective des courbes (avec un cran de marge sous/au-dessus).

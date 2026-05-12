@@ -2,6 +2,7 @@ node_modules/
 server/.env
 dist/
 .DS_Store
+.claude/
 .idea/
 server/dev.db
 server/dev.db-shm

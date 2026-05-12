@@ -5,6 +5,13 @@ const { labelSimilarity } = require('../utils/labelSimilarity');
 const { buildTokenIndex, findCandidates } = require('../utils/tokenIndex');
 
 const SIMILARITY_THRESHOLD = 0.7;
+// Seuil plus permissif pour l'inférence de catégorie via category_hints. Une
+// mauvaise inférence n'est qu'une valeur par défaut éditable par l'utilisateur,
+// alors qu'une mauvaise réconciliation écrase une op existante ; on accepte
+// donc des matches plus lâches ici. 0.5 attrape les variantes courantes du
+// type « CARREFOUR PARIS » ↔ « CARREFOUR LYON » (même enseigne, ville
+// différente) sans confondre des libellés franchement distincts.
+const HINT_SIMILARITY_THRESHOLD = 0.5;
 
 // Fenêtre de jours autour de la date d'une ligne importée pour considérer
 // une opération existante comme candidate à la réconciliation. Évite qu'un
@@ -52,13 +59,13 @@ function appendImportLabel(currentLabel, importedLabel) {
 }
 
 // Cherche le categoryId d'un hint dont le libellé est similaire à `label`
-// à au moins SIMILARITY_THRESHOLD. Utilise un index inversé par tokens pour
+// à au moins HINT_SIMILARITY_THRESHOLD. Utilise un index inversé par tokens pour
 // ne calculer la similarité que sur les hints partageant au moins un token
 // avec `label` (au lieu de scanner toute la liste).
 function inferCategoryFromHints(hints, tokenIndex, label) {
   const candidates = findCandidates(tokenIndex, label);
   let best = null;
-  let bestScore = SIMILARITY_THRESHOLD - Number.EPSILON;
+  let bestScore = HINT_SIMILARITY_THRESHOLD - Number.EPSILON;
   for (const h of candidates) {
     const score = labelSimilarity(h.label, label);
     if (score > bestScore) {

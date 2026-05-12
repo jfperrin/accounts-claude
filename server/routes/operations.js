@@ -7,9 +7,11 @@
 
 const router = require('express').Router();
 const multer = require('multer');
+const { randomUUID } = require('crypto');
 const wrap = require('../utils/asyncHandler');
 const importService = require('../services/importService');
 const { findSimilarUncategorized, findSimilarExcludingCategory } = require('../services/categoryPropagationService');
+const { detectTransferCandidates } = require('../services/transferDetectionService');
 
 // Multer mémoire pour l'import (1 Mo max).
 // Accepte .qif, .ofx ou .zip (qui doit contenir un de ces formats).
@@ -56,7 +58,12 @@ function parseDateRange(query) {
 // Liste les opérations dans la plage donnée. Sans param → 30 derniers jours.
 router.get('/', wrap(async (req, res) => {
   const { start, end } = parseDateRange(req.query);
-  res.json(await req.app.locals.db.operations.findByDateRange(start, end, req.user._id));
+  const filters = {};
+  if (req.query.q) filters.q = String(req.query.q).trim().slice(0, 200);
+  if (req.query.categoryId) filters.categoryId = String(req.query.categoryId);
+  if (req.query.pointed === 'true') filters.pointed = true;
+  else if (req.query.pointed === 'false') filters.pointed = false;
+  res.json(await req.app.locals.db.operations.findByDateRange(start, end, req.user._id, filters));
 }));
 
 // POST /api/operations → crée une opération (body sans periodId).
@@ -89,9 +96,110 @@ router.put('/:id', wrap(async (req, res) => {
 }));
 
 // DELETE /api/operations/:id
+// Si l'opération fait partie d'un virement interne (transferId non null),
+// les deux opérations liées sont supprimées en cascade.
 router.delete('/:id', wrap(async (req, res) => {
-  await req.app.locals.db.operations.delete(req.params.id, req.user._id);
+  const { operations } = req.app.locals.db;
+  const op = await operations.findById(req.params.id, req.user._id);
+  if (!op) return res.status(204).end();
+  if (op.transferId) {
+    await operations.deleteByTransferId(op.transferId, req.user._id);
+  } else {
+    await operations.delete(req.params.id, req.user._id);
+  }
   res.status(204).end();
+}));
+
+// POST /api/operations/transfer → virement interne entre deux banques.
+// Body: { fromBankId, toBankId, amount > 0, date, label? }
+// Crée 2 opérations liées par un même transferId UUID :
+//   - sur fromBankId : -amount, libellé "→ <bank cible>" (ou label custom)
+//   - sur toBankId   : +amount, libellé "← <bank source>"
+router.post('/transfer', wrap(async (req, res) => {
+  const { fromBankId, toBankId, date } = req.body;
+  const amount = Number(req.body.amount);
+  if (!fromBankId || !toBankId) return res.status(400).json({ message: 'fromBankId et toBankId requis' });
+  if (String(fromBankId) === String(toBankId)) return res.status(400).json({ message: 'Les banques source et destination doivent être différentes' });
+  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: 'Montant positif requis' });
+  if (!date) return res.status(400).json({ message: 'Date requise' });
+
+  const { banks, operations } = req.app.locals.db;
+  const [fromBank, toBank] = await Promise.all([
+    banks.findById(fromBankId, req.user._id),
+    banks.findById(toBankId, req.user._id),
+  ]);
+  if (!fromBank || !toBank) return res.status(404).json({ message: 'Banque introuvable' });
+
+  const transferId = randomUUID();
+  const customLabel = req.body.label ? String(req.body.label).trim() : '';
+  const outLabel = customLabel || `Virement → ${toBank.label}`;
+  const inLabel  = customLabel || `Virement ← ${fromBank.label}`;
+  const userId = req.user._id;
+
+  const out = await operations.create({ label: outLabel, amount: -amount, date, bankId: fromBankId, userId, transferId });
+  const inn = await operations.create({ label: inLabel,  amount:  amount, date, bankId: toBankId,   userId, transferId });
+  res.status(201).json([out, inn]);
+}));
+
+// GET /api/operations/transfer-candidates
+// Détecte les paires d'opérations non liées qui sont probablement les deux
+// jambes d'un virement interbanque (mêmes critères que detectTransferCandidates :
+// banques différentes, montants opposés, ±5 j). À confirmer par l'utilisateur
+// avant d'appeler /link-transfer.
+router.get('/transfer-candidates', wrap(async (req, res) => {
+  const { operations, banks } = req.app.locals.db;
+  const [ops, userBanks] = await Promise.all([
+    operations.findAllMinimal(req.user._id),
+    banks.findByUser(req.user._id),
+  ]);
+  const pairs = detectTransferCandidates(ops, userBanks);
+  // Renvoie les ops complètes (le client a besoin du libellé, de la banque
+  // populée et de la date pour la preview de chaque paire candidate).
+  const ids = new Set();
+  for (const p of pairs) { ids.add(String(p.outOp._id)); ids.add(String(p.inOp._id)); }
+  const fullOps = new Map();
+  for (const id of ids) {
+    const full = await operations.findById(id, req.user._id);
+    if (full) fullOps.set(String(full._id), full);
+  }
+  res.json(pairs.map((p) => ({
+    confidence: p.confidence,
+    outOp: fullOps.get(String(p.outOp._id)),
+    inOp: fullOps.get(String(p.inOp._id)),
+  })));
+}));
+
+// POST /api/operations/:id/link-transfer  body: { otherId }
+// Lie deux opérations existantes en virement interne via un transferId
+// commun. Renvoie 400 si les contraintes ne sont pas remplies.
+router.post('/:id/link-transfer', wrap(async (req, res) => {
+  const { otherId } = req.body;
+  if (!otherId) return res.status(400).json({ message: 'otherId requis' });
+  const { operations } = req.app.locals.db;
+  const result = await operations.linkAsTransfer(req.params.id, otherId, req.user._id);
+  if (result.error) {
+    const map = {
+      NOT_FOUND: { status: 404, msg: 'Opération introuvable' },
+      SAME_OP: { status: 400, msg: 'Impossible de lier une opération à elle-même' },
+      ALREADY_LINKED: { status: 400, msg: 'Au moins une des opérations est déjà liée à un virement' },
+      SAME_BANK: { status: 400, msg: 'Les deux opérations doivent être sur des banques différentes' },
+      AMOUNT_MISMATCH: { status: 400, msg: 'Les montants doivent être exactement opposés' },
+    };
+    const e = map[result.error] || { status: 400, msg: 'Lien impossible' };
+    return res.status(e.status).json({ message: e.msg });
+  }
+  res.json(result);
+}));
+
+// DELETE /api/operations/:id/transfer-link
+// Retire le transferId des deux jambes du virement (sans supprimer les ops).
+router.delete('/:id/transfer-link', wrap(async (req, res) => {
+  const { operations } = req.app.locals.db;
+  const op = await operations.findById(req.params.id, req.user._id);
+  if (!op) return res.status(404).json({ message: 'Introuvable' });
+  if (!op.transferId) return res.status(400).json({ message: "Cette opération n'est pas liée à un virement" });
+  const cleared = await operations.unlinkTransfer(op.transferId, req.user._id);
+  res.json({ cleared });
 }));
 
 // PATCH /api/operations/:id/point → inverse l'état pointé.
@@ -127,13 +235,38 @@ router.post('/generate-recurring', wrap(async (req, res) => {
     }),
   );
 
+  // Banks pour résoudre les labels dans les libellés "Virement → X" / "← X".
+  const banksList = await req.app.locals.db.banks.findByUser(userId);
+  const bankLabelById = new Map(banksList.map((b) => [String(b._id), b.label]));
+
   // Pour chaque récurrent, on calcule le jour effectif (Math.min pour février),
   // on construit l'op datée et on dédup avant insertion.
+  // Cas spécial transfert (toBankId posé) : on génère 2 ops liées par un transferId.
   const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const toInsert = [];
   for (const r of recurring) {
     const day = Math.min(r.dayOfMonth, lastDay);
     const date = new Date(Date.UTC(year, month - 1, day));
+
+    if (r.toBankId) {
+      const abs = Math.abs(Number(r.amount));
+      const fromBank = String(r.bankId);
+      const toBank = String(r.toBankId);
+      const outLabel = r.label || `Virement → ${bankLabelById.get(toBank) || 'banque'}`;
+      const inLabel  = r.label || `Virement ← ${bankLabelById.get(fromBank) || 'banque'}`;
+      const outKey = keyOf(outLabel, fromBank, -abs, date);
+      const inKey  = keyOf(inLabel, toBank,  abs, date);
+      if (existingKeys.has(outKey) || existingKeys.has(inKey)) continue;
+      existingKeys.add(outKey);
+      existingKeys.add(inKey);
+      const transferId = randomUUID();
+      toInsert.push(
+        { label: outLabel, amount: -abs, date, bankId: r.bankId,   userId, pointed: false, categoryId: null, transferId },
+        { label: inLabel,  amount:  abs, date, bankId: r.toBankId, userId, pointed: false, categoryId: null, transferId },
+      );
+      continue;
+    }
+
     const key = keyOf(r.label, String(r.bankId), r.amount, date);
     if (existingKeys.has(key)) continue;
     existingKeys.add(key);

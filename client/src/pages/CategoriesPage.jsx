@@ -1,6 +1,6 @@
 import { useState, useMemo, Fragment } from 'react';
 import {
-  Plus, Pencil, Trash2, Tag, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronRight,
+  Plus, Pencil, Trash2, Tag, ArrowDownCircle, ArrowUpCircle, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import CategoryColorPicker from '@/components/CategoryColorPicker';
+import EmptyState from '@/components/EmptyState';
 
 export default function CategoriesPage() {
   const { categories, reload } = useCategories();
@@ -75,7 +76,7 @@ export default function CategoriesPage() {
       color,
       kind,
       parentId: parentId === 'none' ? null : parentId,
-      maxAmount: kind === 'transfer' || maxAmount.trim() === ''
+      maxAmount: maxAmount.trim() === ''
         ? null
         : Number(maxAmount.replace(',', '.')),
     };
@@ -178,7 +179,6 @@ export default function CategoriesPage() {
     let totalDebit = 0;
     let totalCredit = 0;
     categories.forEach((c, i) => {
-      if (c.kind === 'transfer') return;
       const total = budgets[i].total;
       if (total <= 0) return;
       used.push({ label: c.label, color: c.color || DEFAULT_COLOR });
@@ -213,10 +213,13 @@ export default function CategoriesPage() {
 
       <div className="rounded-xl border border-border bg-card shadow-xs">
         {categories.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <Tag className="mb-3 h-10 w-10 opacity-30" />
-            <p className="text-sm">Aucune catégorie</p>
-          </div>
+          <EmptyState
+            variant="card"
+            icon={Tag}
+            title="Aucune catégorie"
+            description="Les catégories servent à classer les opérations et à fixer un budget mensuel par poste. Clique sur Ajouter pour commencer."
+            actions={<Button size="sm" onClick={openAdd}><Plus className="h-4 w-4" /> Ajouter</Button>}
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -332,26 +335,18 @@ export default function CategoriesPage() {
 
             <div className="space-y-1.5">
               <Label>Type</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <KindButton active={kind === 'debit'} onClick={() => setKind('debit')} kind="debit" />
                 <KindButton active={kind === 'credit'} onClick={() => setKind('credit')} kind="credit" />
-                <KindButton active={kind === 'transfer'} onClick={() => setKind('transfer')} kind="transfer" />
               </div>
-              {kind === 'transfer' && (
-                <p className="text-xs text-muted-foreground">
-                  Les opérations de cette catégorie sont exclues des graphes et prévisions.
-                </p>
-              )}
             </div>
 
-            {kind !== 'transfer' && (
-              <BudgetField
-                maxAmount={maxAmount}
-                setMaxAmount={setMaxAmount}
-                kind={kind}
-                recurringSum={directional(recurringByCategory.get(label) ?? 0, kind)}
-              />
-            )}
+            <BudgetField
+              maxAmount={maxAmount}
+              setMaxAmount={setMaxAmount}
+              kind={kind}
+              recurringSum={directional(recurringByCategory.get(label) ?? 0, kind)}
+            />
 
             <div className="space-y-1.5">
               <Label>Catégorie parente (optionnelle)</Label>
@@ -505,13 +500,6 @@ const KIND_META = {
     Icon: ArrowUpCircle,
     badge: 'bg-emerald-500 text-white dark:bg-emerald-600',
     border: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-  },
-  transfer: {
-    label: 'Virement interne',
-    shortLabel: 'Virement',
-    Icon: ArrowLeftRight,
-    badge: 'bg-muted text-muted-foreground border border-border',
-    border: 'border-foreground/40 bg-muted text-foreground',
   },
 };
 

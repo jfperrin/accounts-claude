@@ -11,6 +11,7 @@ const schema = new Schema({
   date:     { type: Date, required: true },
   pointed:    { type: Boolean, default: false },
   categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+  transferId: { type: String, default: null, index: true },
   bankId:     { type: Schema.Types.ObjectId, ref: 'Bank', required: true },
   userId:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });

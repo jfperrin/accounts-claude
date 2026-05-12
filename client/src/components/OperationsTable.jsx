@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X } from 'lucide-react';
+import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X, ArrowLeftRight, Link2, Unlink2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
@@ -143,7 +143,7 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
 const PAGE_SIZES = [20, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 50;
 
-export default function OperationsTable({ operations, categories = [], banks = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onFilterStateChange }) {
+export default function OperationsTable({ operations, categories = [], banks = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onLinkTransfer, onUnlinkTransfer, onFilterStateChange }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
@@ -404,6 +404,11 @@ export default function OperationsTable({ operations, categories = [], banks = [
               <TableCell>
                 <div className="flex flex-col gap-1">
                   <span className="inline-flex items-center gap-1.5 font-medium">
+                    {op.transferId && (
+                      <span title="Virement entre banques" className="shrink-0">
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-primary" />
+                      </span>
+                    )}
                     {isFromRecurring(op) && (
                       <span title="Opération récurrente" className="shrink-0">
                         <Repeat className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
@@ -444,12 +449,28 @@ export default function OperationsTable({ operations, categories = [], banks = [
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
-                  {onMakeRecurring && (
+                  {onMakeRecurring && !op.transferId && (
                     <Button variant="ghost" size="icon" aria-label="convertir en récurrente"
                       className="text-primary hover:bg-primary/10"
                       onClick={(e) => { e.stopPropagation(); onMakeRecurring(op); }}
                       title="Convertir en récurrente">
                       <Repeat2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {onLinkTransfer && !op.transferId && (
+                    <Button variant="ghost" size="icon" aria-label="lier comme virement interbanque"
+                      className="text-muted-foreground hover:text-primary"
+                      onClick={(e) => { e.stopPropagation(); onLinkTransfer(op); }}
+                      title="Lier comme virement interbanque">
+                      <Link2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {onUnlinkTransfer && op.transferId && (
+                    <Button variant="ghost" size="icon" aria-label="délier le virement"
+                      className="text-muted-foreground hover:text-debit"
+                      onClick={(e) => { e.stopPropagation(); onUnlinkTransfer(op); }}
+                      title="Délier le virement">
+                      <Unlink2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                   <Button variant="ghost" size="icon" aria-label="éditer" onClick={(e) => { e.stopPropagation(); onEdit(op); }}>

@@ -1,8 +1,8 @@
 import client from './client';
 
 // Sans paramètre, le serveur renvoie les 30 derniers jours.
-export const list = ({ startDate, endDate } = {}) =>
-  client.get('/operations', { params: { startDate, endDate } });
+export const list = ({ startDate, endDate, q, categoryId, pointed } = {}) =>
+  client.get('/operations', { params: { startDate, endDate, q, categoryId, pointed } });
 export const create = (data) => client.post('/operations', data);
 export const update = (id, data) => client.put(`/operations/${id}`, data);
 export const remove = (id) => client.delete(`/operations/${id}`);
@@ -46,3 +46,19 @@ export const findSimilarUncategorized = ({ label, bankId, excludeId }) =>
 // Affecte une catégorie à plusieurs opérations en une requête.
 export const bulkCategorize = (ids, categoryId) =>
   client.post('/operations/bulk-categorize', { ids, categoryId });
+
+// Virement interne : crée 2 ops liées sur les banques source/destination.
+export const transfer = ({ fromBankId, toBankId, amount, date, label }) =>
+  client.post('/operations/transfer', { fromBankId, toBankId, amount, date, label });
+
+// Paires d'opérations détectées comme candidates à un virement interbanque.
+export const getTransferCandidates = () =>
+  client.get('/operations/transfer-candidates');
+
+// Lie 2 opérations existantes en virement interne (partagent un transferId).
+export const linkTransfer = (idA, idB) =>
+  client.post(`/operations/${idA}/link-transfer`, { otherId: idB });
+
+// Retire le transferId des deux jambes (sans supprimer les ops).
+export const unlinkTransfer = (id) =>
+  client.delete(`/operations/${id}/transfer-link`);

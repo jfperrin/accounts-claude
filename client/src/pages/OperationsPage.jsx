@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload, Search, X, ArrowLeftRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
@@ -14,6 +14,8 @@ import {
   getSimilarExcludingCategory,
   findSimilarUncategorized,
   bulkCategorize,
+  transfer as transferOp,
+  unlinkTransfer as unlinkTransferOp,
 } from '@/api/operations';
 import { update as updateBank } from '@/api/banks';
 import { create as createRecurring } from '@/api/recurringOperations';
@@ -26,13 +28,21 @@ import OperationsTable from '@/components/OperationsTable';
 import OperationForm from '@/components/OperationForm';
 import ImportDialog from '@/components/ImportDialog';
 import MakeRecurringDialog from '@/components/MakeRecurringDialog';
+import TransferDialog from '@/components/TransferDialog';
+import LinkTransferDialog from '@/components/LinkTransferDialog';
+import TransferCandidatesCard from '@/components/TransferCandidatesCard';
 import ImportResolveDialog from '@/components/ImportResolveDialog';
 import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import CategorySelectItems from '@/components/CategorySelectItems';
+import EmptyState from '@/components/EmptyState';
+import { Building2, ListOrdered } from 'lucide-react';
 import { formatEur, amountClass } from '@/lib/utils';
 
 const COOKIE_NAME = 'dash_date_range';
@@ -80,7 +90,24 @@ export default function OperationsPage() {
     return { startDate: customStart, endDate: customEnd };
   }, [rangeMode, customStart, customEnd, monthOffset]);
 
-  const { operations, reload: reloadOperations } = useOperations({ startDate, endDate });
+  const [searchInput, setSearchInput] = useState('');
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(searchInput.trim()), 250);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+  const [filterCategory, setFilterCategory] = useState('all'); // 'all' | 'none' | <id>
+  const [filterPointed, setFilterPointed] = useState('all');   // 'all' | 'true' | 'false'
+  const filtersActive = q || filterCategory !== 'all' || filterPointed !== 'all';
+  const clearFilters = () => { setSearchInput(''); setQ(''); setFilterCategory('all'); setFilterPointed('all'); };
+
+  const { operations, reload: reloadOperations } = useOperations({
+    startDate,
+    endDate,
+    q: q || undefined,
+    categoryId: filterCategory === 'all' ? undefined : filterCategory,
+    pointed: filterPointed === 'all' ? undefined : filterPointed === 'true',
+  });
 
   const [onlyUncategorized, setOnlyUncategorized] = useState(false);
   const uncategorizedCount = useMemo(
@@ -95,6 +122,11 @@ export default function OperationsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editOp, setEditOp] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [linkTransferOp, setLinkTransferOp] = useState(null);
+  // Bumpé après import ou link/unlink pour forcer un re-scan des candidats.
+  const [candidatesReloadKey, setCandidatesReloadKey] = useState(0);
+  const bumpCandidates = () => setCandidatesReloadKey((k) => k + 1);
   const [pendingMatches, setPendingMatches] = useState(null);
   const [recurringForm, setRecurringForm] = useState(null);
 
@@ -155,6 +187,18 @@ export default function OperationsPage() {
     }
   };
 
+  const handleTransferFinish = async (values) => {
+    try {
+      await transferOp(values);
+      toast.success('Virement enregistré');
+      setTransferOpen(false);
+      reloadOperations();
+      reloadBanks();
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || "Erreur lors du virement");
+    }
+  };
+
   const handlePoint = async (id) => {
     await point(id);
     reloadOperations();
@@ -165,6 +209,18 @@ export default function OperationsPage() {
     await removeOp(id);
     reloadOperations();
     reloadBanks();
+    bumpCandidates();
+  };
+
+  const handleUnlinkTransfer = async (op) => {
+    try {
+      await unlinkTransferOp(op._id);
+      toast.success('Virement délié');
+      reloadOperations();
+      bumpCandidates();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Erreur lors du déliage');
+    }
   };
 
   // Quand on affecte une catégorie : si on en pose une (truthy), on cherche
@@ -219,6 +275,7 @@ export default function OperationsPage() {
       setImportOpen(false);
       reloadOperations();
       reloadBanks();
+      bumpCandidates();
       if (Array.isArray(result.pendingMatches) && result.pendingMatches.length > 0) {
         setPendingMatches(result.pendingMatches);
       }
@@ -400,6 +457,10 @@ export default function OperationsPage() {
               <Upload className="h-4 w-4" />
               Un fichier d'opérations
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTransferOpen(true)} disabled={banks.length < 2}>
+              <ArrowLeftRight className="h-4 w-4" />
+              Virement entre banques
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
@@ -419,6 +480,10 @@ export default function OperationsPage() {
               <Upload className="h-4 w-4" />
               Un fichier d'opérations
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTransferOpen(true)} disabled={banks.length < 2}>
+              <ArrowLeftRight className="h-4 w-4" />
+              Virement entre banques
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <Button ref={newOpBtnRef} onClick={() => { setEditOp(null); setFormOpen(true); }} className="hidden md:inline-flex gap-2">
@@ -436,39 +501,109 @@ export default function OperationsPage() {
         </>
       )}
 
+      {banks.length >= 2 && (
+        <TransferCandidatesCard
+          reloadKey={candidatesReloadKey}
+          onLinked={() => { reloadOperations(); reloadBanks(); }}
+        />
+      )}
+
+      {banks.length > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Rechercher dans le libellé…"
+              className="pl-9 pr-9"
+              aria-label="Rechercher dans les opérations"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                aria-label="Effacer la recherche"
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="w-[160px]" aria-label="Filtrer par catégorie"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes catégories</SelectItem>
+                <SelectItem value="none">Sans catégorie</SelectItem>
+                <CategorySelectItems categories={categories} />
+              </SelectContent>
+            </Select>
+            <Select value={filterPointed} onValueChange={setFilterPointed}>
+              <SelectTrigger className="w-[140px]" aria-label="Filtrer par pointage"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous états</SelectItem>
+                <SelectItem value="true">Pointées</SelectItem>
+                <SelectItem value="false">Non pointées</SelectItem>
+              </SelectContent>
+            </Select>
+            {filtersActive && (
+              <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
+                Réinitialiser
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {visibleOperations.length === 0 ? (
-        onlyUncategorized ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <Tag className="mb-3 h-10 w-10 opacity-30" />
-            <p className="text-sm">Toutes les opérations de la période sont catégorisées.</p>
-          </div>
+        filtersActive ? (
+          <EmptyState
+            variant="card"
+            icon={Search}
+            title="Aucun résultat pour ces filtres"
+            actions={
+              <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                Réinitialiser les filtres
+              </Button>
+            }
+          />
+        ) : onlyUncategorized ? (
+          <EmptyState
+            variant="card"
+            icon={Tag}
+            title="Toutes les opérations de la période sont catégorisées."
+          />
         ) : banks.length === 0 ? (
-          <div className="mx-auto max-w-sm py-16 text-center">
-            <h3 className="font-serif text-2xl font-semibold mb-2">Pas encore de banque</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              Avant d'ajouter des opérations, crée d'abord une banque pour suivre ses soldes.
-            </p>
-            <Button asChild size="sm">
-              <a href="/banks">Aller aux banques</a>
-            </Button>
-          </div>
+          <EmptyState
+            icon={Building2}
+            title="Pas encore de banque"
+            description="Avant d'ajouter des opérations, crée d'abord une banque pour suivre ses soldes."
+            actions={
+              <Button asChild size="sm">
+                <a href="/banks">Aller aux banques</a>
+              </Button>
+            }
+          />
         ) : (
-          <div className="mx-auto max-w-md py-16 text-center">
-            <h3 className="font-serif text-2xl font-semibold mb-2">Pas encore d'opération sur cette période</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              Importe un relevé bancaire pour rapatrier les opérations en masse, ou ajoute une opération à la main.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2 justify-center">
-              <Button onClick={() => setImportOpen(true)} variant="outline" size="sm">
-                <Upload className="h-4 w-4" />
-                Importer un fichier
-              </Button>
-              <Button onClick={() => { setEditOp(null); setFormOpen(true); }} size="sm">
-                <Plus className="h-4 w-4" />
-                Nouvelle opération
-              </Button>
-            </div>
-          </div>
+          <EmptyState
+            icon={ListOrdered}
+            title="Pas encore d'opération sur cette période"
+            description="Importe un relevé bancaire pour rapatrier les opérations en masse, ou ajoute une opération à la main."
+            actions={
+              <>
+                <Button onClick={() => setImportOpen(true)} variant="outline" size="sm">
+                  <Upload className="h-4 w-4" />
+                  Importer un fichier
+                </Button>
+                <Button onClick={() => { setEditOp(null); setFormOpen(true); }} size="sm">
+                  <Plus className="h-4 w-4" />
+                  Nouvelle opération
+                </Button>
+              </>
+            }
+          />
         )
       ) : (
         <div className="sm:rounded-xl sm:border sm:border-border sm:bg-card sm:p-4 sm:shadow-xs">
@@ -508,6 +643,8 @@ export default function OperationsPage() {
             onDelete={handleDelete}
             onCategoryChange={handleCategoryChange}
             onMakeRecurring={openMakeRecurring}
+            onLinkTransfer={(op) => setLinkTransferOp(op)}
+            onUnlinkTransfer={handleUnlinkTransfer}
             onFilterStateChange={handleTableFilterChange}
           />
         </div>
@@ -550,6 +687,20 @@ export default function OperationsPage() {
         open={generateRecurringOpen}
         onConfirm={handleConfirmGenerateRecurring}
         onCancel={() => setGenerateRecurringOpen(false)}
+      />
+
+      <TransferDialog
+        open={transferOpen}
+        banks={banks}
+        onFinish={handleTransferFinish}
+        onCancel={() => setTransferOpen(false)}
+      />
+
+      <LinkTransferDialog
+        open={!!linkTransferOp}
+        sourceOp={linkTransferOp}
+        onClose={() => setLinkTransferOp(null)}
+        onLinked={() => { reloadOperations(); bumpCandidates(); }}
       />
 
       <BulkCategorizeDialog

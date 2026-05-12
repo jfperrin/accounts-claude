@@ -4,6 +4,7 @@ import { ResponsiveContainer, PieChart, Pie, Tooltip } from 'recharts';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import { formatEur } from '@/lib/utils';
 import InfoTip from '@/components/InfoTip';
+import EmptyState from '@/components/EmptyState';
 
 // Compare deux YYYY-MM-DD via les 10 premiers caractères ISO. Indépendant du
 // fuseau, contrairement à new Date(...) qui ramène à minuit UTC.
@@ -50,12 +51,14 @@ export default function ExpensesByCategoryChart({ categories, operations, startD
           <PieChartIcon className="h-4 w-4 text-primary" />
           Dépenses par catégorie
         </h2>
-        <p className="text-sm text-muted-foreground">Aucune dépense sur cette période.</p>
-        {uncategorized > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-            Sans catégorie : {formatEur(uncategorized)}
-          </p>
-        )}
+        <EmptyState
+          variant="card"
+          icon={PieChartIcon}
+          title="Aucune dépense catégorisée"
+          description={uncategorized > 0
+            ? `${formatEur(uncategorized)} de dépenses sans catégorie : assigne-les pour les voir ici.`
+            : 'Aucune dépense sur la période.'}
+        />
       </div>
     );
   }

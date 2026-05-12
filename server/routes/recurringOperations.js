@@ -57,15 +57,42 @@ router.delete('/suggestions/dismiss/:key', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
+// Valide les champs liés au virement interne. Renvoie un message d'erreur ou
+// `null` si l'entrée est cohérente. Pour un virement (toBankId posé) :
+//   - bankId et toBankId doivent être différents et exister pour l'utilisateur
+//   - amount doit être strictement positif (le sens est encodé par bankId/toBankId)
+//   - categoryId est forcé à null (un virement n'a pas de catégorie)
+async function validateTransfer(body, banksRepo, userId) {
+  if (!body.toBankId) return null;
+  if (!body.bankId) return 'bankId requis pour un virement';
+  if (String(body.bankId) === String(body.toBankId)) return 'Banque source et destination doivent être différentes';
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return 'Montant positif requis pour un virement';
+  const [from, to] = await Promise.all([
+    banksRepo.findById(body.bankId, userId),
+    banksRepo.findById(body.toBankId, userId),
+  ]);
+  if (!from || !to) return 'Banque introuvable';
+  return null;
+}
+
 // POST /api/recurring-operations → crée un nouveau modèle récurrent
 router.post('/', wrap(async (req, res) => {
-  const op = await req.app.locals.db.recurringOps.create({ ...req.body, userId: req.user._id });
+  const err = await validateTransfer(req.body, req.app.locals.db.banks, req.user._id);
+  if (err) return res.status(400).json({ message: err });
+  const data = { ...req.body, userId: req.user._id };
+  if (data.toBankId) data.categoryId = null; // un virement n'a pas de catégorie
+  const op = await req.app.locals.db.recurringOps.create(data);
   res.status(201).json(op);
 }));
 
 // PUT /api/recurring-operations/:id → mise à jour complète du modèle
 router.put('/:id', wrap(async (req, res) => {
-  const op = await req.app.locals.db.recurringOps.update(req.params.id, req.user._id, req.body);
+  const err = await validateTransfer(req.body, req.app.locals.db.banks, req.user._id);
+  if (err) return res.status(400).json({ message: err });
+  const data = { ...req.body };
+  if (data.toBankId) data.categoryId = null;
+  const op = await req.app.locals.db.recurringOps.update(req.params.id, req.user._id, data);
   if (!op) return res.status(404).json({ message: 'Introuvable' });
   res.json(op);
 }));

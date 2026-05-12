@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import EmptyState from '@/components/EmptyState';
 
 export default function BanksPage() {
   const [banks, setBanks] = useState([]);
@@ -68,19 +69,17 @@ export default function BanksPage() {
       </div>
 
       {banks.length === 0 ? (
-        <div className="mx-auto max-w-md py-16 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-            <Building2 className="h-6 w-6 text-primary" />
-          </div>
-          <h2 className="font-serif text-2xl font-semibold mb-2">Aucune banque enregistrée</h2>
-          <p className="text-sm text-muted-foreground mb-6">
-            Une banque représente un compte que tu suis (courant, épargne, joint). Le solde actuel saisi ici sert de base au calcul du prévisionnel sur toutes tes opérations.
-          </p>
-          <Button onClick={openAdd} size="sm">
-            <Plus className="h-4 w-4" />
-            Ajouter ma première banque
-          </Button>
-        </div>
+        <EmptyState
+          icon={Building2}
+          title="Aucune banque enregistrée"
+          description="Une banque représente un compte que tu suis (courant, épargne, joint). Le solde actuel saisi ici sert de base au calcul du prévisionnel sur toutes tes opérations."
+          actions={
+            <Button onClick={openAdd} size="sm">
+              <Plus className="h-4 w-4" />
+              Ajouter ma première banque
+            </Button>
+          }
+        />
       ) : (
         <div className="rounded-xl border border-border bg-card shadow-xs">
           <Table>

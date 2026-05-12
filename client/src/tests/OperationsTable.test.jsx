@@ -11,8 +11,9 @@ const ops = [
 describe('OperationsTable', () => {
   it('affiche les opérations', () => {
     render(<OperationsTable operations={ops} onPoint={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
-    expect(screen.getByText('Loyer')).toBeInTheDocument();
-    expect(screen.getByText('Salaire')).toBeInTheDocument();
+    // jsdom rend mobile + desktop simultanément : on accepte plusieurs occurrences.
+    expect(screen.getAllByText('Loyer').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Salaire').length).toBeGreaterThan(0);
   });
 
   it('appelle onPoint avec l\'id de l\'opération', async () => {
