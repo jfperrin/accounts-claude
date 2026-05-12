@@ -90,6 +90,8 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 RESEND_API_KEY=
 RATE_LIMIT_MAX=20
+MFA_ENCRYPTION_KEY=<64 hex chars>
+MFA_ISSUER=Comptes
 ```
 
 ### `reactNative/.env` (gitignored)
