@@ -1,8 +1,8 @@
 import client from './client';
 
 // Sans paramètre, le serveur renvoie les 30 derniers jours.
-export const list = ({ startDate, endDate, q, categoryId, pointed } = {}) =>
-  client.get('/operations', { params: { startDate, endDate, q, categoryId, pointed } });
+export const list = ({ startDate, endDate, q, categoryId, pointed, bankId } = {}) =>
+  client.get('/operations', { params: { startDate, endDate, q, categoryId, pointed, bankId } });
 
 // Toutes les opérations non pointées (toutes dates confondues). Endpoint dédié
 // pour éviter de rapatrier 200 ans d'opérations et de filtrer côté client.

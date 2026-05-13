@@ -71,6 +71,7 @@ router.get('/', wrap(async (req, res) => {
   if (req.query.categoryId) filters.categoryId = String(req.query.categoryId);
   if (req.query.pointed === 'true') filters.pointed = true;
   else if (req.query.pointed === 'false') filters.pointed = false;
+  if (req.query.bankId) filters.bankId = String(req.query.bankId);
   res.json(await req.app.locals.db.operations.findByDateRange(start, end, req.user._id, filters));
 }));
 

@@ -59,6 +59,23 @@ describe('GET /api/operations', () => {
     const res = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' });
     expect(res.body).toHaveLength(0);
   });
+
+  it('filtre par bankId', async () => {
+    const secondBankId = (await agent.post('/api/banks').send({ label: 'LCL', currentBalance: 500 })).body._id;
+    await agent.post('/api/operations').send(makeOp({ label: 'BNP-op' }));
+    await agent.post('/api/operations').send(makeOp({ label: 'LCL-op', bankId: secondBankId }));
+
+    const all = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' });
+    expect(all.body).toHaveLength(2);
+
+    const onlyBnp = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30', bankId });
+    expect(onlyBnp.body).toHaveLength(1);
+    expect(onlyBnp.body[0].label).toBe('BNP-op');
+
+    const onlyLcl = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30', bankId: secondBankId });
+    expect(onlyLcl.body).toHaveLength(1);
+    expect(onlyLcl.body[0].label).toBe('LCL-op');
+  });
 });
 
 describe('GET /api/operations/unpointed', () => {

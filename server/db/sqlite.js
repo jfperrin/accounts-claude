@@ -604,6 +604,10 @@ module.exports = function createSQLiteRepos() {
         where.push('o.pointed = ?');
         params.push(filters.pointed ? 1 : 0);
       }
+      if (filters.bankId) {
+        where.push('o.bank_id = ?');
+        params.push(filters.bankId);
+      }
       return db.prepare(
         `${OPS_WITH_BANK} WHERE ${where.join(' AND ')} ORDER BY o.date DESC`,
       ).all(...params).map(mapOp);

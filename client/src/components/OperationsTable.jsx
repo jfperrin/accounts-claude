@@ -1,12 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Pencil, Trash2, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
+import { Pencil, Trash2, Repeat, Repeat2, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, formatEur, amountClass } from '@/lib/utils';
 import CategoryBadge from '@/components/CategoryBadge';
@@ -64,7 +63,7 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
 
   const handleClick = (e) => {
     if (moved.current) { e.stopPropagation(); return; }
-    if (offset !== 0) { setOffset(0); e.stopPropagation(); return; }
+    if (offset !== 0) { setOffset(0); e.stopPropagation(); }
   };
 
   const handleKeyDown = (e) => {
@@ -154,11 +153,8 @@ const ROW_ESTIMATE = 56;
 // filtres au-dessus et le footer en bas.
 const TABLE_MAX_HEIGHT = 'min(60vh, 720px)';
 
-export default function OperationsTable({ operations, categories = [], banks = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onLinkTransfer, onUnlinkTransfer, onFilterStateChange }) {
+export default function OperationsTable({ operations, categories = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onLinkTransfer, onUnlinkTransfer }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [query, setQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [bankFilter, setBankFilter] = useState('all');
   const [sortKey, setSortKey] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
 
@@ -171,23 +167,9 @@ export default function OperationsTable({ operations, categories = [], banks = [
     }
   };
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return operations.filter((op) => {
-      if (q && !op.label?.toLowerCase().includes(q)) return false;
-      if (bankFilter !== 'all') {
-        const opBank = String(op.bankId?._id ?? op.bankId);
-        if (opBank !== bankFilter) return false;
-      }
-      if (categoryFilter === 'all') return true;
-      if (categoryFilter === 'none') return !op.categoryId;
-      return op.categoryId === categoryFilter;
-    });
-  }, [operations, query, categoryFilter, bankFilter]);
-
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
-    const arr = [...filtered];
+    const arr = [...operations];
     arr.sort((a, b) => {
       if (sortKey === 'amount') return (a.amount - b.amount) * dir;
       if (sortKey === 'label') return a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }) * dir;
@@ -197,20 +179,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
       return (a.pointed === b.pointed) ? 0 : (a.pointed ? 1 : -1);
     });
     return arr;
-  }, [filtered, sortKey, sortDir]);
-
-  // Remonte au parent l'état des filtres (count + somme signée) pour qu'il
-  // puisse compléter le titre de la table quand un filtre est actif.
-  const filteredSum = useMemo(
-    () => filtered.reduce((s, o) => s + o.amount, 0),
-    [filtered],
-  );
-  useEffect(() => {
-    if (!onFilterStateChange) return;
-    const active = query.trim() !== '' || categoryFilter !== 'all' || bankFilter !== 'all';
-    onFilterStateChange({ active, count: filtered.length, sum: filteredSum });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredSum, filtered.length, query, categoryFilter, bankFilter]);
+  }, [operations, sortKey, sortDir]);
 
   const sortIcon = (k) => {
     if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
@@ -262,71 +231,24 @@ export default function OperationsTable({ operations, categories = [], banks = [
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un libellé…"
-            className="pl-8 pr-8 h-9"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Effacer"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {categories.length > 0 && (
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-9 w-40 sm:w-48" aria-label="Filtrer par catégorie">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes catégories</SelectItem>
-              <SelectItem value="none">— Sans catégorie</SelectItem>
-              <CategorySelectItems categories={categories} />
-            </SelectContent>
-          </Select>
-        )}
-        {banks.length > 1 && (
-          <Select value={bankFilter} onValueChange={setBankFilter}>
-            <SelectTrigger className="h-9 w-32 sm:w-40" aria-label="Filtrer par banque">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes banques</SelectItem>
-              {banks.map((b) => (
-                <SelectItem key={b._id} value={String(b._id)}>{b.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <div className="md:hidden flex items-center gap-1">
-          <Select value={sortKey} onValueChange={setSortKey}>
-            <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="date">Date</SelectItem>
-              <SelectItem value="label">Libellé</SelectItem>
-              <SelectItem value="amount">Montant</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9"
-            aria-label={sortDir === 'asc' ? 'Croissant' : 'Décroissant'}
-            onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-          >
-            {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-          </Button>
-        </div>
+      <div className="md:hidden mb-3 flex items-center justify-end gap-1">
+        <Select value={sortKey} onValueChange={setSortKey}>
+          <SelectTrigger className="h-9 w-32" aria-label="Trier par"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="date">Date</SelectItem>
+            <SelectItem value="label">Libellé</SelectItem>
+            <SelectItem value="amount">Montant</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-9 w-9"
+          aria-label={sortDir === 'asc' ? 'Croissant' : 'Décroissant'}
+          onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+        >
+          {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+        </Button>
       </div>
 
       <div className="md:hidden flex flex-col gap-2">

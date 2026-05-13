@@ -155,6 +155,7 @@ const operations = {
     if (filters.categoryId === 'none') query.categoryId = null;
     else if (filters.categoryId) query.categoryId = filters.categoryId;
     if (filters.pointed === true || filters.pointed === false) query.pointed = filters.pointed;
+    if (filters.bankId) query.bankId = filters.bankId;
     return Operation.find(query).populate('bankId', 'label').sort('-date');
   },
 

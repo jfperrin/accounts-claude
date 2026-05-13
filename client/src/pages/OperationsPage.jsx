@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload, Search, X, ArrowLeftRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -99,8 +99,12 @@ export default function OperationsPage() {
   }, [searchInput]);
   const [filterCategory, setFilterCategory] = useState('all'); // 'all' | 'none' | <id>
   const [filterPointed, setFilterPointed] = useState('all');   // 'all' | 'true' | 'false'
-  const filtersActive = q || filterCategory !== 'all' || filterPointed !== 'all';
-  const clearFilters = () => { setSearchInput(''); setQ(''); setFilterCategory('all'); setFilterPointed('all'); };
+  const [filterBank, setFilterBank] = useState('all');         // 'all' | <id>
+  const filtersActive = q || filterCategory !== 'all' || filterPointed !== 'all' || filterBank !== 'all';
+  const clearFilters = () => {
+    setSearchInput(''); setQ('');
+    setFilterCategory('all'); setFilterPointed('all'); setFilterBank('all');
+  };
 
   const { operations, reload: reloadOperations, loading: operationsLoading } = useOperations({
     startDate,
@@ -108,6 +112,7 @@ export default function OperationsPage() {
     q: q || undefined,
     categoryId: filterCategory === 'all' ? undefined : filterCategory,
     pointed: filterPointed === 'all' ? undefined : filterPointed === 'true',
+    bankId: filterBank === 'all' ? undefined : filterBank,
   });
 
   const [onlyUncategorized, setOnlyUncategorized] = useState(false);
@@ -135,8 +140,10 @@ export default function OperationsPage() {
   const bankBalancesRef = useRef(null);
   const [fabVisible, setFabVisible] = useState(false);
   const [totalBadgeVisible, setTotalBadgeVisible] = useState(false);
-  const [tableFilter, setTableFilter] = useState({ active: false, count: 0, sum: 0 });
-  const handleTableFilterChange = useCallback((info) => setTableFilter(info), []);
+  const visibleSum = useMemo(
+    () => visibleOperations.reduce((s, o) => s + o.amount, 0),
+    [visibleOperations],
+  );
 
   useEffect(() => {
     const el = newOpBtnRef.current;
@@ -539,7 +546,7 @@ export default function OperationsPage() {
               </button>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Select value={filterCategory} onValueChange={setFilterCategory}>
               <SelectTrigger className="w-[160px]" aria-label="Filtrer par catégorie"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -556,6 +563,17 @@ export default function OperationsPage() {
                 <SelectItem value="false">Non pointées</SelectItem>
               </SelectContent>
             </Select>
+            {banks.length > 1 && (
+              <Select value={filterBank} onValueChange={setFilterBank}>
+                <SelectTrigger className="w-[160px]" aria-label="Filtrer par banque"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes banques</SelectItem>
+                  {banks.map((b) => (
+                    <SelectItem key={b._id} value={String(b._id)}>{b.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {filtersActive && (
               <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
                 Réinitialiser
@@ -625,20 +643,18 @@ export default function OperationsPage() {
                 <span className="capitalize">{dayjs().add(monthOffset, 'month').format('MMMM YYYY')}</span>
               )}
               {rangeMode === 'custom' && `${dayjs(startDate).format('DD/MM/YYYY')} – ${dayjs(endDate).format('DD/MM/YYYY')}`}
-              {tableFilter.active && (
+              {filtersActive && (
                 <Badge
                   variant="outline"
-                  className={`tabular-nums ${amountClass(tableFilter.sum)}`}
+                  className={`tabular-nums ${amountClass(visibleSum)}`}
                 >
-                  {formatEur(tableFilter.sum)}
+                  {formatEur(visibleSum)}
                 </Badge>
               )}
             </span>
             <span className="text-sm text-muted-foreground tabular-nums shrink-0">
-              {tableFilter.active
-                ? `${tableFilter.count} sur ${visibleOperations.length}`
-                : `${visibleOperations.length} opération(s)`}
-              {!tableFilter.active && onlyUncategorized && operations.length !== visibleOperations.length && (
+              {visibleOperations.length} opération(s)
+              {onlyUncategorized && operations.length !== visibleOperations.length && (
                 <span> / {operations.length}</span>
               )}
             </span>
@@ -646,7 +662,6 @@ export default function OperationsPage() {
           <OperationsTable
             operations={visibleOperations}
             categories={categories}
-            banks={banks}
             recurring={recurring}
             onPoint={handlePoint}
             onEdit={(op) => { setEditOp(op); setFormOpen(true); }}
@@ -655,7 +670,6 @@ export default function OperationsPage() {
             onMakeRecurring={openMakeRecurring}
             onLinkTransfer={(op) => setLinkTransferOp(op)}
             onUnlinkTransfer={handleUnlinkTransfer}
-            onFilterStateChange={handleTableFilterChange}
           />
         </div>
       )}
