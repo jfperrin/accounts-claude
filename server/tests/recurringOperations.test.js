@@ -136,3 +136,57 @@ describe('DELETE /api/recurring-operations/:id', () => {
     expect(ops).toHaveLength(1);
   });
 });
+
+describe('GET /api/recurring-operations/suggestions', () => {
+  it("n'inclut pas les virements internes déjà liés (transferId posé)", async () => {
+    const otherBankId = (await alice.post('/api/banks').send({ label: 'Boursorama' })).body._id;
+    for (const date of ['2025-12-05', '2026-01-05', '2026-02-05', '2026-03-05']) {
+      await alice.post('/api/operations/transfer').send({
+        fromBankId: bankId,
+        toBankId: otherBankId,
+        amount: 500,
+        date,
+      });
+    }
+    const res = await alice.get('/api/recurring-operations/suggestions');
+    expect(res.status).toBe(200);
+    expect(res.body.find((s) => /virement/i.test(s.label))).toBeUndefined();
+  });
+
+  it("n'inclut pas les virements internes détectés heuristiquement (non liés)", async () => {
+    const otherBankId = (await alice.post('/api/banks').send({ label: 'Boursorama' })).body._id;
+    // Quatre paires débit/crédit opposés sur deux banques, non liées via /transfer.
+    // detectTransferCandidates doit les apparier et les exclure des suggestions.
+    for (const date of ['2025-12-05', '2026-01-05', '2026-02-05', '2026-03-05']) {
+      await alice.post('/api/operations').send({
+        label: 'VIR vers Boursorama', amount: -500, date, bankId, pointed: false,
+      });
+      await alice.post('/api/operations').send({
+        label: 'VIR depuis BNP', amount: 500, date, bankId: otherBankId, pointed: false,
+      });
+    }
+    const res = await alice.get('/api/recurring-operations/suggestions');
+    expect(res.status).toBe(200);
+    expect(res.body.find((s) => /vir/i.test(s.label))).toBeUndefined();
+  });
+
+  it('détecte un loyer mensuel et exclut un virement interne concomitant', async () => {
+    const otherBankId = (await alice.post('/api/banks').send({ label: 'Boursorama' })).body._id;
+    for (const date of ['2025-12-05', '2026-01-05', '2026-02-05', '2026-03-05']) {
+      await alice.post('/api/operations').send({
+        label: 'PRLV LOYER', amount: -800, date, bankId, pointed: false,
+      });
+      await alice.post('/api/operations/transfer').send({
+        fromBankId: bankId,
+        toBankId: otherBankId,
+        amount: 200,
+        date,
+      });
+    }
+    const res = await alice.get('/api/recurring-operations/suggestions');
+    expect(res.status).toBe(200);
+    const labels = res.body.map((s) => s.label);
+    expect(labels).toContain('PRLV LOYER');
+    expect(res.body.find((s) => /virement/i.test(s.label))).toBeUndefined();
+  });
+});

@@ -27,9 +27,10 @@ import {
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import CategoryColorPicker from '@/components/CategoryColorPicker';
 import EmptyState from '@/components/EmptyState';
+import TableSkeleton from '@/components/TableSkeleton';
 
 export default function CategoriesPage() {
-  const { categories, reload } = useCategories();
+  const { categories, reload, loading } = useCategories();
   const { recurring } = useRecurringOperations();
 
   const [modal, setModal] = useState(null); // null | { cat? }
@@ -211,6 +212,9 @@ export default function CategoriesPage() {
         Définissez un type (dépense ou revenu) et un budget mensuel : la somme des opérations récurrentes assignées à la catégorie est cumulée à un complément optionnel pour donner le total.
       </p>
 
+      {loading && categories.length === 0 ? (
+        <TableSkeleton rows={6} cols={['w-6', 'w-44', 'w-20', 'w-24', 'w-24', 'w-24']} />
+      ) : (
       <div className="rounded-xl border border-border bg-card shadow-xs">
         {categories.length === 0 ? (
           <EmptyState
@@ -313,6 +317,7 @@ export default function CategoriesPage() {
           </Table>
         )}
       </div>
+      )}
 
       <BudgetChart data={chartData} chartCategories={chartCategories} totals={totals} />
 

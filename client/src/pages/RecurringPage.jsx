@@ -31,6 +31,7 @@ import SubscriptionsCard from '@/components/SubscriptionsCard';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
 import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
 import EmptyState from '@/components/EmptyState';
+import TableSkeleton from '@/components/TableSkeleton';
 import { useCategories } from '@/hooks/useCategories';
 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
@@ -40,6 +41,7 @@ const empty = () => ({ label: '', bankId: '', dayOfMonth: '', amount: '', kind: 
 export default function RecurringPage() {
   const [items, setItems] = useState([]);
   const [banks, setBanks] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null); // null | { item? }
   const [form, setForm] = useState(empty());
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -75,7 +77,13 @@ export default function RecurringPage() {
   useEffect(() => { runDetection({ silent: true }); }, []);
 
   const { categories } = useCategories();
-  const load = () => Promise.all([listRecurring(), listBanks()]).then(([ops, b]) => { setItems(ops); setBanks(b); });
+  const load = () => {
+    setLoading(true);
+    return Promise.all([listRecurring(), listBanks()])
+      .then(([ops, b]) => { setItems(ops); setBanks(b); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const [searchInput, setSearchInput] = useState('');
@@ -298,7 +306,9 @@ export default function RecurringPage() {
 
       <SubscriptionsCard items={items} categories={categories} />
 
-      {items.length === 0 ? (
+      {loading && items.length === 0 ? (
+        <TableSkeleton rows={5} cols={['w-40', 'w-28', 'w-16', 'w-20', 'w-24']} />
+      ) : items.length === 0 ? (
         <EmptyState
           icon={RefreshCw}
           title="Aucune opération récurrente"

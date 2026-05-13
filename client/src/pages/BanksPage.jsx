@@ -14,15 +14,23 @@ import {
 } from '@/components/ui/dialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import EmptyState from '@/components/EmptyState';
+import TableSkeleton from '@/components/TableSkeleton';
 
 export default function BanksPage() {
   const [banks, setBanks] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null); // null | { bank? }
   const [label, setLabel] = useState('');
   const [currentBalance, setCurrentBalance] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const load = () => list().then(setBanks);
+  const load = () => {
+    setLoading(true);
+    return list()
+      .then(setBanks)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const openAdd = () => { setLabel(''); setCurrentBalance(''); setModal({}); };
@@ -68,7 +76,9 @@ export default function BanksPage() {
         </Button>
       </div>
 
-      {banks.length === 0 ? (
+      {loading && banks.length === 0 ? (
+        <TableSkeleton rows={4} cols={['w-40', 'w-28', 'w-16']} />
+      ) : banks.length === 0 ? (
         <EmptyState
           icon={Building2}
           title="Aucune banque enregistrée"

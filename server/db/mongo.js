@@ -38,14 +38,14 @@ const users = {
     User.findByIdAndUpdate(
       id,
       { $set: { title, firstName, lastName, nickname } },
-      { new: true },
+      { returnDocument: 'after' },
     ).select('-passwordHash'),
 
   updateEmail: (id, email) =>
-    User.findByIdAndUpdate(id, { $set: { email } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { email } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   updateAvatar: (id, avatarUrl) =>
-    User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   findAll: () =>
     User.find({}).select('-passwordHash').sort({ createdAt: -1 }),
@@ -54,22 +54,22 @@ const users = {
     User.findByIdAndUpdate(
       id,
       { $set: { email, role, ...(emailVerified !== undefined && { emailVerified }) } },
-      { new: true },
+      { returnDocument: 'after' },
     ).select('-passwordHash'),
 
   deleteUser: (id) => User.findByIdAndDelete(id),
 
   setPassword: (id, passwordHash) =>
-    User.findByIdAndUpdate(id, { $set: { passwordHash } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { passwordHash } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   setEmailVerified: (id) =>
-    User.findByIdAndUpdate(id, { $set: { emailVerified: true } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { emailVerified: true } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   applyPendingEmail: (id, email) =>
-    User.findByIdAndUpdate(id, { $set: { email, emailVerified: true } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { email, emailVerified: true } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   acceptToS: (id) =>
-    User.findByIdAndUpdate(id, { $set: { acceptedToSAt: new Date() } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { acceptedToSAt: new Date() } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   updateMfa: (id, fields) => {
     const $set = {};
@@ -77,7 +77,7 @@ const users = {
     if (Object.prototype.hasOwnProperty.call(fields, 'totpEnabled'))    $set.totpEnabled = fields.totpEnabled;
     if (Object.prototype.hasOwnProperty.call(fields, 'emailMfaEnabled'))$set.emailMfaEnabled = fields.emailMfaEnabled;
     if (Object.prototype.hasOwnProperty.call(fields, 'recoveryCodes'))  $set.recoveryCodes = fields.recoveryCodes;
-    return User.findByIdAndUpdate(id, { $set }, { new: true }).select('-passwordHash');
+    return User.findByIdAndUpdate(id, { $set }, { returnDocument: 'after' }).select('-passwordHash');
   },
 
   // Retrait atomique d'un hash de recovery code. Retourne true si retiré, false si déjà absent.
@@ -95,7 +95,7 @@ const users = {
     const u = await User.findByIdAndUpdate(
       id,
       { $inc: { mfaFailedAttempts: 1 } },
-      { new: true, select: 'mfaFailedAttempts' },
+      { returnDocument: 'after', select: 'mfaFailedAttempts' },
     );
     return u ? u.mfaFailedAttempts : 0;
   },

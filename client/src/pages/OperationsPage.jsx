@@ -42,6 +42,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import EmptyState from '@/components/EmptyState';
+import TableSkeleton from '@/components/TableSkeleton';
 import { Building2, ListOrdered } from 'lucide-react';
 import { formatEur, amountClass } from '@/lib/utils';
 
@@ -101,7 +102,7 @@ export default function OperationsPage() {
   const filtersActive = q || filterCategory !== 'all' || filterPointed !== 'all';
   const clearFilters = () => { setSearchInput(''); setQ(''); setFilterCategory('all'); setFilterPointed('all'); };
 
-  const { operations, reload: reloadOperations } = useOperations({
+  const { operations, reload: reloadOperations, loading: operationsLoading } = useOperations({
     startDate,
     endDate,
     q: q || undefined,
@@ -457,10 +458,6 @@ export default function OperationsPage() {
               <Upload className="h-4 w-4" />
               Un fichier d'opérations
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTransferOpen(true)} disabled={banks.length < 2}>
-              <ArrowLeftRight className="h-4 w-4" />
-              Virement entre banques
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
@@ -480,16 +477,27 @@ export default function OperationsPage() {
               <Upload className="h-4 w-4" />
               Un fichier d'opérations
             </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button ref={newOpBtnRef} className="hidden md:inline-flex gap-2">
+              <Plus className="h-4 w-4" />
+              Nouvelle opération
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => { setEditOp(null); setFormOpen(true); }}>
+              <Plus className="h-4 w-4" />
+              Nouvelle opération
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTransferOpen(true)} disabled={banks.length < 2}>
               <ArrowLeftRight className="h-4 w-4" />
               Virement entre banques
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button ref={newOpBtnRef} onClick={() => { setEditOp(null); setFormOpen(true); }} className="hidden md:inline-flex gap-2">
-          <Plus className="h-4 w-4" />
-          Nouvelle opération
-        </Button>
       </div>
 
       {banks.length > 0 && (
@@ -557,7 +565,9 @@ export default function OperationsPage() {
         </div>
       )}
 
-      {visibleOperations.length === 0 ? (
+      {operationsLoading && visibleOperations.length === 0 ? (
+        <TableSkeleton rows={6} cols={['w-24', 'w-48', 'w-20', 'w-24', 'w-8']} />
+      ) : visibleOperations.length === 0 ? (
         filtersActive ? (
           <EmptyState
             variant="card"
@@ -713,15 +723,28 @@ export default function OperationsPage() {
         onCancel={() => setBulkCat(null)}
       />
 
-      <button
-        type="button"
-        onClick={() => { setEditOp(null); setFormOpen(true); }}
-        className={`animate-fly-to-corner fixed bottom-28 right-6 z-50 h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/40 transition-transform hover:bg-primary/90 hover:scale-105 active:scale-95 md:bottom-8 md:right-8 flex ${fabVisible ? 'md:flex' : 'md:hidden'}`}
-        aria-label="Nouvelle opération"
-        title="Nouvelle opération"
-      >
-        <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={`animate-fly-to-corner fixed bottom-28 right-6 z-50 h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/40 transition-transform hover:bg-primary/90 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:bottom-8 md:right-8 flex ${fabVisible ? 'md:flex' : 'md:hidden'}`}
+            aria-label="Créer (opération ou virement)"
+            title="Créer"
+          >
+            <Plus className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="top" sideOffset={12}>
+          <DropdownMenuItem onClick={() => { setEditOp(null); setFormOpen(true); }}>
+            <Plus className="h-4 w-4" />
+            Nouvelle opération
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTransferOpen(true)} disabled={banks.length < 2}>
+            <ArrowLeftRight className="h-4 w-4" />
+            Virement entre banques
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

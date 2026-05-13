@@ -3,13 +3,20 @@ import { list } from '@/api/categories';
 
 export function useCategories() {
   const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const reload = useCallback(
-    () => list().then(setCategories).catch(() => {}),
+    () => {
+      setLoading(true);
+      return list()
+        .then(setCategories)
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    },
     [],
   );
 
   useEffect(() => { reload(); }, [reload]);
 
-  return { categories, reload };
+  return { categories, reload, loading };
 }

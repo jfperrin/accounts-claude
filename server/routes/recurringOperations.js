@@ -8,6 +8,7 @@
 const router = require('express').Router();
 const wrap = require('../utils/asyncHandler');
 const { detectRecurringSuggestions } = require('../services/recurringDetectionService');
+const { detectTransferCandidates } = require('../services/transferDetectionService');
 
 // GET /api/recurring-operations → liste avec bankId populé { _id, label }, triée par libellé
 router.get('/', wrap(async (req, res) => {
@@ -29,7 +30,21 @@ router.get('/suggestions', wrap(async (req, res) => {
     banks.findByUser(userId),
   ]);
 
-  const suggestions = detectRecurringSuggestions(ops, recurring, dismissed);
+  // Un virement interne (deux jambes débit/crédit opposées entre deux banques)
+  // n'est jamais une vraie récurrente : on l'exclut des candidats. Deux passes :
+  //   1. transferId déjà posé (lien confirmé par l'utilisateur)
+  //   2. heuristique transferDetectionService sur les ops non liées
+  const transferPairs = detectTransferCandidates(ops, banksList);
+  const heuristicTransferIds = new Set();
+  for (const p of transferPairs) {
+    heuristicTransferIds.add(String(p.outOp._id));
+    heuristicTransferIds.add(String(p.inOp._id));
+  }
+  const opsForDetection = ops.filter(
+    (o) => !o.transferId && !heuristicTransferIds.has(String(o._id)),
+  );
+
+  const suggestions = detectRecurringSuggestions(opsForDetection, recurring, dismissed);
   // Populate le label de la banque pour l'affichage côté client.
   const bankById = new Map(banksList.map((b) => [String(b._id), b]));
   for (const s of suggestions) {
