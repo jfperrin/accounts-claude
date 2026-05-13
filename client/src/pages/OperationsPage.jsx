@@ -507,7 +507,7 @@ export default function OperationsPage() {
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="min-w-[140px] text-center text-sm font-medium tabular-nums capitalize">
+            <span className="min-w-35 text-center text-sm font-medium tabular-nums capitalize">
               {dayjs().add(monthOffset, 'month').format('MMMM YYYY')}
             </span>
             <button
@@ -648,7 +648,7 @@ export default function OperationsPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-[160px]" aria-label="Filtrer par catégorie"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40" aria-label="Filtrer par catégorie"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Toutes catégories</SelectItem>
                 <SelectItem value="none">Sans catégorie</SelectItem>
@@ -656,7 +656,7 @@ export default function OperationsPage() {
               </SelectContent>
             </Select>
             <Select value={filterPointed} onValueChange={setFilterPointed}>
-              <SelectTrigger className="w-[140px]" aria-label="Filtrer par pointage"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-35" aria-label="Filtrer par pointage"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous états</SelectItem>
                 <SelectItem value="true">Pointées</SelectItem>
@@ -665,7 +665,7 @@ export default function OperationsPage() {
             </Select>
             {banks.length > 1 && (
               <Select value={filterBank} onValueChange={setFilterBank}>
-                <SelectTrigger className="w-[160px]" aria-label="Filtrer par banque"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-40" aria-label="Filtrer par banque"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes banques</SelectItem>
                   {banks.map((b) => (

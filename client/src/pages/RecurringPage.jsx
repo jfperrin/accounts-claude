@@ -27,7 +27,6 @@ import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import RecurringSuggestions from '@/components/RecurringSuggestions';
-import SubscriptionsCard from '@/components/SubscriptionsCard';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
 import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
 import EmptyState from '@/components/EmptyState';
@@ -93,6 +92,13 @@ export default function RecurringPage() {
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  const [filterCategory, setFilterCategory] = useState('all'); // 'all' | 'none' | <id>
+  const [filterType, setFilterType] = useState('all'); // 'all' | 'subscription' | 'income' | 'transfer'
+  const filtersActive = q || filterCategory !== 'all' || filterType !== 'all';
+  const clearFilters = () => {
+    setSearchInput(''); setQ(''); setFilterCategory('all'); setFilterType('all');
+  };
+
   const [sortKey, setSortKey] = useState('dayOfMonth');
   const [sortDir, setSortDir] = useState('asc');
   const toggleSort = (key) => {
@@ -111,21 +117,24 @@ export default function RecurringPage() {
     const dir = sortDir === 'asc' ? 1 : -1;
     const cmpStr = (a, b) => (a ?? '').localeCompare(b ?? '', 'fr', { sensitivity: 'base' });
     const catLabel = (id) => categories.find((c) => c._id === id)?.label ?? '';
-    // Filtre recherche : libellé, banque(s), catégorie. Insensible à la casse,
-    // sans accent (NFD + suppression des marques) pour matcher « epargne »
-    // contre « Épargne ».
+    // Recherche : sur le libellé uniquement. Insensible à la casse, sans
+    // accent (NFD + suppression des marques) pour matcher « epargne » contre
+    // « Épargne ». Le filtre catégorie est un Select indépendant.
     const norm = (s) => (s ?? '').toString().toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '');
     const needle = norm(q);
+    // Type d'une récurrente :
+    //   - 'transfer'     : possède une banque destination (virement interne)
+    //   - 'income'       : montant positif sans destination (revenu mensuel)
+    //   - 'subscription' : montant négatif sans destination (abonnement / dépense récurrente)
+    const typeOf = (item) => {
+      if (item.toBankId) return 'transfer';
+      return Number(item.amount) >= 0 ? 'income' : 'subscription';
+    };
     const matches = (item) => {
-      if (!needle) return true;
-      const toBank = item.toBankId ? banks.find((b) => String(b._id) === String(item.toBankId)) : null;
-      const haystack = [
-        item.label,
-        item.bankId?.label,
-        toBank?.label,
-        catLabel(item.categoryId),
-      ].map(norm).join(' ');
-      return haystack.includes(needle);
+      if (needle && !norm(item.label).includes(needle)) return false;
+      if (filterCategory === 'none' && item.categoryId) return false;
+      if (filterCategory !== 'all' && filterCategory !== 'none' && String(item.categoryId) !== filterCategory) return false;
+      return filterType === 'all' || typeOf(item) === filterType;
     };
     const arr = items.filter(matches);
     arr.sort((a, b) => {
@@ -135,11 +144,16 @@ export default function RecurringPage() {
         case 'category': return cmpStr(catLabel(a.categoryId), catLabel(b.categoryId)) * dir;
         case 'amount': return (a.amount - b.amount) * dir;
         case 'dayOfMonth':
-        default: return (a.dayOfMonth - b.dayOfMonth) * dir;
+        default: return (Number(a.dayOfMonth) - Number(b.dayOfMonth)) * dir;
       }
     });
     return arr;
-  }, [items, sortKey, sortDir, categories, q, banks]);
+  }, [items, sortKey, sortDir, categories, q, filterCategory, filterType]);
+
+  const sortedSum = useMemo(
+    () => sortedItems.reduce((s, i) => s + Number(i.amount || 0), 0),
+    [sortedItems],
+  );
 
   const openAdd = () => { setForm(empty()); setModal({}); };
   const openFromSuggestion = (s) => {
@@ -304,8 +318,6 @@ export default function RecurringPage() {
         onChange={setSuggestions}
       />
 
-      <SubscriptionsCard items={items} categories={categories} />
-
       {loading && items.length === 0 ? (
         <TableSkeleton rows={5} cols={['w-40', 'w-28', 'w-16', 'w-20', 'w-24']} />
       ) : items.length === 0 ? (
@@ -328,33 +340,92 @@ export default function RecurringPage() {
         />
       ) : (
       <div className="space-y-2">
-        {items.length >= 5 && (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Rechercher (libellé, banque, catégorie)"
-              className="pl-9 pr-9"
-              aria-label="Rechercher dans les récurrentes"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput('')}
-                aria-label="Effacer la recherche"
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+        {items.length > 0 && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Rechercher dans le libellé…"
+                className="pl-9 pr-9"
+                aria-label="Rechercher dans les récurrentes"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  aria-label="Effacer la recherche"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="w-37.5" aria-label="Filtrer par type"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous types</SelectItem>
+                  <SelectItem value="subscription">Abonnements</SelectItem>
+                  <SelectItem value="income">Revenus</SelectItem>
+                  <SelectItem value="transfer">Virements</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="w-40" aria-label="Filtrer par catégorie"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes catégories</SelectItem>
+                  <SelectItem value="none">Sans catégorie</SelectItem>
+                  <CategorySelectItems categories={categories} />
+                </SelectContent>
+              </Select>
+              {filtersActive && (
+                <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
+                  Réinitialiser
+                </Button>
+              )}
+            </div>
           </div>
         )}
       <div className="rounded-xl border border-border bg-card shadow-xs">
-        {q && sortedItems.length === 0 && (
-          <div className="p-6 text-center text-sm text-muted-foreground">
-            Aucune récurrente ne correspond à « {q} ».
+        <header className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-primary" />
+            <h2 className="text-base font-semibold">
+              {filterType === 'subscription' ? 'Abonnements'
+                : filterType === 'income' ? 'Revenus récurrents'
+                : filterType === 'transfer' ? 'Virements récurrents'
+                : 'Toutes les récurrentes'}
+            </h2>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {sortedItems.length}
+              {filtersActive && items.length !== sortedItems.length && (
+                <> sur {items.length}</>
+              )}
+            </span>
+          </div>
+          {sortedItems.length > 0 && (
+            <div className="text-right">
+              <div className={cn('text-base font-bold tabular-nums', amountClass(sortedSum))}>
+                {sortedSum > 0 ? '+' : ''}{formatEur(sortedSum)}
+                <span className="ml-1 text-xs font-medium text-muted-foreground">/ mois</span>
+              </div>
+              {filterType === 'subscription' && (
+                <div className="text-[11px] text-muted-foreground tabular-nums">
+                  soit {formatEur(sortedSum * 12)} / an
+                </div>
+              )}
+            </div>
+          )}
+        </header>
+        {filtersActive && sortedItems.length === 0 && (
+          <div className="border-t border-border p-6 text-center text-sm text-muted-foreground">
+            Aucune récurrente ne correspond aux filtres.{' '}
+            <button type="button" onClick={clearFilters} className="text-primary hover:underline">
+              Réinitialiser
+            </button>
           </div>
         )}
         {sortedItems.length > 0 && (

@@ -284,6 +284,21 @@ function Recurring() {
         <em> Banque</em>, <em>Catégorie</em>, <em>Jour</em> et <em>Montant</em>.
         Chaque clic bascule l'ordre croissant / décroissant.
       </p>
+      <p>
+        Une barre au-dessus du tableau combine une <strong>recherche par
+        libellé</strong> (debouncée, insensible à la casse et aux accents), un
+        <strong> filtre par type</strong> (<em>Abonnements</em> = débits mensuels
+        hors virements, <em>Revenus</em> = montants positifs, <em>Virements</em>
+        {' '}= virements internes liés, <em>Tous types</em> par défaut) et un
+        <strong> filtre par catégorie</strong>. Un bouton <em>Réinitialiser</em>
+        apparaît dès qu'un filtre est actif.
+      </p>
+      <p>
+        Le titre du tableau et le total s'adaptent au filtre Type&nbsp;: en mode
+        <em> Abonnements</em>, le tableau s'intitule «&nbsp;Abonnements&nbsp;» et
+        le total affiche aussi l'équivalent annuel (× 12). Sinon, seul le total
+        mensuel est affiché.
+      </p>
     </Section>
   );
 }

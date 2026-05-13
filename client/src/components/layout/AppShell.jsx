@@ -203,7 +203,7 @@ export default function AppShell() {
               Plus
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="center" sideOffset={8} className="min-w-[10rem]">
+          <DropdownMenuContent side="top" align="center" sideOffset={8} className="min-w-40">
             {BOTTOM_MORE.map(({ key, icon: Icon, label }) => (
               <DropdownMenuItem key={key} onClick={() => navigate(key)}>
                 <Icon className="h-4 w-4" /> {label}
