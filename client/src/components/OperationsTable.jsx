@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { Pencil, Trash2, Repeat, Repeat2, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -148,10 +148,6 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
 // Hauteur estimée d'une row desktop (px). Le virtualizer mesure ensuite la
 // hauteur réelle de chaque row rendue via ref → ResizeObserver.
 const ROW_ESTIMATE = 56;
-// Hauteur max du container scrollable de la table desktop. Au-delà, on scrolle
-// à l'intérieur de la table (header sticky). 60vh laisse de la place pour les
-// filtres au-dessus et le footer en bas.
-const TABLE_MAX_HEIGHT = 'min(60vh, 720px)';
 
 export default function OperationsTable({
   operations, categories = [], recurring = [],
@@ -223,24 +219,32 @@ export default function OperationsTable({
 
   const total = sorted.length;
 
-  // Virtualisation desktop : on rend uniquement les rows visibles dans le viewport
-  // de la table. Le parent <div> scrollable doit avoir une hauteur bornée.
+  // Virtualisation par fenêtre : c'est la page entière qui scrolle, le tableau
+  // n'a plus de conteneur scrollable. Permet au <TableHeader sticky top-0> de
+  // rester collé au sommet de la fenêtre pendant le scroll page.
+  // scrollMargin = offsetTop du container, recalculé après mount + au resize.
   const tableScrollRef = useRef(null);
-  // TanStack Virtual expose des fonctions non-mémoïsables : React Compiler
-  // refuse de compiler ce composant sinon. C'est documenté côté lib (cf. README).
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const rowVirtualizer = useVirtualizer({
+  const [scrollMargin, setScrollMargin] = useState(0);
+  useEffect(() => {
+    const update = () => setScrollMargin(tableScrollRef.current?.offsetTop ?? 0);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  const rowVirtualizer = useWindowVirtualizer({
     count: sorted.length,
-    getScrollElement: () => tableScrollRef.current,
     estimateSize: () => ROW_ESTIMATE,
     overscan: 8,
+    scrollMargin,
     getItemKey: (i) => sorted[i]._id,
   });
   const virtualItems = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
-  const paddingTop = virtualItems[0]?.start ?? 0;
+  // Avec useWindowVirtualizer, item.start est relatif à la page : on retire
+  // scrollMargin pour avoir le padding intra-tableau.
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start - scrollMargin : 0;
   const paddingBottom = virtualItems.length > 0
-    ? totalSize - (virtualItems[virtualItems.length - 1].end ?? 0)
+    ? totalSize - (virtualItems[virtualItems.length - 1].end - scrollMargin)
     : 0;
 
   const confirmDelete = () => {
@@ -322,11 +326,10 @@ export default function OperationsTable({
 
       <div
         ref={tableScrollRef}
-        className="hidden md:block overflow-auto rounded-md border border-border"
-        style={{ maxHeight: TABLE_MAX_HEIGHT }}
+        className="hidden md:block rounded-md border border-border"
       >
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card">
+      <Table wrapperClassName="relative w-full">
+        <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_var(--border)]">
           <TableRow>
             {selectable && (
               <TableHead className="w-8 text-center">
