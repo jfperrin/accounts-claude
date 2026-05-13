@@ -85,8 +85,8 @@ export default function ExpensesByCategoryChart({ categories, operations, startD
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr] md:items-center">
-        <div className="h-56 md:h-64">
+      <div className="flex flex-col gap-4">
+        <div className="mx-auto h-56 w-full max-w-xs sm:h-64">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie

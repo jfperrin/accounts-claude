@@ -65,7 +65,6 @@ export default function LoginPage() {
         const res = await login({ ...form, rememberDays });
         if (res && res.mfaRequired) {
           navigate('/login/mfa');
-          return;
         }
       } else {
         if (!acceptedToS) {
@@ -92,7 +91,7 @@ export default function LoginPage() {
   if (registered) {
     return (
       <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900">
-        <div className="relative z-10 w-full max-w-[420px] rounded-2xl bg-white p-12 shadow-2xl text-center">
+        <div className="relative z-10 w-full max-w-105 rounded-2xl bg-white p-12 shadow-2xl text-center">
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
             <Mail className="h-6 w-6 text-white" />
           </div>
@@ -114,10 +113,10 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-slate-900">
-      <div className="pointer-events-none absolute -right-20 -top-40 h-[700px] w-[700px] rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18)_0%,transparent_65%)]" />
+      <div className="pointer-events-none absolute -right-20 -top-40 h-175 w-175 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18)_0%,transparent_65%)]" />
       <main className="flex flex-1 items-center justify-center px-4">
 
-      <div className="relative z-10 w-full max-w-[420px] rounded-2xl bg-white p-12 shadow-2xl">
+      <div className="relative z-10 w-full max-w-105 rounded-2xl bg-white p-12 shadow-2xl">
         <div className="mb-9 text-center">
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
             <Wallet className="h-6 w-6 text-white" />

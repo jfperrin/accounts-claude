@@ -76,7 +76,7 @@ export default function MfaChallengePage() {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-slate-900">
       <main className="flex flex-1 items-center justify-center px-4">
-        <div className="relative z-10 w-full max-w-[420px] rounded-2xl bg-white p-12 shadow-2xl">
+        <div className="relative z-10 w-full max-w-105 rounded-2xl bg-white p-12 shadow-2xl">
           <div className="mb-9 text-center">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
               <Wallet className="h-6 w-6 text-white" />
