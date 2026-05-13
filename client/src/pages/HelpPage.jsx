@@ -190,6 +190,27 @@ function Operations() {
         l'avez validée manuellement. Toute catégorie posée à la création
         manuelle est d'office considérée validée.
       </p>
+      <p>
+        <strong>Sélection multiple et actions de masse</strong>&nbsp;— sur
+        ordinateur, une colonne de cases à cocher permet de sélectionner
+        plusieurs opérations à la fois (la case d'en-tête bascule «&nbsp;tout /
+        rien&nbsp;» sur la liste visible). Une barre flottante apparaît en bas
+        de l'écran avec les actions disponibles&nbsp;: <em>Pointer</em>,
+        <em> Dépointer</em>, <em>Catégoriser…</em> (ouvre un sélecteur de
+        catégorie) et <em>Supprimer</em> (avec confirmation, les jambes de
+        virements liées sont effacées en cascade).
+      </p>
+      <p>
+        <strong>Raccourcis clavier sur le tableau</strong>&nbsp;— une fois la
+        ligne au focus (Tab, ou clic dessus), les touches suivantes agissent
+        sur l'opération&nbsp;:
+      </p>
+      <ul className="ml-5 list-disc space-y-1">
+        <li><kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">P</kbd> — pointer / dépointer</li>
+        <li><kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">E</kbd> — éditer</li>
+        <li><kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">X</kbd> ou <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">Espace</kbd> — basculer la sélection</li>
+        <li><kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">Suppr</kbd> ou <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">Retour</kbd> — supprimer (avec confirmation)</li>
+      </ul>
     </Section>
   );
 }

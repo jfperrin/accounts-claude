@@ -53,6 +53,14 @@ export const findSimilarUncategorized = ({ label, bankId, excludeId }) =>
 export const bulkCategorize = (ids, categoryId) =>
   client.post('/operations/bulk-categorize', { ids, categoryId });
 
+// Bascule l'état pointé d'un lot d'opérations.
+export const bulkPoint = (ids, pointed) =>
+  client.post('/operations/bulk-point', { ids, pointed });
+
+// Supprime un lot d'opérations (jambes de virement supprimées en cascade).
+export const bulkDelete = (ids) =>
+  client.post('/operations/bulk-delete', { ids });
+
 // Virement interne : crée 2 ops liées sur les banques source/destination.
 export const transfer = ({ fromBankId, toBankId, amount, date, label }) =>
   client.post('/operations/transfer', { fromBankId, toBankId, amount, date, label });

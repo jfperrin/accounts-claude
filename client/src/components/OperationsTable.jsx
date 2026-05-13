@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pencil, Trash2, Repeat, Repeat2, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -153,10 +153,16 @@ const ROW_ESTIMATE = 56;
 // filtres au-dessus et le footer en bas.
 const TABLE_MAX_HEIGHT = 'min(60vh, 720px)';
 
-export default function OperationsTable({ operations, categories = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onLinkTransfer, onUnlinkTransfer }) {
+export default function OperationsTable({
+  operations, categories = [], recurring = [],
+  onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onLinkTransfer, onUnlinkTransfer,
+  selectedIds, onToggleSelect, onToggleSelectAll,
+}) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [sortKey, setSortKey] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
+  const headerCheckboxRef = useRef(null);
+  const selectable = !!(selectedIds && onToggleSelect && onToggleSelectAll);
 
   const toggleSort = (key) => {
     if (sortKey === key) {
@@ -166,6 +172,19 @@ export default function OperationsTable({ operations, categories = [], recurring
       setSortDir(key === 'label' ? 'asc' : 'desc');
     }
   };
+
+  const selectionStats = useMemo(() => {
+    if (!selectable) return { selected: 0, all: false };
+    let selected = 0;
+    for (const o of operations) if (selectedIds.has(o._id)) selected++;
+    return { selected, all: selected > 0 && selected === operations.length };
+  }, [selectable, selectedIds, operations]);
+
+  useEffect(() => {
+    if (!selectable || !headerCheckboxRef.current) return;
+    const { selected } = selectionStats;
+    headerCheckboxRef.current.indeterminate = selected > 0 && selected < operations.length;
+  }, [selectable, selectionStats, operations.length]);
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -309,6 +328,18 @@ export default function OperationsTable({ operations, categories = [], recurring
       <Table>
         <TableHeader className="sticky top-0 z-10 bg-card">
           <TableRow>
+            {selectable && (
+              <TableHead className="w-8 text-center">
+                <input
+                  ref={headerCheckboxRef}
+                  type="checkbox"
+                  checked={selectionStats.all}
+                  onChange={onToggleSelectAll}
+                  aria-label="Sélectionner toutes les opérations visibles"
+                  className="h-4 w-4 cursor-pointer accent-primary"
+                />
+              </TableHead>
+            )}
             <TableHead>
               <button type="button" onClick={() => toggleSort('date')} className="inline-flex items-center gap-1 hover:text-foreground">
                 Date {sortIcon('date')}
@@ -331,17 +362,55 @@ export default function OperationsTable({ operations, categories = [], recurring
         </TableHeader>
         <TableBody>
           {paddingTop > 0 && (
-            <tr aria-hidden="true"><td colSpan={6} style={{ height: paddingTop, padding: 0, border: 0 }} /></tr>
+            <tr aria-hidden="true"><td colSpan={selectable ? 7 : 6} style={{ height: paddingTop, padding: 0, border: 0 }} /></tr>
           )}
           {virtualItems.map((virtualRow) => {
             const op = sorted[virtualRow.index];
+            const isSelected = selectable && selectedIds.has(op._id);
             return (
             <TableRow
               key={op._id}
               ref={rowVirtualizer.measureElement}
               data-index={virtualRow.index}
-              className={cn(op.pointed && 'opacity-50')}
+              data-state={isSelected ? 'selected' : undefined}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                // Ignore les combinaisons avec Cmd/Ctrl (laisse passer Cmd+K etc.)
+                // et les modifiers usuels. Ignore aussi si la cible est un champ.
+                if (e.metaKey || e.ctrlKey || e.altKey) return;
+                const tag = e.target.tagName;
+                if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+                if (e.key === 'p' || e.key === 'P') {
+                  e.preventDefault();
+                  onPoint(op._id);
+                } else if (e.key === 'e' || e.key === 'E') {
+                  e.preventDefault();
+                  onEdit(op);
+                } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.preventDefault();
+                  setDeleteTarget(op._id);
+                } else if (selectable && (e.key === 'x' || e.key === 'X' || e.key === ' ')) {
+                  e.preventDefault();
+                  onToggleSelect(op._id);
+                }
+              }}
+              className={cn(
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
+                op.pointed && 'opacity-50',
+                isSelected && 'bg-muted/40',
+              )}
             >
+              {selectable && (
+                <TableCell className="w-8 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(op._id)}
+                    aria-label={`Sélectionner ${op.label}`}
+                    className="h-4 w-4 cursor-pointer accent-primary"
+                  />
+                </TableCell>
+              )}
               <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
               <TableCell>
                 <div className="flex flex-col gap-1">
@@ -428,7 +497,7 @@ export default function OperationsTable({ operations, categories = [], recurring
             );
           })}
           {paddingBottom > 0 && (
-            <tr aria-hidden="true"><td colSpan={6} style={{ height: paddingBottom, padding: 0, border: 0 }} /></tr>
+            <tr aria-hidden="true"><td colSpan={selectable ? 7 : 6} style={{ height: paddingBottom, padding: 0, border: 0 }} /></tr>
           )}
         </TableBody>
       </Table>

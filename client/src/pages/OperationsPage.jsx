@@ -15,6 +15,8 @@ import {
   getSimilarExcludingCategory,
   findSimilarUncategorized,
   bulkCategorize,
+  bulkPoint,
+  bulkDelete,
   transfer as transferOp,
   unlinkTransfer as unlinkTransferOp,
 } from '@/api/operations';
@@ -35,6 +37,12 @@ import TransferCandidatesCard from '@/components/TransferCandidatesCard';
 import ImportResolveDialog from '@/components/ImportResolveDialog';
 import GenerateRecurringDialog from '@/components/GenerateRecurringDialog';
 import BulkCategorizeDialog from '@/components/BulkCategorizeDialog';
+import BulkActionBar from '@/components/BulkActionBar';
+import BulkSelectCategoryDialog from '@/components/BulkSelectCategoryDialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -150,6 +158,83 @@ export default function OperationsPage() {
   const bumpCandidates = () => setCandidatesReloadKey((k) => k + 1);
   const [pendingMatches, setPendingMatches] = useState(null);
   const [recurringForm, setRecurringForm] = useState(null);
+
+  // Sélection multi-ops pour les actions de masse (pointer / catégoriser /
+  // supprimer). On stocke un Set d'ids. La sélection effective au moment d'agir
+  // est l'intersection avec `visibleOperations` — une op filtrée n'est pas
+  // "perdue" mais n'est pas comptée tant qu'elle est invisible.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const effectiveSelectedIds = useMemo(() => {
+    const visible = new Set(visibleOperations.map((o) => o._id));
+    return [...selectedIds].filter((id) => visible.has(id));
+  }, [selectedIds, visibleOperations]);
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const allSelected = effectiveSelectedIds.length === visibleOperations.length && visibleOperations.length > 0;
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const o of visibleOperations) next.delete(o._id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const o of visibleOperations) next.add(o._id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkPoint = async (pointed) => {
+    if (effectiveSelectedIds.length === 0) return;
+    try {
+      await bulkPoint(effectiveSelectedIds, pointed);
+      toast.success(`${effectiveSelectedIds.length} opération${effectiveSelectedIds.length > 1 ? 's' : ''} ${pointed ? 'pointée' : 'dépointée'}${effectiveSelectedIds.length > 1 ? 's' : ''}`);
+      clearSelection();
+      reloadOperations();
+      reloadBanks();
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Erreur lors du pointage');
+    }
+  };
+
+  const handleBulkCategorize = async (categoryId) => {
+    if (effectiveSelectedIds.length === 0) return;
+    try {
+      await bulkCategorize(effectiveSelectedIds, categoryId);
+      toast.success(`${effectiveSelectedIds.length} opération${effectiveSelectedIds.length > 1 ? 's' : ''} catégorisée${effectiveSelectedIds.length > 1 ? 's' : ''}`);
+      setBulkCategoryOpen(false);
+      clearSelection();
+      reloadOperations();
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Erreur lors de la catégorisation');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (effectiveSelectedIds.length === 0) return;
+    try {
+      await bulkDelete(effectiveSelectedIds);
+      toast.success(`${effectiveSelectedIds.length} opération${effectiveSelectedIds.length > 1 ? 's' : ''} supprimée${effectiveSelectedIds.length > 1 ? 's' : ''}`);
+      setBulkDeleteOpen(false);
+      clearSelection();
+      reloadOperations();
+      reloadBanks();
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Erreur lors de la suppression');
+    }
+  };
 
   const newOpBtnRef = useRef(null);
   const bankBalancesRef = useRef(null);
@@ -685,6 +770,9 @@ export default function OperationsPage() {
             onMakeRecurring={openMakeRecurring}
             onLinkTransfer={(op) => setLinkTransferOp(op)}
             onUnlinkTransfer={handleUnlinkTransfer}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onToggleSelectAll={toggleSelectAllVisible}
           />
         </div>
       )}
@@ -751,6 +839,46 @@ export default function OperationsPage() {
         onConfirm={handleBulkConfirm}
         onCancel={() => setBulkCat(null)}
       />
+
+      <BulkActionBar
+        count={effectiveSelectedIds.length}
+        onPoint={() => handleBulkPoint(true)}
+        onUnpoint={() => handleBulkPoint(false)}
+        onCategorize={() => setBulkCategoryOpen(true)}
+        onDelete={() => setBulkDeleteOpen(true)}
+        onCancel={clearSelection}
+      />
+
+      <BulkSelectCategoryDialog
+        open={bulkCategoryOpen}
+        count={effectiveSelectedIds.length}
+        categories={categories}
+        onConfirm={handleBulkCategorize}
+        onCancel={() => setBulkCategoryOpen(false)}
+      />
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Supprimer {effectiveSelectedIds.length} opération{effectiveSelectedIds.length > 1 ? 's' : ''}&nbsp;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Les opérations seront définitivement supprimées. Les virements
+              internes liés voient leurs deux jambes effacées en cascade.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

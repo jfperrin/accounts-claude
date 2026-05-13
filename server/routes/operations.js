@@ -428,6 +428,53 @@ router.post('/bulk-categorize', wrap(async (req, res) => {
   res.json({ updated });
 }));
 
+// POST /api/operations/bulk-point  body: { ids: string[], pointed: boolean }
+// Bascule l'état pointé d'un lot d'opérations. Idempotent.
+router.post('/bulk-point', wrap(async (req, res) => {
+  const { ids, pointed } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: 'ids[] requis' });
+  }
+  if (typeof pointed !== 'boolean') {
+    return res.status(400).json({ message: 'pointed (boolean) requis' });
+  }
+  const { operations } = req.app.locals.db;
+  const userId = req.user._id;
+  let updated = 0;
+  for (const id of ids) {
+    const op = await operations.update(id, userId, { pointed });
+    if (op) updated++;
+  }
+  res.json({ updated });
+}));
+
+// POST /api/operations/bulk-delete  body: { ids: string[] }
+// Supprime un lot d'opérations. Les jambes de virement liées sont supprimées
+// en cascade comme le DELETE individuel.
+router.post('/bulk-delete', wrap(async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: 'ids[] requis' });
+  }
+  const { operations } = req.app.locals.db;
+  const userId = req.user._id;
+  let deleted = 0;
+  for (const id of ids) {
+    const op = await operations.findById(id, userId);
+    if (!op) continue;
+    if (op.transferId) {
+      const pair = await operations.findByTransferId(op.transferId, userId);
+      await operations.deleteByTransferId(op.transferId, userId);
+      deleted += pair.length;
+    } else {
+      const r = await operations.delete(id, userId);
+      // SQLite renvoie un objet avec changes, Mongo renvoie le doc supprimé
+      if (r && (r.changes > 0 || r._id)) deleted++;
+    }
+  }
+  res.json({ deleted });
+}));
+
 // POST /api/operations/import  (multipart/form-data) — fields: file, bankId
 router.post('/import', (req, res, next) => {
   importUpload.single('file')(req, res, (err) => err ? next(err) : next());
