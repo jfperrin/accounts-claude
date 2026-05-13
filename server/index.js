@@ -24,6 +24,8 @@ async function main() {
 
     await require('./utils/ensureAdmin')(sqliteRepos);
     await require('./utils/ensureAdmin')(mongoRepos);
+    await require('./utils/ensureDevUser')(sqliteRepos);
+    await require('./utils/ensureDevUser')(mongoRepos);
 
     db = createDualDb(sqliteRepos, mongoRepos);
     dualMode = true;
@@ -33,12 +35,14 @@ async function main() {
   } else if (isDev || !hasMongo) {
     db = require('./db/sqlite')();
     await require('./utils/ensureAdmin')(db);
+    await require('./utils/ensureDevUser')(db);
   } else {
     await require('./config/db')();
     db = require('./db/mongo');
     mongoUri = process.env.MONGODB_URI;
     await db.migrateLegacyCategoryFields();
     await require('./utils/ensureAdmin')(db);
+    await require('./utils/ensureDevUser')(db);
   }
 
   const app = createApp(db, mongoUri, { dualMode });

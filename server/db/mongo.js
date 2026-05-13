@@ -527,6 +527,25 @@ async function migrateLegacyCategoryFields() {
   // Migration : kind='transfer' supprimé au profit du transferId sur les opérations.
   // Les anciennes catégories 'transfer' redeviennent 'debit'. Idempotent.
   await Category.updateMany({ kind: 'transfer' }, { $set: { kind: 'debit' } });
+
+  // Migration : suppression de l'index unique legacy `username_1` sur User.
+  // L'app a migré vers l'auth par email il y a longtemps (cf. sqlite.js: DROP
+  // COLUMN username). L'index Mongo reste cependant orphelin dans les bases
+  // existantes : tous les nouveaux users ayant `username: undefined`, un seul
+  // peut coexister à cause de l'unicité (Mongo traite les multiples null comme
+  // doublons sauf index sparse). On le drop si encore présent. Idempotent.
+  try {
+    const idx = await User.collection.indexes();
+    if (idx.some((i) => i.name === 'username_1')) {
+      await User.collection.dropIndex('username_1');
+    }
+  } catch (err) {
+    // Ne pas bloquer le boot si la collection n'existe pas encore ou si l'index
+    // a déjà été supprimé par une instance concurrente.
+    if (err?.codeName !== 'IndexNotFound' && err?.codeName !== 'NamespaceNotFound') {
+      console.warn('[migrate] dropIndex username_1 failed:', err?.message);
+    }
+  }
 }
 
 module.exports = {
