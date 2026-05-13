@@ -10,6 +10,17 @@ const requireAuth = require('../middleware/requireAuth');
 const upload = require('../middleware/upload');
 const { randomUUID } = require('crypto');
 const mailer = require('../utils/mailer');
+const { router: mfaRouter, helpers: mfaHelpers } = require('./mfa');
+const {
+  signMfaChallenge,
+  hashRefreshToken,
+  generateRefreshToken,
+  signAccessToken,
+  authCookieOptions,
+  ACCESS_TTL_SEC,
+  MFA_CHALLENGE_TTL_SEC,
+} = require('../utils/tokens');
+const { issueAuthCookies, clearAuthCookies, REFRESH_COOKIE_PATH } = require('../utils/issueAuth');
 
 // Helper : sérialise un user Mongoose ou SQLite en réponse JSON uniforme
 function serializeUser(u) {
@@ -24,6 +35,9 @@ function serializeUser(u) {
     nickname:      u.nickname  ?? null,
     avatarUrl:     u.avatarUrl ?? null,
     acceptedToSAt: u.acceptedToSAt ?? null,
+    totpEnabled:     !!u.totpEnabled,
+    emailMfaEnabled: !!u.emailMfaEnabled,
+    recoveryCodesRemaining: (u.recoveryCodes || []).length,
   };
 }
 
@@ -65,13 +79,14 @@ router.post('/register', authLimiter, wrap(async (req, res) => {
 }));
 
 // POST /api/auth/login
-// Délègue à Passport LocalStrategy. Bloque les comptes locaux non-vérifiés.
+// LocalStrategy (passport) avec { session: false } : on vérifie le password
+// puis on émet soit les cookies d'auth (access+refresh) soit un cookie
+// mfa_challenge (JWT 10min) qui porte l'état du flow 2FA.
 router.post('/login', authLimiter, (req, res, next) => {
-  passport.authenticate('local', async (err, user, info) => {
+  passport.authenticate('local', { session: false }, async (err, user, info) => {
     if (err) return next(err);
     if (!user) return res.status(401).json({ message: info?.message || 'Échec de connexion' });
     if (!user.googleId && !user.emailVerified) {
-      // Renvoie automatiquement un email de vérification à chaque tentative de connexion bloquée
       try {
         const db = req.app.locals.db;
         const token = randomUUID();
@@ -85,13 +100,70 @@ router.post('/login', authLimiter, (req, res, next) => {
     const days = ALLOWED_DAYS.includes(Number(req.body.rememberDays))
       ? Number(req.body.rememberDays)
       : 30;
-    req.login(user, (err) => {
-      if (err) return next(err);
-      req.session.cookie.maxAge = days * 24 * 60 * 60 * 1000;
-      res.json(serializeUser(user));
-    });
+
+    const bypassMfa = process.env.MFA_BYPASS_DEV === '1';
+    const hasMfa = !bypassMfa && !user.googleId && (user.totpEnabled || user.emailMfaEnabled);
+    if (hasMfa) {
+      if (mfaHelpers.isMfaLocked(user)) {
+        return res.status(423).json({
+          message: 'Trop de tentatives, compte temporairement verrouillé',
+          lockedUntil: user.mfaLockedUntil,
+        });
+      }
+      const methods = [];
+      if (user.totpEnabled) methods.push('totp');
+      if (user.emailMfaEnabled) methods.push('email');
+      const challenge = signMfaChallenge({
+        userId: user._id ?? user.id,
+        methods,
+        rememberDays: days,
+      });
+      res.cookie('mfa_challenge', challenge, authCookieOptions({
+        maxAgeMs: MFA_CHALLENGE_TTL_SEC * 1000,
+        path: '/api/auth',
+      }));
+      return res.json({ mfaRequired: true, methods });
+    }
+
+    await issueAuthCookies(req, res, user, { rememberDays: days });
+    res.json(serializeUser(user));
   })(req, res, next);
 });
+
+// POST /api/auth/refresh
+// Vérifie le cookie refresh_token, fait tourner le hash en DB et émet de
+// nouveaux cookies (rotation). Si invalide/expiré/révoqué → 401.
+router.post('/refresh', wrap(async (req, res) => {
+  const raw = req.cookies?.refresh_token;
+  if (!raw) return res.status(401).json({ message: 'Pas de refresh token' });
+  const db = req.app.locals.db;
+  const hash = hashRefreshToken(raw);
+  const record = await db.refreshTokens.findByHash(hash);
+  if (!record) {
+    clearAuthCookies(res);
+    return res.status(401).json({ message: 'Refresh token invalide' });
+  }
+  const user = await db.users.findById(record.userId);
+  if (!user) {
+    clearAuthCookies(res);
+    return res.status(401).json({ message: 'Utilisateur introuvable' });
+  }
+
+  // Rotation : nouveau token brut, on remplace le hash en DB et on refresh la
+  // date d'expiration sur la même TTL que celle d'origine (calculée depuis createdAt).
+  const ttl = record.expiresAt.getTime() - record.createdAt.getTime();
+  const { raw: newRaw, hash: newHash } = generateRefreshToken();
+  const newExpiresAt = new Date(Date.now() + ttl);
+  await db.refreshTokens.touchAndRotate(record._id, newHash, newExpiresAt);
+
+  const access = signAccessToken(user);
+  res.cookie('access_token', access, authCookieOptions({ maxAgeMs: ACCESS_TTL_SEC * 1000 }));
+  res.cookie('refresh_token', newRaw, authCookieOptions({
+    maxAgeMs: ttl,
+    path: REFRESH_COOKIE_PATH,
+  }));
+  res.json(serializeUser(user));
+}));
 
 // GET /api/auth/config
 // Indique au client si la connexion Google est disponible (clés configurées).
@@ -106,25 +178,77 @@ router.get('/config', (_req, res) => {
 router.get('/google', (req, res, next) => {
   if (!process.env.GOOGLE_CLIENT_ID) return res.redirect(`${CLIENT_URL}/login?error=google`);
   next();
-}, passport.authenticate('google', { scope: ['profile', 'email'] }));
+}, passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
 
 router.get('/google/callback',
-  passport.authenticate('google', { failureRedirect: `${CLIENT_URL}/login?error=google` }),
-  (_req, res) => res.redirect(CLIENT_URL),
+  passport.authenticate('google', { failureRedirect: `${CLIENT_URL}/login?error=google`, session: false }),
+  wrap(async (req, res) => {
+    if (!req.user) return res.redirect(`${CLIENT_URL}/login?error=google`);
+    await issueAuthCookies(req, res, req.user, { rememberDays: 30 });
+    res.redirect(CLIENT_URL);
+  }),
 );
 
 // POST /api/auth/logout
-router.post('/logout', (req, res) => {
-  req.logout(() => res.json({ message: 'Déconnecté' }));
-});
+// Révoque le refresh token courant en DB puis efface tous les cookies d'auth.
+router.post('/logout', wrap(async (req, res) => {
+  const raw = req.cookies?.refresh_token;
+  if (raw) {
+    const db = req.app.locals.db;
+    const record = await db.refreshTokens.findByHash(hashRefreshToken(raw));
+    if (record) await db.refreshTokens.revokeById(record._id, record.userId);
+  }
+  clearAuthCookies(res);
+  res.clearCookie('mfa_challenge', authCookieOptions({ path: '/api/auth' }));
+  res.json({ message: 'Déconnecté' });
+}));
 
 // GET /api/auth/me
-// Utilisé par AuthContext au montage du client pour savoir si une session existe.
-// Retourne 401 si non authentifié (le client affiche alors la page de login).
-router.get('/me', (req, res) => {
-  if (!req.isAuthenticated()) return res.status(401).json({ message: 'Non authentifié' });
+// Avec JWT, l'absence d'access valide retourne 401 — le client tente alors un
+// /refresh avant de basculer en mode déconnecté.
+router.get('/me', requireAuth, (req, res) => {
   res.json(serializeUser(req.user));
 });
+
+// GET /api/auth/sessions — liste les sessions actives de l'utilisateur courant.
+// Marque la session courante via `current: true` pour que le client puisse l'exclure
+// d'un "Déconnecter ailleurs".
+router.get('/sessions', requireAuth, wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  const records = await db.refreshTokens.findActive(req.user._id ?? req.user.id);
+  const currentHash = req.cookies?.refresh_token ? hashRefreshToken(req.cookies.refresh_token) : null;
+  res.json(records.map((r) => ({
+    _id: String(r._id ?? r.id),
+    userAgent: r.userAgent,
+    ip: r.ip,
+    createdAt: r.createdAt,
+    lastUsedAt: r.lastUsedAt,
+    expiresAt: r.expiresAt,
+    current: !!currentHash && r.tokenHash === currentHash,
+  })));
+}));
+
+router.delete('/sessions/:id', requireAuth, wrap(async (req, res) => {
+  const db = req.app.locals.db;
+  await db.refreshTokens.revokeById(req.params.id, req.user._id ?? req.user.id);
+  res.json({ message: 'Session révoquée' });
+}));
+
+router.post('/sessions/revoke-others', requireAuth, wrap(async (req, res) => {
+  const raw = req.cookies?.refresh_token;
+  const db = req.app.locals.db;
+  let exceptId = null;
+  if (raw) {
+    const current = await db.refreshTokens.findByHash(hashRefreshToken(raw));
+    exceptId = current?._id ?? null;
+  }
+  if (exceptId) {
+    await db.refreshTokens.revokeOthers(req.user._id ?? req.user.id, exceptId);
+  } else {
+    await db.refreshTokens.revokeAll(req.user._id ?? req.user.id);
+  }
+  res.json({ message: 'Autres sessions révoquées' });
+}));
 
 // PUT /api/auth/profile — met à jour les champs de profil de l'utilisateur connecté
 router.put('/profile', requireAuth, wrap(async (req, res) => {
@@ -231,11 +355,35 @@ router.post('/resend-verification', authLimiter, wrap(async (req, res) => {
   res.json(neutral);
 }));
 
+// POST /api/auth/forgot-password
+// Déclenche l'envoi d'un lien de réinitialisation. Répond toujours 200 avec un
+// message neutre pour éviter l'énumération d'adresses (un attaquant ne peut pas
+// déduire l'existence d'un compte à partir d'un succès/échec).
+// Les comptes Google (sans passwordHash) sont ignorés silencieusement : aucun
+// reset possible, ils doivent passer par Google.
+router.post('/forgot-password', authLimiter, wrap(async (req, res) => {
+  const neutral = { message: 'Si un compte existe pour cette adresse, un email a été envoyé.' };
+  const { email } = req.body ?? {};
+  if (!email || !EMAIL_RE.test(email)) return res.json(neutral);
+  const db = req.app.locals.db;
+  const user = await db.users.findByEmail(email.trim().toLowerCase());
+  if (!user || !user.passwordHash) return res.json(neutral);
+
+  const token = randomUUID();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+  await db.resetTokens.create(user._id ?? user.id, token, expiresAt, { type: 'password_reset' });
+  const resetUrl = `${CLIENT_URL}/reset-password?token=${token}`;
+  await mailer.sendPasswordResetEmail(user.email, resetUrl);
+  res.json(neutral);
+}));
+
 // GET /api/auth/reset-password/:token — vérifie la validité du token
 router.get('/reset-password/:token', wrap(async (req, res) => {
   const db = req.app.locals.db;
   const record = await db.resetTokens.findValid(req.params.token);
-  if (!record) return res.status(410).json({ message: 'Lien invalide ou expiré' });
+  if (!record || record.type !== 'password_reset') {
+    return res.status(410).json({ message: 'Lien invalide ou expiré' });
+  }
   res.json({ valid: true });
 }));
 
@@ -247,7 +395,11 @@ router.post('/reset-password/:token', wrap(async (req, res) => {
   }
   const db = req.app.locals.db;
   const record = await db.resetTokens.findValid(req.params.token);
-  if (!record) return res.status(410).json({ message: 'Lien invalide ou expiré' });
+  // Verrouille à 'password_reset' uniquement : un token email_verify ou
+  // password_change_cancel ne doit jamais pouvoir servir à fixer un nouveau pwd.
+  if (!record || record.type !== 'password_reset') {
+    return res.status(410).json({ message: 'Lien invalide ou expiré' });
+  }
 
   const passwordHash = await bcrypt.hash(password, 12);
   await db.users.setPassword(record.userId, passwordHash);
@@ -298,5 +450,7 @@ router.get('/cancel-password-change/:token', wrap(async (req, res) => {
   await db.resetTokens.markUsed(record.token);
   res.redirect(`${CLIENT_URL}/login?password_cancelled=1`);
 }));
+
+router.use('/mfa', mfaRouter);
 
 module.exports = router;

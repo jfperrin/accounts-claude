@@ -39,10 +39,10 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <main className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex items-center justify-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/30">
             <Wallet className="h-5 w-5 text-white" />
           </div>
           <span className="text-lg font-bold tracking-tight">Comptes</span>
@@ -70,6 +70,10 @@ export default function ResetPasswordPage() {
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   autoComplete="new-password"
+                  required
+                  minLength={8}
+                  aria-invalid={!!errorMsg}
+                  aria-describedby={errorMsg ? 'rp-error' : undefined}
                 />
               </div>
               <div className="space-y-1">
@@ -79,9 +83,14 @@ export default function ResetPasswordPage() {
                   value={form.confirm}
                   onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
                   autoComplete="new-password"
+                  required
+                  aria-invalid={!!errorMsg}
+                  aria-describedby={errorMsg ? 'rp-error' : undefined}
                 />
               </div>
-              {errorMsg && <p className="text-sm text-destructive">{errorMsg}</p>}
+              {errorMsg && (
+                <p id="rp-error" role="alert" className="text-sm text-destructive">{errorMsg}</p>
+              )}
               <Button type="submit" className="w-full" disabled={saving}>
                 {saving ? 'Enregistrement…' : 'Changer le mot de passe'}
               </Button>
@@ -98,6 +107,6 @@ export default function ResetPasswordPage() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }

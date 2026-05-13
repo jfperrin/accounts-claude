@@ -70,4 +70,28 @@ async function sendPasswordChangeEmail(to, cancelUrl) {
   });
 }
 
-module.exports = { sendPasswordResetEmail, sendVerificationEmail, sendEmailChangeEmail, sendPasswordChangeEmail };
+async function sendMfaCodeEmail(to, code, purpose) {
+  const titles = {
+    login:   'Votre code de connexion — Comptes',
+    setup:   'Activez le 2FA par email — Comptes',
+    disable: 'Confirmez la désactivation du 2FA — Comptes',
+  };
+  const intros = {
+    login:   'Voici votre code de connexion à usage unique :',
+    setup:   'Voici votre code pour activer le 2FA par email :',
+    disable: 'Voici votre code pour désactiver le 2FA :',
+  };
+  await send({
+    to,
+    subject: titles[purpose] ?? titles.login,
+    html: `
+      <p>Bonjour,</p>
+      <p>${intros[purpose] ?? intros.login}</p>
+      <p style="font-size:28px;font-weight:bold;letter-spacing:6px;font-family:monospace;text-align:center;margin:24px 0;color:#1e293b;">${code}</p>
+      <p>Ce code expire dans <strong>10 minutes</strong>.</p>
+      <p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email et changez votre mot de passe.</p>
+    `,
+  });
+}
+
+module.exports = { sendPasswordResetEmail, sendVerificationEmail, sendEmailChangeEmail, sendPasswordChangeEmail, sendMfaCodeEmail };

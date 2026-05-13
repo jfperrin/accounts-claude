@@ -19,7 +19,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <App />
         <PwaUpdatePrompt />
       </ThemeProvider>
-      <Toaster richColors position="top-right" />
+      {/* closeButton : permet la fermeture clavier (Tab + Enter). Sonner
+          expose déjà aria-live="polite" et role="status" sur la région. */}
+      <Toaster richColors position="top-right" closeButton />
     </AuthProvider>
   </React.StrictMode>
 );

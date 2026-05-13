@@ -161,3 +161,84 @@ describe('PUT /api/admin/users/:id — mise à jour de emailVerified', () => {
     expect(res.body.role).toBe('admin');
   });
 });
+
+describe('DELETE /api/admin/users/:id/mfa/* — révocation 2FA', () => {
+  let adminAgent;
+  let bobId;
+  beforeEach(async () => {
+    await createAdminUser(app, ADMIN.email, ADMIN.password);
+    adminAgent = request.agent(app);
+    await adminAgent.post('/api/auth/login').send(ADMIN);
+    const bob = await createVerifiedUser(app, BOB.email, BOB.password);
+    bobId = String(bob._id);
+    // Active les deux facteurs avec quelques recovery codes.
+    await app.locals.db.users.updateMfa(bobId, {
+      totpSecret: 'enc:placeholder',
+      totpEnabled: true,
+      emailMfaEnabled: true,
+      recoveryCodes: ['hash1', 'hash2'],
+    });
+  });
+
+  it('refuse sans session admin', async () => {
+    const res = await request(app).delete(`/api/admin/users/${bobId}/mfa/totp`);
+    expect(res.status).toBe(401);
+  });
+
+  it('refuse pour un user non admin', async () => {
+    const CHARLIE = { email: 'charlie@test.com', password: 'charliepass1' };
+    await createVerifiedUser(app, CHARLIE.email, CHARLIE.password);
+    const otherAgent = request.agent(app);
+    await otherAgent.post('/api/auth/login').send(CHARLIE);
+    const res = await otherAgent.delete(`/api/admin/users/${bobId}/mfa/totp`);
+    expect(res.status).toBe(403);
+  });
+
+  it('révoque TOTP et préserve les recovery codes si email MFA toujours actif', async () => {
+    const res = await adminAgent.delete(`/api/admin/users/${bobId}/mfa/totp`);
+    expect(res.status).toBe(200);
+    expect(res.body.totpEnabled).toBe(false);
+    expect(res.body.emailMfaEnabled).toBe(true);
+    const full = await app.locals.db.users.findByIdWithHash(bobId);
+    expect(full.totpSecret).toBeFalsy();
+    expect((full.recoveryCodes || []).length).toBe(2);
+  });
+
+  it('révoque email MFA et préserve les recovery codes si TOTP toujours actif', async () => {
+    const res = await adminAgent.delete(`/api/admin/users/${bobId}/mfa/email`);
+    expect(res.status).toBe(200);
+    expect(res.body.emailMfaEnabled).toBe(false);
+    expect(res.body.totpEnabled).toBe(true);
+    const full = await app.locals.db.users.findByIdWithHash(bobId);
+    expect((full.recoveryCodes || []).length).toBe(2);
+  });
+
+  it('purge les recovery codes quand on désactive le dernier facteur', async () => {
+    await adminAgent.delete(`/api/admin/users/${bobId}/mfa/email`);
+    await adminAgent.delete(`/api/admin/users/${bobId}/mfa/totp`);
+    const full = await app.locals.db.users.findByIdWithHash(bobId);
+    expect(full.totpEnabled).toBe(false);
+    expect(full.emailMfaEnabled).toBe(false);
+    expect((full.recoveryCodes || []).length).toBe(0);
+  });
+
+  it('retourne 404 pour un user inexistant', async () => {
+    const res = await adminAgent.delete('/api/admin/users/000000000000000000000000/mfa/totp');
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /api/admin/users — états 2FA présents', () => {
+  it('inclut totpEnabled et emailMfaEnabled pour chaque utilisateur', async () => {
+    await createAdminUser(app, ADMIN.email, ADMIN.password);
+    const adminAgent = request.agent(app);
+    await adminAgent.post('/api/auth/login').send(ADMIN);
+    const bob = await createVerifiedUser(app, BOB.email, BOB.password);
+    await app.locals.db.users.updateMfa(String(bob._id), { totpEnabled: true });
+
+    const res = await adminAgent.get('/api/admin/users');
+    const bobRow = res.body.find((u) => u.email === BOB.email);
+    expect(bobRow.totpEnabled).toBe(true);
+    expect(bobRow.emailMfaEnabled).toBe(false);
+  });
+});

@@ -294,6 +294,26 @@ describe('POST /api/operations/import', () => {
       const inserted = ops.find((o) => o.label === 'CARREFOUR LYON');
       expect(inserted).toBeDefined();
       expect(String(inserted.categoryId)).toBe(String(cat._id));
+      // Catégorie inférée à l'import → marquée 'auto'.
+      expect(inserted.categorySource).toBe('auto');
+    });
+
+    it("après une retouche manuelle, categorySource bascule en 'manual'", async () => {
+      const cat = (await agent.post('/api/categories').send({ label: 'Courses' })).body;
+      const other = (await agent.post('/api/categories').send({ label: 'Loisirs' })).body;
+      await agent.post('/api/operations').send({
+        label: 'CARREFOUR PARIS', amount: -45.10,
+        date: '2026-04-02T00:00:00.000Z', bankId,
+        categoryId: cat._id,
+      });
+      const buf = qifBuffer([{ label: 'CARREFOUR LYON', amount: -32.50, date: '20/04/2026' }]);
+      await importFile(buf);
+      const ops = (await agent.get('/api/operations').query({ startDate: '2026-04-01', endDate: '2026-04-30' })).body;
+      const auto = ops.find((o) => o.label === 'CARREFOUR LYON');
+      expect(auto.categorySource).toBe('auto');
+
+      const res = await agent.put(`/api/operations/${auto._id}`).send({ categoryId: other._id });
+      expect(res.body.categorySource).toBe('manual');
     });
   });
 });

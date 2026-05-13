@@ -8,6 +8,7 @@
 const router = require('express').Router();
 const wrap = require('../utils/asyncHandler');
 const { detectRecurringSuggestions } = require('../services/recurringDetectionService');
+const { detectTransferCandidates } = require('../services/transferDetectionService');
 
 // GET /api/recurring-operations → liste avec bankId populé { _id, label }, triée par libellé
 router.get('/', wrap(async (req, res) => {
@@ -29,7 +30,21 @@ router.get('/suggestions', wrap(async (req, res) => {
     banks.findByUser(userId),
   ]);
 
-  const suggestions = detectRecurringSuggestions(ops, recurring, dismissed);
+  // Un virement interne (deux jambes débit/crédit opposées entre deux banques)
+  // n'est jamais une vraie récurrente : on l'exclut des candidats. Deux passes :
+  //   1. transferId déjà posé (lien confirmé par l'utilisateur)
+  //   2. heuristique transferDetectionService sur les ops non liées
+  const transferPairs = detectTransferCandidates(ops, banksList);
+  const heuristicTransferIds = new Set();
+  for (const p of transferPairs) {
+    heuristicTransferIds.add(String(p.outOp._id));
+    heuristicTransferIds.add(String(p.inOp._id));
+  }
+  const opsForDetection = ops.filter(
+    (o) => !o.transferId && !heuristicTransferIds.has(String(o._id)),
+  );
+
+  const suggestions = detectRecurringSuggestions(opsForDetection, recurring, dismissed);
   // Populate le label de la banque pour l'affichage côté client.
   const bankById = new Map(banksList.map((b) => [String(b._id), b]));
   for (const s of suggestions) {
@@ -57,15 +72,42 @@ router.delete('/suggestions/dismiss/:key', wrap(async (req, res) => {
   res.status(204).end();
 }));
 
+// Valide les champs liés au virement interne. Renvoie un message d'erreur ou
+// `null` si l'entrée est cohérente. Pour un virement (toBankId posé) :
+//   - bankId et toBankId doivent être différents et exister pour l'utilisateur
+//   - amount doit être strictement positif (le sens est encodé par bankId/toBankId)
+//   - categoryId est forcé à null (un virement n'a pas de catégorie)
+async function validateTransfer(body, banksRepo, userId) {
+  if (!body.toBankId) return null;
+  if (!body.bankId) return 'bankId requis pour un virement';
+  if (String(body.bankId) === String(body.toBankId)) return 'Banque source et destination doivent être différentes';
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return 'Montant positif requis pour un virement';
+  const [from, to] = await Promise.all([
+    banksRepo.findById(body.bankId, userId),
+    banksRepo.findById(body.toBankId, userId),
+  ]);
+  if (!from || !to) return 'Banque introuvable';
+  return null;
+}
+
 // POST /api/recurring-operations → crée un nouveau modèle récurrent
 router.post('/', wrap(async (req, res) => {
-  const op = await req.app.locals.db.recurringOps.create({ ...req.body, userId: req.user._id });
+  const err = await validateTransfer(req.body, req.app.locals.db.banks, req.user._id);
+  if (err) return res.status(400).json({ message: err });
+  const data = { ...req.body, userId: req.user._id };
+  if (data.toBankId) data.categoryId = null; // un virement n'a pas de catégorie
+  const op = await req.app.locals.db.recurringOps.create(data);
   res.status(201).json(op);
 }));
 
 // PUT /api/recurring-operations/:id → mise à jour complète du modèle
 router.put('/:id', wrap(async (req, res) => {
-  const op = await req.app.locals.db.recurringOps.update(req.params.id, req.user._id, req.body);
+  const err = await validateTransfer(req.body, req.app.locals.db.banks, req.user._id);
+  if (err) return res.status(400).json({ message: err });
+  const data = { ...req.body };
+  if (data.toBankId) data.categoryId = null;
+  const op = await req.app.locals.db.recurringOps.update(req.params.id, req.user._id, data);
   if (!op) return res.status(404).json({ message: 'Introuvable' });
   res.json(op);
 }));

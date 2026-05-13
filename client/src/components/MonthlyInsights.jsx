@@ -39,7 +39,7 @@ export default function MonthlyInsights({
     for (const o of operations) {
       if (!o.categoryId) continue;
       const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
-      if (!cat || cat.kind === 'transfer') continue;
+      if (!cat) continue;
       if (cat.kind === 'credit') revenus += Math.max(0, o.amount);
       else depenses += Math.max(0, -o.amount);
     }
@@ -56,9 +56,8 @@ export default function MonthlyInsights({
         .filter((o) => {
           const d = dayjs(o.date);
           if (!(d.isBefore(cap) || d.isSame(cap))) return false;
-          if (!o.categoryId) return true;
-          const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
-          return !cat || cat.kind !== 'transfer';
+          if (o.transferId) return false;
+          return true;
         })
         .reduce((s, o) => s + o.amount, 0);
       const projectedAtEnd = totalCurrent + pending;
@@ -191,11 +190,6 @@ export default function MonthlyInsights({
     };
     const expenses = operations
       .filter((o) => o.amount < 0)
-      .filter((o) => {
-        if (!o.categoryId) return true;
-        const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
-        return !cat || cat.kind !== 'transfer';
-      })
       .filter((o) => !isFromRecurring(o))
       .sort((a, b) => a.amount - b.amount);
     if (expenses.length >= 5) {
@@ -221,7 +215,7 @@ export default function MonthlyInsights({
       for (const o of comparisonOps) {
         if (!o.categoryId) continue;
         const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
-        if (!cat || cat.kind === 'transfer') continue;
+        if (!cat) continue;
         const d = dayjs(o.date);
         if (d.isBefore(prevStart) || d.isAfter(prevEnd)) continue;
         if (cat.kind === 'credit') prevRevenus += Math.max(0, o.amount);
@@ -249,10 +243,6 @@ export default function MonthlyInsights({
     //    virements internes.
     let uncatTotal = 0; let totalVolume = 0; let uncatCount = 0;
     for (const o of operations) {
-      if (o.categoryId) {
-        const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
-        if (cat && cat.kind === 'transfer') continue;
-      }
       const abs = Math.abs(o.amount);
       totalVolume += abs;
       if (!o.categoryId) { uncatTotal += abs; uncatCount += 1; }
@@ -382,10 +372,7 @@ export default function MonthlyInsights({
       };
       const missing = recurring.filter((r) => {
         if (r.dayOfMonth > dayToday) return false;
-        if (r.categoryId) {
-          const cat = catById.get(String(r.categoryId?._id ?? r.categoryId));
-          if (cat && cat.kind === 'transfer') return false;
-        }
+        if (r.toBankId) return false; // virements récurrents ignorés (2 ops liées, gestion à part)
         const rBank = String(r.bankId?._id ?? r.bankId);
         return !operations.some((o) => {
           const oBank = String(o.bankId?._id ?? o.bankId);
@@ -412,7 +399,7 @@ export default function MonthlyInsights({
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-indigo-600" />
+          <Sparkles className="h-4 w-4 text-primary" />
           Analyse du mois
           <InfoTip>
             Synthèse automatique des points marquants de la période :
@@ -431,7 +418,7 @@ export default function MonthlyInsights({
       </div>
       {insights.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Rien à signaler — aucun point critique détecté sur la période.
+          Rien à signaler : aucun point critique détecté sur la période.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -446,7 +433,7 @@ function InsightItem({ severity, icon: Icon, title, message }) {
   const styles = {
     critical: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:border-rose-400/30 dark:text-rose-300',
     warning: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-amber-400/30 dark:text-amber-300',
-    info: 'border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:border-indigo-400/30 dark:text-indigo-300',
+    info: 'border-primary/30 bg-primary/10 text-primary',
     positive: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/30 dark:text-emerald-300',
   };
   return (

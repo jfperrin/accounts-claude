@@ -28,7 +28,7 @@ export default function PwaUpdatePrompt() {
       role="status"
       className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 shadow-lg"
     >
-      <RefreshCw className="h-4 w-4 text-indigo-600 shrink-0" />
+      <RefreshCw className="h-4 w-4 text-primary shrink-0" />
       <span className="text-sm">Une nouvelle version est disponible.</span>
       <Button size="sm" onClick={() => updateServiceWorker(true)}>
         Mettre à jour

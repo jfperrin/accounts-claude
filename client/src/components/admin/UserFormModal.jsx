@@ -9,6 +9,7 @@ const EMPTY = { email: '', password: '', role: 'user', emailVerified: false };
 
 export default function UserFormModal({ open, onClose, onSubmit, initial }) {
   const isEdit = !!initial;
+  const isGoogle = !!initial?.isGoogle;
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -41,9 +42,14 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
     }
     setSaving(true);
     try {
-      const payload = isEdit
-        ? { email: form.email, role: form.role, emailVerified: form.emailVerified }
-        : { email: form.email, password: form.password, role: form.role, emailVerified: form.emailVerified };
+      let payload;
+      if (!isEdit) {
+        payload = { email: form.email, password: form.password, role: form.role, emailVerified: form.emailVerified };
+      } else if (isGoogle) {
+        payload = { email: form.email, role: form.role };
+      } else {
+        payload = { email: form.email, role: form.role, emailVerified: form.emailVerified };
+      }
       await onSubmit(payload);
       onClose();
     } catch (err) {
@@ -62,7 +68,16 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="space-y-1">
             <Label htmlFor="uf-email">Email</Label>
-            <Input id="uf-email" type="email" value={form.email} onChange={set('email')} />
+            <Input
+              id="uf-email"
+              type="email"
+              value={form.email}
+              onChange={set('email')}
+              disabled={isGoogle}
+            />
+            {isGoogle && (
+              <p className="text-xs text-muted-foreground">Compte Google — email géré par Google.</p>
+            )}
           </div>
           {!isEdit && (
             <div className="space-y-1">
@@ -82,15 +97,17 @@ export default function UserFormModal({ open, onClose, onSubmit, initial }) {
               </SelectContent>
             </Select>
           </div>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.emailVerified}
-              onChange={(e) => setForm((f) => ({ ...f, emailVerified: e.target.checked }))}
-              className="h-4 w-4 rounded border-input text-indigo-600 focus:ring-indigo-500"
-            />
-            <span>Email vérifié</span>
-          </label>
+          {!isGoogle && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.emailVerified}
+                onChange={(e) => setForm((f) => ({ ...f, emailVerified: e.target.checked }))}
+                className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
+              />
+              <span>Email vérifié</span>
+            </label>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>

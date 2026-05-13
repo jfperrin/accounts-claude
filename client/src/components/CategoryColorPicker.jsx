@@ -35,15 +35,20 @@ export default function CategoryColorPicker({ color, onChange, size = 'sm' }) {
     };
     const escHandler = (e) => { if (e.key === 'Escape') setOpen(false); };
     const closeOnScrollResize = () => setOpen(false);
+    // Listeners passifs sur scroll/resize : le handler ne fait que fermer le
+    // popover, il ne preventDefault() jamais. Passer `passive: true` libère le
+    // scroll natif sur mobile (Vercel `client-passive-event-listeners`).
+    const scrollOpts = { passive: true, capture: true };
+    const resizeOpts = { passive: true };
     document.addEventListener('mousedown', handler);
     document.addEventListener('keydown', escHandler);
-    window.addEventListener('scroll', closeOnScrollResize, true);
-    window.addEventListener('resize', closeOnScrollResize);
+    window.addEventListener('scroll', closeOnScrollResize, scrollOpts);
+    window.addEventListener('resize', closeOnScrollResize, resizeOpts);
     return () => {
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('keydown', escHandler);
-      window.removeEventListener('scroll', closeOnScrollResize, true);
-      window.removeEventListener('resize', closeOnScrollResize);
+      window.removeEventListener('scroll', closeOnScrollResize, scrollOpts);
+      window.removeEventListener('resize', closeOnScrollResize, resizeOpts);
     };
   }, [open]);
 
@@ -67,18 +72,19 @@ export default function CategoryColorPicker({ color, onChange, size = 'sm' }) {
           style={{ top: pos.top, left: pos.left }}
         >
           <div className="mb-3 grid grid-cols-6 gap-1.5">
-            {CATEGORY_COLORS.map((c) => (
+            {CATEGORY_COLORS.map(({ hex, name }) => (
               <button
-                key={c}
+                key={hex}
                 type="button"
-                onClick={() => apply(c)}
-                className="h-6 w-6 rounded-full transition-transform hover:scale-110"
+                onClick={() => apply(hex)}
+                className="h-6 w-6 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                 style={{
-                  backgroundColor: c,
-                  outline: current.toLowerCase() === c.toLowerCase() ? `2px solid ${c}` : 'none',
+                  backgroundColor: hex,
+                  outline: current.toLowerCase() === hex.toLowerCase() ? `2px solid ${hex}` : 'none',
                   outlineOffset: '2px',
                 }}
-                aria-label={c}
+                aria-label={name}
+                aria-pressed={current.toLowerCase() === hex.toLowerCase()}
               />
             ))}
           </div>

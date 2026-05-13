@@ -1,0 +1,418 @@
+// Routes 2FA — préfixe /api/auth/mfa
+// Montées depuis routes/auth.js après authLimiter.
+
+const router = require('express').Router();
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
+const { generateSecret: totpGenerateSecret, verifySync: totpVerify, generateURI: totpURI } = require('otplib');
+const QRCode = require('qrcode');
+const wrap = require('../utils/asyncHandler');
+const requireAuth = require('../middleware/requireAuth');
+const cryptoBox = require('../utils/cryptoBox');
+const { generateEmailCode, generateRecoveryCodes } = require('../utils/mfaCodes');
+const mailer = require('../utils/mailer');
+
+const { verifyMfaChallenge, authCookieOptions } = require('../utils/tokens');
+const { issueAuthCookies } = require('../utils/issueAuth');
+
+const MFA_ISSUER = process.env.MFA_ISSUER || 'Comptes';
+const CODE_TTL_MS = 10 * 60 * 1000;
+const CHALLENGE_TTL_MS = 10 * 60 * 1000;
+const MAX_CHALLENGE_ATTEMPTS = 5;
+const MFA_CHALLENGE_COOKIE = 'mfa_challenge';
+const MFA_COOKIE_PATH = '/api/auth';
+// Lockout par utilisateur : après N échecs cumulés, on bloque toute tentative MFA
+// pendant LOCKOUT_MS. Le compteur est persisté en base (atomique via $inc / UPDATE SQLite),
+// donc résistant aux requêtes concurrentes et aux re-logins répétés.
+const USER_MAX_FAILURES = 10;
+const USER_LOCKOUT_MS = 60 * 60 * 1000;
+
+function isString(v, max = 256) {
+  return typeof v === 'string' && v.length > 0 && v.length <= max;
+}
+
+function isMfaLocked(user) {
+  return user?.mfaLockedUntil && new Date(user.mfaLockedUntil).getTime() > Date.now();
+}
+
+// Lit le challenge depuis le cookie mfa_challenge (JWT signé court-vie).
+// Retourne { userId, methods, rememberDays } ou null si absent/invalide/expiré.
+function getValidChallenge(req) {
+  const token = req.cookies?.[MFA_CHALLENGE_COOKIE];
+  if (!token) return null;
+  const decoded = verifyMfaChallenge(token);
+  if (!decoded?.sub) return null;
+  return {
+    userId: decoded.sub,
+    methods: decoded.methods || [],
+    rememberDays: decoded.rememberDays || 30,
+  };
+}
+
+function clearChallengeCookie(res) {
+  res.clearCookie(MFA_CHALLENGE_COOKIE, authCookieOptions({ path: MFA_COOKIE_PATH }));
+}
+
+// Incrémente le compteur d'échecs en base, et pose un verrou temporaire si on dépasse le seuil.
+async function recordMfaFailure(db, userId) {
+  const count = await db.users.incrementMfaFailures(userId);
+  if (count >= USER_MAX_FAILURES) {
+    await db.users.setMfaLock(userId, new Date(Date.now() + USER_LOCKOUT_MS));
+  }
+}
+
+// Rate limiter Express générique sur les routes MFA (30 req / 15min par IP).
+// Le rate-limit fin par user (1/60s sur send-email) est géré au cas par cas
+// via db.mfaCodes.countRecent dans chaque handler concerné.
+// En test (RATE_LIMIT_MAX élevé), on aligne le max pour ne pas bloquer la suite.
+const mfaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX ?? '30', 10) || 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.use(mfaLimiter);
+
+// Helpers ────────────────────────────────────────────────────────────────────
+
+// passwordHash est absent de req.user (exclu par findById via select('-passwordHash')).
+// On détecte un compte Google uniquement via googleId.
+function isLocalAccount(user) {
+  return !user.googleId;
+}
+
+async function rejectIfGoogle(req, res) {
+  if (!isLocalAccount(req.user)) {
+    res.status(400).json({ message: '2FA non disponible pour les comptes Google' });
+    return true;
+  }
+  return false;
+}
+
+// Vérifie un mot de passe. Renvoie l'objet user complet (avec hash) si OK, null sinon.
+async function verifyPassword(db, userId, password) {
+  if (!isString(password, 256)) return null;
+  const full = await db.users.findByIdWithHash(userId);
+  if (!full || !full.passwordHash) return null;
+  const ok = await bcrypt.compare(password, full.passwordHash);
+  return ok ? full : null;
+}
+
+// Génère un code 6 chiffres, le hash, l'insère, renvoie le code en clair pour envoi.
+async function issueEmailCode(db, userId, purpose) {
+  const code = generateEmailCode();
+  const codeHash = await bcrypt.hash(code, 10);
+  await db.mfaCodes.create({
+    userId, codeHash, purpose,
+    expiresAt: new Date(Date.now() + CODE_TTL_MS),
+  });
+  return code;
+}
+
+// Vérifie un code email. Marque le record `used` quoi qu'il arrive (un code = un essai).
+async function verifyEmailCode(db, userId, purpose, code) {
+  if (!isString(code, 32)) return false;
+  const record = await db.mfaCodes.findLatestValid({ userId, purpose });
+  if (!record) return false;
+  await db.mfaCodes.markUsed(record._id);
+  return bcrypt.compare(code, record.codeHash);
+}
+
+function verifyTotpCode(user, code) {
+  if (!isString(code, 32)) return false;
+  if (!user.totpEnabled || !user.totpSecret) return false;
+  try {
+    const secret = cryptoBox.decrypt(user.totpSecret);
+    return totpVerify({ secret, token: code }).valid;
+  } catch (_) {
+    return false;
+  }
+}
+
+// Vérifie + consomme un recovery code via une opération atomique côté DB.
+// Empêche la double consommation par 2 requêtes parallèles avec le même code.
+async function consumeRecoveryCode(db, user, code) {
+  if (!isString(code, 32)) return false;
+  for (const hash of user.recoveryCodes || []) {
+    if (await bcrypt.compare(code, hash)) {
+      return db.users.pullRecoveryCode(user._id ?? user.id, hash);
+    }
+  }
+  return false;
+}
+
+// POST /mfa/totp/setup
+// Step-up : exige le mot de passe pour empêcher un attaquant ayant hijacké la
+// session de reconfigurer/désactiver le TOTP sans connaître les credentials.
+router.post('/totp/setup', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const { password } = req.body ?? {};
+  if (!isString(password, 256)) return res.status(400).json({ message: 'Mot de passe requis' });
+  const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
+
+  const secret = totpGenerateSecret();
+  const encrypted = cryptoBox.encrypt(secret);
+  await db.users.updateMfa(userId, {
+    totpSecret: encrypted,
+    totpEnabled: false,
+  });
+  const otpauthUrl = totpURI({ label: req.user.email, issuer: MFA_ISSUER, secret });
+  const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+  res.json({ secret, otpauthUrl, qrCodeDataUrl });
+}));
+
+// POST /mfa/totp/enable
+// Vérifie un code TOTP initial, active totpEnabled, génère 10 recovery codes (renvoyés en clair une seule fois).
+router.post('/totp/enable', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const { code } = req.body ?? {};
+  if (!isString(code, 32)) return res.status(400).json({ message: 'Code requis' });
+  const db = req.app.locals.db;
+  const full = await db.users.findByIdWithHash(req.user._id ?? req.user.id);
+  if (!full.totpSecret) return res.status(400).json({ message: 'Aucun setup TOTP en attente' });
+  const secret = cryptoBox.decrypt(full.totpSecret);
+  if (!totpVerify({ secret, token: code }).valid) {
+    return res.status(401).json({ message: 'Code invalide' });
+  }
+  const recoveryPlain = generateRecoveryCodes();
+  const recoveryHashes = await Promise.all(recoveryPlain.map((c) => bcrypt.hash(c, 10)));
+  await db.users.updateMfa(full._id, {
+    totpEnabled: true,
+    recoveryCodes: recoveryHashes,
+  });
+  res.json({ recoveryCodes: recoveryPlain });
+}));
+
+// POST /mfa/totp/disable
+// Demande password + code (TOTP, email ou recovery). Purge les recovery codes si plus aucun facteur actif.
+router.post('/totp/disable', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const { password, code } = req.body ?? {};
+  if (!isString(password, 256) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'Mot de passe et code requis' });
+  }
+  const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
+
+  let codeOk = verifyTotpCode(full, code);
+  if (!codeOk && full.emailMfaEnabled) {
+    codeOk = await verifyEmailCode(db, full._id, 'disable', code);
+  }
+  if (!codeOk) {
+    codeOk = await consumeRecoveryCode(db, full, code);
+  }
+  if (!codeOk) return res.status(401).json({ message: 'Code invalide' });
+
+  const updates = { totpSecret: null, totpEnabled: false };
+  if (!full.emailMfaEnabled) updates.recoveryCodes = [];
+  await db.users.updateMfa(full._id, updates);
+  res.json({ message: 'TOTP désactivé' });
+}));
+
+// POST /mfa/email/setup
+// Envoie un code de test à l'email de l'utilisateur. Rate-limit 1/60s, 3/15min par user.
+router.post('/email/setup', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const recent60s = await db.mfaCodes.countRecent({ userId, purpose: 'setup', sinceMs: 60_000 });
+  if (recent60s > 0) return res.status(429).json({ message: 'Attendez avant de redemander un code' });
+  const recent15min = await db.mfaCodes.countRecent({ userId, purpose: 'setup', sinceMs: 15 * 60_000 });
+  if (recent15min >= 3) return res.status(429).json({ message: 'Trop de demandes, réessayez plus tard' });
+  const code = await issueEmailCode(db, userId, 'setup');
+  await mailer.sendMfaCodeEmail(req.user.email, code, 'setup');
+  res.json({ message: 'Code envoyé par email' });
+}));
+
+// POST /mfa/email/enable
+// Confirme un code reçu via /setup et active emailMfaEnabled.
+// Si aucun autre facteur n'était actif, génère aussi les recovery codes.
+router.post('/email/enable', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const { code } = req.body ?? {};
+  if (!isString(code, 32)) return res.status(400).json({ message: 'Code requis' });
+  const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const ok = await verifyEmailCode(db, userId, 'setup', code);
+  if (!ok) return res.status(401).json({ message: 'Code invalide' });
+
+  const full = await db.users.findByIdWithHash(userId);
+  const updates = { emailMfaEnabled: true };
+  let recoveryPlain;
+  if (!full.totpEnabled && (!full.recoveryCodes || full.recoveryCodes.length === 0)) {
+    recoveryPlain = generateRecoveryCodes();
+    updates.recoveryCodes = await Promise.all(recoveryPlain.map((c) => bcrypt.hash(c, 10)));
+  }
+  await db.users.updateMfa(userId, updates);
+  res.json({ message: 'Email MFA activé', ...(recoveryPlain && { recoveryCodes: recoveryPlain }) });
+}));
+
+// POST /mfa/email/disable
+router.post('/email/disable', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const { password, code } = req.body ?? {};
+  if (!isString(password, 256) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'Mot de passe et code requis' });
+  }
+  const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
+
+  let codeOk = verifyTotpCode(full, code);
+  if (!codeOk && full.emailMfaEnabled) {
+    codeOk = await verifyEmailCode(db, full._id, 'disable', code);
+  }
+  if (!codeOk) {
+    codeOk = await consumeRecoveryCode(db, full, code);
+  }
+  if (!codeOk) return res.status(401).json({ message: 'Code invalide' });
+
+  const updates = { emailMfaEnabled: false };
+  if (!full.totpEnabled) updates.recoveryCodes = [];
+  await db.users.updateMfa(full._id, updates);
+  res.json({ message: 'Email MFA désactivé' });
+}));
+
+// POST /mfa/email/disable/send
+// Envoie un code purpose='disable' pour permettre la désactivation via email.
+router.post('/email/disable/send', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const recent60s = await db.mfaCodes.countRecent({ userId, purpose: 'disable', sinceMs: 60_000 });
+  if (recent60s > 0) return res.status(429).json({ message: 'Attendez avant de redemander un code' });
+  const code = await issueEmailCode(db, userId, 'disable');
+  await mailer.sendMfaCodeEmail(req.user.email, code, 'disable');
+  res.json({ message: 'Code envoyé par email' });
+}));
+
+// POST /mfa/recovery/regenerate
+// Demande password + code 2FA actuel. Invalide les anciens, génère 10 nouveaux.
+router.post('/recovery/regenerate', requireAuth, wrap(async (req, res) => {
+  if (await rejectIfGoogle(req, res)) return;
+  const { password, code } = req.body ?? {};
+  if (!isString(password, 256) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'Mot de passe et code requis' });
+  }
+  const db = req.app.locals.db;
+  const userId = req.user._id ?? req.user.id;
+  const full = await verifyPassword(db, userId, password);
+  if (!full) return res.status(401).json({ message: 'Mot de passe incorrect' });
+  if (!full.totpEnabled && !full.emailMfaEnabled) {
+    return res.status(400).json({ message: 'Aucun 2FA actif' });
+  }
+
+  let codeOk = verifyTotpCode(full, code);
+  if (!codeOk && full.emailMfaEnabled) {
+    codeOk = await verifyEmailCode(db, full._id, 'login', code);
+  }
+  if (!codeOk) return res.status(401).json({ message: 'Code invalide' });
+
+  const plain = generateRecoveryCodes();
+  const hashes = await Promise.all(plain.map((c) => bcrypt.hash(c, 10)));
+  await db.users.updateMfa(full._id, { recoveryCodes: hashes });
+  res.json({ recoveryCodes: plain });
+}));
+
+// POST /mfa/challenge/send-email
+router.post('/challenge/send-email', wrap(async (req, res) => {
+  const ch = getValidChallenge(req);
+  if (!ch || !ch.methods.includes('email')) {
+    return res.status(401).json({ message: 'Aucun challenge en cours' });
+  }
+  const db = req.app.locals.db;
+  const recent60s = await db.mfaCodes.countRecent({ userId: ch.userId, purpose: 'login', sinceMs: 60_000 });
+  if (recent60s > 0) return res.status(429).json({ message: 'Attendez avant de redemander un code' });
+  const recent15min = await db.mfaCodes.countRecent({ userId: ch.userId, purpose: 'login', sinceMs: 15 * 60_000 });
+  if (recent15min >= 3) return res.status(429).json({ message: 'Trop de demandes, réessayez plus tard' });
+  const user = await db.users.findById(ch.userId);
+  if (!user) return res.status(401).json({ message: 'Aucun challenge en cours' });
+  const code = await issueEmailCode(db, ch.userId, 'login');
+  await mailer.sendMfaCodeEmail(user.email, code, 'login');
+  res.json({ message: 'Code envoyé' });
+}));
+
+// POST /mfa/challenge/verify
+// body { method, code }. method ∈ 'totp' | 'email' | 'recovery'.
+// Succès → efface le cookie mfa_challenge, émet access+refresh, renvoie l'user.
+router.post('/challenge/verify', wrap(async (req, res) => {
+  const ch = getValidChallenge(req);
+  if (!ch) return res.status(401).json({ message: 'Challenge expiré' });
+  const { method, code } = req.body ?? {};
+  if (!isString(method, 16) || !isString(code, 32)) {
+    return res.status(400).json({ message: 'method et code requis' });
+  }
+
+  const db = req.app.locals.db;
+  const full = await db.users.findByIdWithHash(ch.userId);
+  if (!full) {
+    clearChallengeCookie(res);
+    return res.status(401).json({ message: 'Challenge expiré' });
+  }
+
+  // Vérouillage persistant (résiste aux re-logins consécutifs).
+  if (isMfaLocked(full)) {
+    return res.status(423).json({
+      message: 'Trop de tentatives, compte temporairement verrouillé',
+      lockedUntil: full.mfaLockedUntil,
+    });
+  }
+
+  let ok = false;
+  if (method === 'totp')          ok = verifyTotpCode(full, code);
+  else if (method === 'email')    ok = await verifyEmailCode(db, ch.userId, 'login', code);
+  else if (method === 'recovery') ok = await consumeRecoveryCode(db, full, code);
+
+  if (!ok) {
+    const count = await db.users.incrementMfaFailures(ch.userId);
+    if (count >= 10) {
+      await db.users.setMfaLock(ch.userId, new Date(Date.now() + 60 * 60 * 1000));
+    }
+    // En cas d'échec répété, on purge le cookie pour forcer un nouveau login.
+    if (count % MAX_CHALLENGE_ATTEMPTS === 0) clearChallengeCookie(res);
+    return res.status(401).json({ message: 'Code invalide' });
+  }
+
+  clearChallengeCookie(res);
+  await db.users.resetMfaFailures(ch.userId);
+  const userForLogin = await db.users.findById(ch.userId);
+  await issueAuthCookies(req, res, userForLogin, { rememberDays: ch.rememberDays });
+  res.json({
+    _id:             userForLogin._id ?? userForLogin.id,
+    email:           userForLogin.email ?? null,
+    emailVerified:   userForLogin.emailVerified ?? false,
+    role:            userForLogin.role ?? 'user',
+    title:           userForLogin.title     ?? null,
+    firstName:       userForLogin.firstName ?? null,
+    lastName:        userForLogin.lastName  ?? null,
+    nickname:        userForLogin.nickname  ?? null,
+    avatarUrl:       userForLogin.avatarUrl ?? null,
+    acceptedToSAt:   userForLogin.acceptedToSAt ?? null,
+    totpEnabled:     !!userForLogin.totpEnabled,
+    emailMfaEnabled: !!userForLogin.emailMfaEnabled,
+    recoveryCodesRemaining: (userForLogin.recoveryCodes || []).length,
+  });
+}));
+
+// POST /mfa/challenge/cancel
+router.post('/challenge/cancel', (_req, res) => {
+  clearChallengeCookie(res);
+  res.json({ message: 'Challenge annulé' });
+});
+
+module.exports = {
+  router,
+  helpers: {
+    isLocalAccount, rejectIfGoogle, issueEmailCode, verifyEmailCode,
+    verifyTotpCode, consumeRecoveryCode, isMfaLocked, recordMfaFailure,
+    CODE_TTL_MS, CHALLENGE_TTL_MS, MAX_CHALLENGE_ATTEMPTS,
+    USER_MAX_FAILURES, USER_LOCKOUT_MS,
+  },
+};

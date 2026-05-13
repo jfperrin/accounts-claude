@@ -11,6 +11,10 @@ const schema = new Schema({
   date:     { type: Date, required: true },
   pointed:    { type: Boolean, default: false },
   categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+  // Provenance de la catégorie : 'auto' (inférée par hint à l'import),
+  // 'manual' (saisie/modifiée par l'utilisateur). null sans catégorie.
+  categorySource: { type: String, enum: ['auto', 'manual', null], default: null },
+  transferId: { type: String, default: null, index: true },
   bankId:     { type: Schema.Types.ObjectId, ref: 'Bank', required: true },
   userId:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });

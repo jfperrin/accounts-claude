@@ -13,6 +13,7 @@ export default function DbToggle() {
   const [info, setInfo] = useState(null);
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return undefined;
     let alive = true;
     client.get('/dev/db')
       .then((data) => { if (alive) setInfo(data); })
@@ -21,7 +22,7 @@ export default function DbToggle() {
     return () => { alive = false; };
   }, []);
 
-  if (!info?.dualMode) return null;
+  if (!import.meta.env.DEV || !info?.dualMode) return null;
 
   const switchTo = (backend) => {
     if (backend === info.current) return;

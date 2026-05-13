@@ -24,6 +24,8 @@ async function main() {
 
     await require('./utils/ensureAdmin')(sqliteRepos);
     await require('./utils/ensureAdmin')(mongoRepos);
+    await require('./utils/ensureDevUser')(sqliteRepos);
+    await require('./utils/ensureDevUser')(mongoRepos);
 
     db = createDualDb(sqliteRepos, mongoRepos);
     dualMode = true;
@@ -33,15 +35,33 @@ async function main() {
   } else if (isDev || !hasMongo) {
     db = require('./db/sqlite')();
     await require('./utils/ensureAdmin')(db);
+    await require('./utils/ensureDevUser')(db);
   } else {
     await require('./config/db')();
     db = require('./db/mongo');
     mongoUri = process.env.MONGODB_URI;
     await db.migrateLegacyCategoryFields();
     await require('./utils/ensureAdmin')(db);
+    await require('./utils/ensureDevUser')(db);
   }
 
   const app = createApp(db, mongoUri, { dualMode });
+
+  if (process.env.MFA_BYPASS_DEV === '1') {
+    console.warn('[security] MFA_BYPASS_DEV=1 : le second facteur est court-circuité au login. À NE JAMAIS utiliser en production.');
+  }
+
+  // Purge initiale + récurrente (1h) des codes MFA expirés + refresh tokens expirés.
+  // .unref() pour ne pas empêcher le process de s'arrêter proprement en dev.
+  const purge = async () => {
+    try { await app.locals.db.mfaCodes.deleteExpired(); }
+    catch (err) { console.warn('[purge] mfaCodes.deleteExpired failed:', err?.message); }
+    try { await app.locals.db.refreshTokens.deleteExpired(); }
+    catch (err) { console.warn('[purge] refreshTokens.deleteExpired failed:', err?.message); }
+  };
+  await purge();
+  setInterval(purge, 60 * 60 * 1000).unref();
+
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => console.log(`Server listening on :${PORT}`));
 }

@@ -1,8 +1,11 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-const Table = React.forwardRef(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
+// `wrapperClassName` override le wrapper par défaut. Utile pour les tableaux
+// qui veulent que leur <thead sticky> reste collé au scroll de la fenêtre :
+// dans ce cas, retirer `overflow-auto` (qui piège le sticky dans le wrapper).
+const Table = React.forwardRef(({ className, wrapperClassName, ...props }, ref) => (
+  <div className={wrapperClassName ?? 'relative w-full overflow-auto'}>
     <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
   </div>
 ));

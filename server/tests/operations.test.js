@@ -59,6 +59,51 @@ describe('GET /api/operations', () => {
     const res = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' });
     expect(res.body).toHaveLength(0);
   });
+
+  it('filtre par bankId', async () => {
+    const secondBankId = (await agent.post('/api/banks').send({ label: 'LCL', currentBalance: 500 })).body._id;
+    await agent.post('/api/operations').send(makeOp({ label: 'BNP-op' }));
+    await agent.post('/api/operations').send(makeOp({ label: 'LCL-op', bankId: secondBankId }));
+
+    const all = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' });
+    expect(all.body).toHaveLength(2);
+
+    const onlyBnp = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30', bankId });
+    expect(onlyBnp.body).toHaveLength(1);
+    expect(onlyBnp.body[0].label).toBe('BNP-op');
+
+    const onlyLcl = await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30', bankId: secondBankId });
+    expect(onlyLcl.body).toHaveLength(1);
+    expect(onlyLcl.body[0].label).toBe('LCL-op');
+  });
+});
+
+describe('GET /api/operations/unpointed', () => {
+  it('retourne 401 sans auth', async () => {
+    expect((await request(app).get('/api/operations/unpointed')).status).toBe(401);
+  });
+
+  it('renvoie uniquement les opérations non pointées, toutes dates confondues', async () => {
+    const { body: op2024 } = await agent.post('/api/operations').send(makeOp({ date: '2024-01-15T00:00:00.000Z', label: 'Vieux' }));
+    await agent.post('/api/operations').send(makeOp({ date: '2025-04-05T00:00:00.000Z', label: 'Récent' }));
+    await agent.patch(`/api/operations/${op2024._id}/point`); // pointe le vieux
+
+    const res = await agent.get('/api/operations/unpointed');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].label).toBe('Récent');
+  });
+
+  it("n'expose pas les non pointées des autres utilisateurs", async () => {
+    const bob = request.agent(app);
+    await createVerifiedUser(app, 'bob@test.com', 'pass1234');
+    await bob.post('/api/auth/login').send({ email: 'bob@test.com', password: 'pass1234' });
+    const bobBank = (await bob.post('/api/banks').send({ label: 'Bob', currentBalance: 0 })).body._id;
+    await bob.post('/api/operations').send({ label: 'Bob', amount: -10, date: '2025-04-05T00:00:00.000Z', bankId: bobBank });
+
+    const res = await agent.get('/api/operations/unpointed');
+    expect(res.body).toHaveLength(0);
+  });
 });
 
 describe('PATCH /api/operations/:id/point', () => {
@@ -112,6 +157,56 @@ describe('POST /api/operations/generate-recurring', () => {
     expect((await agent.post('/api/operations/generate-recurring').send({ month: 13, year: 2025 })).status).toBe(400);
     expect((await agent.post('/api/operations/generate-recurring').send({})).status).toBe(400);
   });
+
+  it('ne génère que les récurrentes listées via recurringIds', async () => {
+    const list = (await agent.get('/api/recurring-operations')).body;
+    const loyerId = list.find((r) => r.label === 'Loyer')._id;
+    const res = await agent.post('/api/operations/generate-recurring').send({
+      month: 4, year: 2025, recurringIds: [loyerId],
+    });
+    expect(res.body.imported).toBe(1);
+    const ops = (await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' })).body;
+    expect(ops).toHaveLength(1);
+    expect(ops[0].label).toBe('Loyer');
+  });
+
+  it('recurringIds vide → aucune importée', async () => {
+    const res = await agent.post('/api/operations/generate-recurring').send({
+      month: 4, year: 2025, recurringIds: [],
+    });
+    expect(res.body.imported).toBe(0);
+  });
+});
+
+describe('GET /api/operations/recurring-preview', () => {
+  beforeEach(async () => {
+    await agent.post('/api/recurring-operations').send({
+      label: 'Loyer', amount: -800, dayOfMonth: 5, bankId,
+    });
+    await agent.post('/api/recurring-operations').send({
+      label: 'Salaire', amount: 2500, dayOfMonth: 28, bankId,
+    });
+  });
+
+  it('retourne la date cible et alreadyImported=false avant génération', async () => {
+    const res = await agent.get('/api/operations/recurring-preview').query({ month: 4, year: 2025 });
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(2);
+    expect(res.body.items.every((it) => it.alreadyImported === false)).toBe(true);
+    const loyer = res.body.items.find((it) => it.date === '2025-04-05');
+    expect(loyer).toBeTruthy();
+  });
+
+  it('marque alreadyImported=true après génération', async () => {
+    await agent.post('/api/operations/generate-recurring').send({ month: 4, year: 2025 });
+    const res = await agent.get('/api/operations/recurring-preview').query({ month: 4, year: 2025 });
+    expect(res.body.items.every((it) => it.alreadyImported === true)).toBe(true);
+  });
+
+  it('rejette month/year invalides', async () => {
+    expect((await agent.get('/api/operations/recurring-preview').query({ month: 0, year: 2025 })).status).toBe(400);
+    expect((await agent.get('/api/operations/recurring-preview')).status).toBe(400);
+  });
 });
 
 describe('POST /api/operations', () => {
@@ -132,6 +227,17 @@ describe('POST /api/operations', () => {
     const res = await agent.post('/api/operations').send(makeOp({ categoryId: cat._id }));
     expect(String(res.body.categoryId)).toBe(String(cat._id));
   });
+
+  it("marque categorySource='manual' à la création avec catégorie", async () => {
+    const cat = (await agent.post('/api/categories').send({ label: 'Logement' })).body;
+    const res = await agent.post('/api/operations').send(makeOp({ categoryId: cat._id }));
+    expect(res.body.categorySource).toBe('manual');
+  });
+
+  it('laisse categorySource null sans catégorie', async () => {
+    const res = await agent.post('/api/operations').send(makeOp());
+    expect(res.body.categorySource ?? null).toBeNull();
+  });
 });
 
 describe('PUT /api/operations/:id', () => {
@@ -148,6 +254,21 @@ describe('PUT /api/operations/:id', () => {
     const { body: op } = await agent.post('/api/operations').send(makeOp());
     const res = await agent.put(`/api/operations/${op._id}`).send({ categoryId: cat._id });
     expect(String(res.body.categoryId)).toBe(String(cat._id));
+  });
+
+  it("PUT categoryId → categorySource='manual'", async () => {
+    const cat = (await agent.post('/api/categories').send({ label: 'Loisirs' })).body;
+    const { body: op } = await agent.post('/api/operations').send(makeOp());
+    const res = await agent.put(`/api/operations/${op._id}`).send({ categoryId: cat._id });
+    expect(res.body.categorySource).toBe('manual');
+  });
+
+  it('PUT categoryId=null → categorySource null', async () => {
+    const cat = (await agent.post('/api/categories').send({ label: 'Loisirs' })).body;
+    const { body: op } = await agent.post('/api/operations').send(makeOp({ categoryId: cat._id }));
+    expect(op.categorySource).toBe('manual');
+    const res = await agent.put(`/api/operations/${op._id}`).send({ categoryId: null });
+    expect(res.body.categorySource ?? null).toBeNull();
   });
 
   it("retourne 404 si l'opération appartient à un autre utilisateur", async () => {
@@ -176,5 +297,87 @@ describe('DELETE /api/operations/:id', () => {
     await bob.delete(`/api/operations/${op._id}`);
     const ops = (await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' })).body;
     expect(ops).toHaveLength(1);
+  });
+});
+
+describe('POST /api/operations/bulk-point', () => {
+  it('bascule plusieurs opérations à pointed=true', async () => {
+    const a = (await agent.post('/api/operations').send(makeOp({ label: 'A' }))).body;
+    const b = (await agent.post('/api/operations').send(makeOp({ label: 'B' }))).body;
+    const c = (await agent.post('/api/operations').send(makeOp({ label: 'C' }))).body;
+    expect(a.pointed).toBe(false);
+
+    const res = await agent.post('/api/operations/bulk-point').send({ ids: [a._id, b._id], pointed: true });
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toBe(2);
+
+    const all = (await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' })).body;
+    expect(all.find((o) => o._id === a._id).pointed).toBe(true);
+    expect(all.find((o) => o._id === b._id).pointed).toBe(true);
+    expect(all.find((o) => o._id === c._id).pointed).toBe(false);
+  });
+
+  it('dépointe (pointed=false) un lot', async () => {
+    const a = (await agent.post('/api/operations').send(makeOp({ pointed: true }))).body;
+    expect(a.pointed).toBe(true);
+    const res = await agent.post('/api/operations/bulk-point').send({ ids: [a._id], pointed: false });
+    expect(res.body.updated).toBe(1);
+    const all = (await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' })).body;
+    expect(all.find((o) => o._id === a._id).pointed).toBe(false);
+  });
+
+  it('rejette payload invalide', async () => {
+    expect((await agent.post('/api/operations/bulk-point').send({ ids: [], pointed: true })).status).toBe(400);
+    expect((await agent.post('/api/operations/bulk-point').send({ ids: ['x'] })).status).toBe(400);
+  });
+
+  it("n'affecte pas les opérations d'autres utilisateurs", async () => {
+    const bob = request.agent(app);
+    await createVerifiedUser(app, 'bob@test.com', 'pass1234');
+    await bob.post('/api/auth/login').send({ email: 'bob@test.com', password: 'pass1234' });
+    const mine = (await agent.post('/api/operations').send(makeOp())).body;
+    const res = await bob.post('/api/operations/bulk-point').send({ ids: [mine._id], pointed: true });
+    expect(res.body.updated).toBe(0);
+  });
+});
+
+describe('POST /api/operations/bulk-delete', () => {
+  it('supprime plusieurs opérations', async () => {
+    const a = (await agent.post('/api/operations').send(makeOp({ label: 'A' }))).body;
+    const b = (await agent.post('/api/operations').send(makeOp({ label: 'B' }))).body;
+    const c = (await agent.post('/api/operations').send(makeOp({ label: 'C' }))).body;
+
+    const res = await agent.post('/api/operations/bulk-delete').send({ ids: [a._id, b._id] });
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(2);
+
+    const all = (await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' })).body;
+    expect(all).toHaveLength(1);
+    expect(all[0]._id).toBe(c._id);
+  });
+
+  it('supprime les 2 jambes quand on cible un virement', async () => {
+    const dest = (await agent.post('/api/banks').send({ label: 'LCL', currentBalance: 0 })).body;
+    const t = (await agent.post('/api/operations/transfer').send({
+      fromBankId: bankId, toBankId: dest._id, amount: 100, date: '2025-04-15T00:00:00.000Z',
+    })).body;
+    const [out] = t;
+    const res = await agent.post('/api/operations/bulk-delete').send({ ids: [out._id] });
+    expect(res.body.deleted).toBe(2);
+    const all = (await agent.get('/api/operations').query({ startDate: '2025-04-01', endDate: '2025-04-30' })).body;
+    expect(all).toHaveLength(0);
+  });
+
+  it('rejette ids vide', async () => {
+    expect((await agent.post('/api/operations/bulk-delete').send({ ids: [] })).status).toBe(400);
+  });
+
+  it("n'affecte pas les opérations d'autres utilisateurs", async () => {
+    const bob = request.agent(app);
+    await createVerifiedUser(app, 'bob@test.com', 'pass1234');
+    await bob.post('/api/auth/login').send({ email: 'bob@test.com', password: 'pass1234' });
+    const mine = (await agent.post('/api/operations').send(makeOp())).body;
+    const res = await bob.post('/api/operations/bulk-delete').send({ ids: [mine._id] });
+    expect(res.body.deleted).toBe(0);
   });
 });

@@ -6,7 +6,10 @@ import { list, RECURRING_CHANGED } from '@/api/recurringOperations';
 // effectuées depuis une autre page comme le dashboard ou la page récurrentes).
 export function useRecurringOperations() {
   const [recurring, setRecurring] = useState([]);
-  const reload = useCallback(() => list().then(setRecurring).catch(() => {}), []);
+  const reload = useCallback(
+    () => list().then(setRecurring).catch(() => {}),
+    [],
+  );
 
   useEffect(() => {
     reload();

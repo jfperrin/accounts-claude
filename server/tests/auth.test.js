@@ -55,11 +55,11 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(401);
   });
 
-  // express-session v1.19+ sérialise le cookie avec Expires= (date UTC), pas Max-Age=.
-  // On calcule la durée restante en secondes depuis l'attribut Expires.
-  function sessionMaxAge(res) {
+  // Le refresh_token porte désormais la durée choisie par l'utilisateur (rememberDays).
+  // L'access_token reste fixe à 15 min (TTL JWT).
+  function refreshMaxAge(res) {
     const cookies = res.headers['set-cookie'] ?? [];
-    const c = cookies.find(s => s.startsWith('connect.sid='));
+    const c = cookies.find(s => s.startsWith('refresh_token='));
     if (!c) return null;
     const expiresMatch = c.match(/Expires=([^;]+)/i);
     if (expiresMatch) return Math.round((new Date(expiresMatch[1]).getTime() - Date.now()) / 1000);
@@ -68,41 +68,41 @@ describe('POST /api/auth/login', () => {
   }
 
   function expectMaxAge(res, expectedSeconds) {
-    const maxAge = sessionMaxAge(res);
+    const maxAge = refreshMaxAge(res);
     expect(maxAge).not.toBeNull();
     expect(maxAge).toBeGreaterThan(expectedSeconds - 5);
     expect(maxAge).toBeLessThanOrEqual(expectedSeconds);
   }
 
-  it('pose un cookie de session avec une durée de 1 jour quand rememberDays=1', async () => {
+  it('pose un cookie refresh_token avec une durée de 1 jour quand rememberDays=1', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 1 });
     expect(res.status).toBe(200);
     expectMaxAge(res, 24 * 60 * 60);
   });
 
-  it('pose un cookie de session avec une durée de 30 jours quand rememberDays=30', async () => {
+  it('pose un cookie refresh_token avec une durée de 30 jours quand rememberDays=30', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
     expect(res.status).toBe(200);
     expectMaxAge(res, 30 * 24 * 60 * 60);
   });
 
-  it('pose un cookie de session avec une durée de 365 jours quand rememberDays=365', async () => {
+  it('pose un cookie refresh_token avec une durée de 365 jours quand rememberDays=365', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 365 });
     expect(res.status).toBe(200);
     expectMaxAge(res, 365 * 24 * 60 * 60);
   });
 
-  it('pose un cookie de session avec une durée de 30 jours par défaut si rememberDays absent', async () => {
+  it('pose un cookie refresh_token avec une durée de 30 jours par défaut si rememberDays absent', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ email: ALICE.email, password: ALICE.password });
     expect(res.status).toBe(200);
     expectMaxAge(res, 30 * 24 * 60 * 60);
   });
 
-  it('pose un cookie de session avec une durée de 30 jours par défaut si rememberDays invalide', async () => {
+  it('pose un cookie refresh_token avec une durée de 30 jours par défaut si rememberDays invalide', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);
     const res = await request(app).post('/api/auth/login').send({ ...ALICE, rememberDays: 999 });
     expect(res.status).toBe(200);
@@ -209,6 +209,49 @@ describe('POST /api/auth/resend-verification', () => {
   it('retourne 200 sans session (route publique, pas d\'énumération)', async () => {
     const res = await request(app).post('/api/auth/resend-verification');
     expect(res.status).toBe(200);
+  });
+});
+
+describe('POST /api/auth/forgot-password', () => {
+  it('retourne 200 neutre même pour un email inconnu (anti-énumération)', async () => {
+    const res = await request(app).post('/api/auth/forgot-password').send({ email: 'ghost@test.com' });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/si un compte/i);
+  });
+
+  it('retourne 200 neutre pour un compte Google (pas de pwd local)', async () => {
+    await app.locals.db.users.create({ email: 'g@test.com', googleId: 'g1', emailVerified: true });
+    const res = await request(app).post('/api/auth/forgot-password').send({ email: 'g@test.com' });
+    expect(res.status).toBe(200);
+    // Aucun token créé : le compte Google n'a pas de pwd à reset.
+    const PasswordResetToken = require('../models/PasswordResetToken');
+    const count = await PasswordResetToken.countDocuments({ type: 'password_reset' });
+    expect(count).toBe(0);
+  });
+
+  it('crée un token password_reset et envoie un email pour un compte local', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const res = await request(app).post('/api/auth/forgot-password').send({ email: ALICE.email });
+    expect(res.status).toBe(200);
+    const PasswordResetToken = require('../models/PasswordResetToken');
+    const tokens = await PasswordResetToken.find({ type: 'password_reset' });
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('rejette un token autre que password_reset sur /reset-password', async () => {
+    // On simule un token email_verify : il ne doit pas pouvoir servir à set le pwd.
+    const user = await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const token = 'fake-token-' + Date.now();
+    await app.locals.db.resetTokens.create(
+      user._id,
+      token,
+      new Date(Date.now() + 60_000),
+      { type: 'email_verify' },
+    );
+    const res = await request(app).post(`/api/auth/reset-password/${token}`)
+      .send({ password: 'newpass123' });
+    expect(res.status).toBe(410);
   });
 });
 

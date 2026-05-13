@@ -2,6 +2,7 @@ node_modules/
 server/.env
 dist/
 .DS_Store
+.claude/
 .idea/
 server/dev.db
 server/dev.db-shm
@@ -9,3 +10,5 @@ server/dev.db-wal
 .worktrees/
 /server/uploads/avatars/
 /client/.eslintcache
+/*.png
+/.playwright-mcp/

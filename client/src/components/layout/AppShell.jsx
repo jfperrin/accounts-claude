@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, ListOrdered, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal, HelpCircle } from 'lucide-react';
+import { Home, ListOrdered, Building2, RefreshCw, LogOut, ChevronLeft, ChevronRight, Wallet, UserCircle, ShieldCheck, Tag, MoreHorizontal, HelpCircle, Settings } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from '@/lib/utils';
 import Footer from '@/components/layout/Footer';
 import ThemeToggle from '@/components/ThemeToggle';
+import CommandPalette from '@/components/CommandPalette';
 import DbToggle from '@/components/DbToggle';
 
 export default function AppShell() {
@@ -24,6 +25,7 @@ export default function AppShell() {
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Opérations récurrentes' },
     { key: '/categories', icon: Tag, label: 'Catégories' },
+    { key: '/settings', icon: Settings, label: 'Réglages' },
     { key: '/help', icon: HelpCircle, label: 'Aide' },
     ...(isAdmin ? [{ key: '/admin', icon: ShieldCheck, label: 'Administration' }] : []),
   ];
@@ -38,6 +40,7 @@ export default function AppShell() {
     { key: '/banks', icon: Building2, label: 'Banques' },
     { key: '/recurring', icon: RefreshCw, label: 'Récurrents' },
     { key: '/categories', icon: Tag, label: 'Catégories' },
+    { key: '/settings', icon: Settings, label: 'Réglages' },
     { key: '/help', icon: HelpCircle, label: 'Aide' },
   ];
   const moreActive = BOTTOM_MORE.some((t) => t.key === pathname);
@@ -49,6 +52,14 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-background">
+
+      {/* Skip-to-content : caché par défaut, visible au focus clavier. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground focus:shadow-lg"
+      >
+        Aller au contenu principal
+      </a>
 
       {/* ── Sidebar desktop uniquement ── */}
       <aside
@@ -62,7 +73,7 @@ export default function AppShell() {
           'flex items-center gap-3 border-b border-white/10 py-4',
           collapsed ? 'justify-center px-0' : 'px-5'
         )}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary shadow-lg shadow-primary/40">
             <Wallet className="h-4 w-4 text-white" />
           </div>
           {!collapsed && (
@@ -79,7 +90,7 @@ export default function AppShell() {
               className={cn(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 pathname === key
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-slate-400 hover:bg-white/10 hover:text-white',
                 collapsed && 'justify-center px-0'
               )}
@@ -110,7 +121,7 @@ export default function AppShell() {
 
           {/* Logo — mobile uniquement */}
           <div className="flex items-center gap-2 md:hidden">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
               <Wallet className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="text-sm font-bold tracking-tight text-foreground">Comptes</span>
@@ -150,12 +161,14 @@ export default function AppShell() {
         </header>
 
         {/* Contenu — padding bas extra sur mobile pour éviter la bottom nav */}
-        <main className="flex-1 p-2 pb-24 sm:p-4 md:p-6 md:pb-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 p-2 pb-24 sm:p-4 md:p-6 md:pb-6 focus:outline-none">
           <Outlet />
         </main>
 
         <Footer className="hidden md:block" />
       </div>
+
+      <CommandPalette />
 
       {/* ── Bottom navigation mobile uniquement ── */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden border-t border-border bg-card">
@@ -168,7 +181,7 @@ export default function AppShell() {
               onClick={() => navigate(key)}
               className={cn(
                 'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
-                active ? 'text-indigo-600' : 'text-slate-400'
+                active ? 'text-primary' : 'text-slate-400'
               )}
             >
               <Icon className={cn('h-5 w-5', active && 'stroke-[2.5]')} />
@@ -183,14 +196,14 @@ export default function AppShell() {
               type="button"
               className={cn(
                 'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
-                moreActive ? 'text-indigo-600' : 'text-slate-400'
+                moreActive ? 'text-primary' : 'text-slate-400'
               )}
             >
               <MoreHorizontal className={cn('h-5 w-5', moreActive && 'stroke-[2.5]')} />
               Plus
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="center" sideOffset={8} className="min-w-[10rem]">
+          <DropdownMenuContent side="top" align="center" sideOffset={8} className="min-w-40">
             {BOTTOM_MORE.map(({ key, icon: Icon, label }) => (
               <DropdownMenuItem key={key} onClick={() => navigate(key)}>
                 <Icon className="h-4 w-4" /> {label}
@@ -208,7 +221,7 @@ export default function AppShell() {
               onClick={() => navigate(key)}
               className={cn(
                 'flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 py-3 text-[11px] font-semibold transition-colors',
-                active ? 'text-indigo-600' : 'text-slate-400'
+                active ? 'text-primary' : 'text-slate-400'
               )}
             >
               <Icon className={cn('h-5 w-5', active && 'stroke-[2.5]')} />

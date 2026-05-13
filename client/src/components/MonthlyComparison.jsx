@@ -4,11 +4,10 @@ import { CalendarRange } from 'lucide-react';
 import { cn, formatEur } from '@/lib/utils';
 import InfoTip from '@/components/InfoTip';
 
-function aggregate(operations, start, end, transferCatIds) {
+function aggregate(operations, start, end) {
   let revenues = 0;
   let expenses = 0;
   for (const o of operations) {
-    if (o.categoryId && transferCatIds.has(String(o.categoryId?._id ?? o.categoryId))) continue;
     const d = dayjs(o.date);
     if (d.isBefore(start) || d.isAfter(end)) continue;
     if (o.amount >= 0) revenues += o.amount;
@@ -17,13 +16,10 @@ function aggregate(operations, start, end, transferCatIds) {
   return { revenues, expenses, net: revenues - expenses };
 }
 
-export default function MonthlyComparison({ operations, categories = [], monthOffset = 0 }) {
+export default function MonthlyComparison({ operations, monthOffset = 0 }) {
   const {
     current, previous, currentLabel, previousLabel, rangeLabel,
   } = useMemo(() => {
-    const transferCatIds = new Set(
-      categories.filter((c) => c.kind === 'transfer').map((c) => String(c._id)),
-    );
     const sel = dayjs().add(monthOffset, 'month');
     const prev = sel.subtract(1, 'month');
     const today = dayjs().endOf('day');
@@ -46,26 +42,26 @@ export default function MonthlyComparison({ operations, categories = [], monthOf
     }
 
     return {
-      current: aggregate(operations, curStart, curEnd, transferCatIds),
-      previous: aggregate(operations, prevStart, prevEnd, transferCatIds),
+      current: aggregate(operations, curStart, curEnd),
+      previous: aggregate(operations, prevStart, prevEnd),
       currentLabel: sel.format('MMM YYYY'),
       previousLabel: prev.format('MMM YYYY'),
       rangeLabel: isCurrentMonth ? `du 1 au ${today.date()}` : 'mois plein',
     };
-  }, [operations, categories, monthOffset]);
+  }, [operations, monthOffset]);
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <CalendarRange className="h-4 w-4 text-indigo-600" />
+          <CalendarRange className="h-4 w-4 text-primary" />
           <span className="capitalize">{currentLabel}</span>
           <span className="text-muted-foreground font-normal">vs</span>
           <span className="capitalize">{previousLabel}</span>
           <InfoTip>
             Comparaison du mois sélectionné avec le précédent. Sur le
             mois en cours, on s'arrête à aujourd'hui et on confronte au
-            même quantième du mois d'avant — sinon mois pleins. Les
+            même quantième du mois d'avant, sinon mois pleins. Les
             transferts internes sont exclus. La couleur de la variation
             indique si elle est favorable (vert) ou non (rose).
           </InfoTip>
@@ -94,8 +90,8 @@ function Cell({ label, current, previous, positiveIsGood, signed }) {
       <div className={cn(
         'text-[11px] tabular-nums',
         same && 'text-muted-foreground',
-        !same && better && 'text-emerald-600 dark:text-emerald-400',
-        !same && !better && 'text-rose-600 dark:text-rose-400',
+        !same && better && 'text-credit',
+        !same && !better && 'text-debit',
       )}>
         {same
           ? '='

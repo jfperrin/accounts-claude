@@ -1,18 +1,13 @@
-import { useEffect, useState, useCallback } from 'react';
-import { list } from '@/api/operations';
+import { useCallback, useEffect, useState } from 'react';
+import { listUnpointed } from '@/api/operations';
 
-// Toutes les opérations non pointées (toutes dates confondues).
-// On charge sur une plage volontairement large et on filtre côté client :
-// suffisant pour les volumes attendus, et pas besoin d'endpoint dédié.
-const ALL_START = '1900-01-01';
-const ALL_END = '2099-12-31';
-
+// Endpoint dédié côté serveur : pas de filtrage client, pas de bornes de dates
+// arbitraires (1900–2099) — le serveur renvoie directement les non pointées.
 export function useUnpointedOperations() {
   const [operations, setOperations] = useState([]);
 
   const reload = useCallback(
-    () => list({ startDate: ALL_START, endDate: ALL_END })
-      .then((all) => setOperations(all.filter((o) => !o.pointed))),
+    () => listUnpointed().then(setOperations).catch(() => {}),
     [],
   );
 

@@ -1,19 +1,19 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { Pencil, Trash2, ChevronLeft, ChevronRight, Repeat, Repeat2, Search, ArrowUp, ArrowDown, ArrowUpDown, X } from 'lucide-react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
+import { Pencil, Trash2, Repeat, Repeat2, ArrowUp, ArrowDown, ArrowUpDown, ArrowLeftRight, Link2, Unlink2, Check } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
-const DELETE_REVEAL = 88;
-const EDIT_REVEAL = 160;
+const POINT_REVEAL = 88;
+const ACTION_WIDTH = 80;
 const DRAG_THRESHOLD = 6;
 
 function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, children }) {
@@ -24,6 +24,10 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
   const moved = useRef(false);
   const draggingRef = useRef(false);
   const axis = useRef(null);
+
+  const showRecurring = !!onMakeRecurring && !op.transferId;
+  const actionsCount = 2 + (showRecurring ? 1 : 0);
+  const actionsReveal = ACTION_WIDTH * actionsCount;
 
   const onPointerDown = (e) => {
     if (e.target.closest('button, [role="switch"], [role="combobox"]')) return;
@@ -44,24 +48,29 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
     }
     if (axis.current !== 'h') return;
     let next = startOffset.current + dx;
-    next = Math.max(-DELETE_REVEAL, Math.min(EDIT_REVEAL, next));
+    next = Math.max(-actionsReveal, Math.min(POINT_REVEAL, next));
     setOffset(next);
   };
   const onPointerUp = () => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     setDragging(false);
-    if (offset > EDIT_REVEAL / 2) setOffset(EDIT_REVEAL);
-    else if (offset < -DELETE_REVEAL / 2) setOffset(-DELETE_REVEAL);
+    if (offset > POINT_REVEAL / 2) setOffset(POINT_REVEAL);
+    else if (offset < -actionsReveal / 2) setOffset(-actionsReveal);
     else setOffset(0);
     setTimeout(() => { moved.current = false; }, 0);
   };
 
   const handleClick = (e) => {
     if (moved.current) { e.stopPropagation(); return; }
-    if (offset !== 0) { setOffset(0); e.stopPropagation(); return; }
-    if (!e.target.closest('button, [role="switch"], [role="combobox"]')) {
-      onPoint(op._id);
+    if (offset !== 0) { setOffset(0); e.stopPropagation(); }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Escape' && offset !== 0) {
+      e.preventDefault();
+      setOffset(0);
     }
   };
 
@@ -72,38 +81,49 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
       <div className="absolute inset-y-0 left-0 flex">
         <button
           type="button"
+          onClick={() => { close(); onPoint(op._id); }}
+          className="flex flex-col items-center justify-center gap-0.5 bg-emerald-600 px-3 text-white text-[10px] font-medium"
+          style={{ width: POINT_REVEAL }}
+        >
+          <Check className="h-4 w-4" />
+          {op.pointed ? 'Dépointer' : 'Pointer'}
+        </button>
+      </div>
+      <div className="absolute inset-y-0 right-0 flex">
+        <button
+          type="button"
           onClick={() => { close(); onEdit(op); }}
-          className="flex flex-col items-center justify-center gap-0.5 bg-indigo-500 px-3 text-white text-[10px] font-medium"
-          style={{ width: EDIT_REVEAL / 2 }}
+          className="flex flex-col items-center justify-center gap-0.5 bg-primary px-3 text-primary-foreground text-[10px] font-medium"
+          style={{ width: ACTION_WIDTH }}
         >
           <Pencil className="h-4 w-4" />
           Éditer
         </button>
-        {onMakeRecurring && (
+        {showRecurring && (
           <button
             type="button"
             onClick={() => { close(); onMakeRecurring(op); }}
-            className="flex flex-col items-center justify-center gap-0.5 bg-violet-500 px-3 text-white text-[10px] font-medium"
-            style={{ width: EDIT_REVEAL / 2 }}
+            className="flex flex-col items-center justify-center gap-0.5 bg-slate-600 px-3 text-white text-[10px] font-medium"
+            style={{ width: ACTION_WIDTH }}
           >
             <Repeat2 className="h-4 w-4" />
             Récurrente
           </button>
         )}
-      </div>
-      <div className="absolute inset-y-0 right-0 flex">
         <button
           type="button"
           onClick={() => { close(); onDelete(op._id); }}
           className="flex flex-col items-center justify-center gap-0.5 bg-rose-600 px-3 text-white text-[10px] font-medium"
-          style={{ width: DELETE_REVEAL }}
+          style={{ width: ACTION_WIDTH }}
         >
           <Trash2 className="h-4 w-4" />
           Supprimer
         </button>
       </div>
       <div
+        tabIndex={0}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -114,7 +134,8 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
           touchAction: 'pan-y',
         }}
         className={cn(
-          'relative border border-border px-2 py-2 cursor-pointer',
+          'relative border border-border px-2 py-2',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
           op.pointed ? 'bg-muted text-muted-foreground' : 'bg-card',
         )}
       >
@@ -124,18 +145,20 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
   );
 }
 
-const PAGE_SIZES = [20, 50, 100, 200];
-const DEFAULT_PAGE_SIZE = 50;
+// Hauteur estimée d'une row desktop (px). Le virtualizer mesure ensuite la
+// hauteur réelle de chaque row rendue via ref → ResizeObserver.
+const ROW_ESTIMATE = 56;
 
-export default function OperationsTable({ operations, categories = [], banks = [], recurring = [], onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onFilterStateChange }) {
+export default function OperationsTable({
+  operations, categories = [], recurring = [],
+  onPoint, onEdit, onDelete, onCategoryChange, onMakeRecurring, onLinkTransfer, onUnlinkTransfer,
+  selectedIds, onToggleSelect, onToggleSelectAll,
+}) {
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [page, setPage] = useState(1);
-  const [query, setQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [bankFilter, setBankFilter] = useState('all');
   const [sortKey, setSortKey] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
+  const headerCheckboxRef = useRef(null);
+  const selectable = !!(selectedIds && onToggleSelect && onToggleSelectAll);
 
   const toggleSort = (key) => {
     if (sortKey === key) {
@@ -144,26 +167,24 @@ export default function OperationsTable({ operations, categories = [], banks = [
       setSortKey(key);
       setSortDir(key === 'label' ? 'asc' : 'desc');
     }
-    setPage(1);
   };
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return operations.filter((op) => {
-      if (q && !op.label?.toLowerCase().includes(q)) return false;
-      if (bankFilter !== 'all') {
-        const opBank = String(op.bankId?._id ?? op.bankId);
-        if (opBank !== bankFilter) return false;
-      }
-      if (categoryFilter === 'all') return true;
-      if (categoryFilter === 'none') return !op.categoryId;
-      return op.categoryId === categoryFilter;
-    });
-  }, [operations, query, categoryFilter, bankFilter]);
+  const selectionStats = useMemo(() => {
+    if (!selectable) return { selected: 0, all: false };
+    let selected = 0;
+    for (const o of operations) if (selectedIds.has(o._id)) selected++;
+    return { selected, all: selected > 0 && selected === operations.length };
+  }, [selectable, selectedIds, operations]);
+
+  useEffect(() => {
+    if (!selectable || !headerCheckboxRef.current) return;
+    const { selected } = selectionStats;
+    headerCheckboxRef.current.indeterminate = selected > 0 && selected < operations.length;
+  }, [selectable, selectionStats, operations.length]);
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1;
-    const arr = [...filtered];
+    const arr = [...operations];
     arr.sort((a, b) => {
       if (sortKey === 'amount') return (a.amount - b.amount) * dir;
       if (sortKey === 'label') return a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }) * dir;
@@ -173,22 +194,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
       return (a.pointed === b.pointed) ? 0 : (a.pointed ? 1 : -1);
     });
     return arr;
-  }, [filtered, sortKey, sortDir]);
-
-  useEffect(() => { setPage(1); }, [query, categoryFilter, bankFilter]);
-
-  // Remonte au parent l'état des filtres (count + somme signée) pour qu'il
-  // puisse compléter le titre de la table quand un filtre est actif.
-  const filteredSum = useMemo(
-    () => filtered.reduce((s, o) => s + o.amount, 0),
-    [filtered],
-  );
-  useEffect(() => {
-    if (!onFilterStateChange) return;
-    const active = query.trim() !== '' || categoryFilter !== 'all' || bankFilter !== 'all';
-    onFilterStateChange({ active, count: filtered.length, sum: filteredSum });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredSum, filtered.length, query, categoryFilter, bankFilter]);
+  }, [operations, sortKey, sortDir]);
 
   const sortIcon = (k) => {
     if (sortKey !== k) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
@@ -212,16 +218,34 @@ export default function OperationsTable({ operations, categories = [], banks = [
   };
 
   const total = sorted.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // Si la page courante dépasse le nombre de pages (après suppression d'op,
-  // changement de mois, ou augmentation de pageSize), on revient à la dernière.
+  // Virtualisation par fenêtre : c'est la page entière qui scrolle, le tableau
+  // n'a plus de conteneur scrollable. Permet au <TableHeader sticky top-0> de
+  // rester collé au sommet de la fenêtre pendant le scroll page.
+  // scrollMargin = offsetTop du container, recalculé après mount + au resize.
+  const tableScrollRef = useRef(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const start = (page - 1) * pageSize;
-  const rows = sorted.slice(start, start + pageSize);
+    const update = () => setScrollMargin(tableScrollRef.current?.offsetTop ?? 0);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  const rowVirtualizer = useWindowVirtualizer({
+    count: sorted.length,
+    estimateSize: () => ROW_ESTIMATE,
+    overscan: 8,
+    scrollMargin,
+    getItemKey: (i) => sorted[i]._id,
+  });
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+  // Avec useWindowVirtualizer, item.start est relatif à la page : on retire
+  // scrollMargin pour avoir le padding intra-tableau.
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start - scrollMargin : 0;
+  const paddingBottom = virtualItems.length > 0
+    ? totalSize - (virtualItems[virtualItems.length - 1].end - scrollMargin)
+    : 0;
 
   const confirmDelete = () => {
     onDelete(deleteTarget);
@@ -230,75 +254,28 @@ export default function OperationsTable({ operations, categories = [], banks = [
 
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un libellé…"
-            className="pl-8 pr-8 h-9"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Effacer"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {categories.length > 0 && (
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-9 w-40 sm:w-48" aria-label="Filtrer par catégorie">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes catégories</SelectItem>
-              <SelectItem value="none">— Sans catégorie</SelectItem>
-              <CategorySelectItems categories={categories} />
-            </SelectContent>
-          </Select>
-        )}
-        {banks.length > 1 && (
-          <Select value={bankFilter} onValueChange={setBankFilter}>
-            <SelectTrigger className="h-9 w-32 sm:w-40" aria-label="Filtrer par banque">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toutes banques</SelectItem>
-              {banks.map((b) => (
-                <SelectItem key={b._id} value={String(b._id)}>{b.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <div className="md:hidden flex items-center gap-1">
-          <Select value={sortKey} onValueChange={(v) => { setSortKey(v); setPage(1); }}>
-            <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="date">Date</SelectItem>
-              <SelectItem value="label">Libellé</SelectItem>
-              <SelectItem value="amount">Montant</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9"
-            aria-label={sortDir === 'asc' ? 'Croissant' : 'Décroissant'}
-            onClick={() => { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); setPage(1); }}
-          >
-            {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
-          </Button>
-        </div>
+      <div className="md:hidden mb-3 flex items-center justify-end gap-1">
+        <Select value={sortKey} onValueChange={setSortKey}>
+          <SelectTrigger className="h-9 w-32" aria-label="Trier par"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="date">Date</SelectItem>
+            <SelectItem value="label">Libellé</SelectItem>
+            <SelectItem value="amount">Montant</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-9 w-9"
+          aria-label={sortDir === 'asc' ? 'Croissant' : 'Décroissant'}
+          onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+        >
+          {sortDir === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+        </Button>
       </div>
 
       <div className="md:hidden flex flex-col gap-2">
-        {rows.map((op) => (
+        {sorted.map((op) => (
           <SwipeableCard
             key={op._id}
             op={op}
@@ -319,7 +296,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
                       ? 'h-auto w-fit border-0 bg-transparent p-0 shadow-none focus:ring-0 [&>svg]:hidden'
                       : 'h-6 w-full max-w-32 border-dashed text-xs text-muted-foreground'}>
                       {op.categoryId ? (
-                        <CategoryBadge categoryId={op.categoryId} categories={categories} />
+                        <CategoryBadge categoryId={op.categoryId} categories={categories} source={op.categorySource} />
                       ) : (
                         <SelectValue placeholder="Catégorie…" />
                       )}
@@ -331,27 +308,41 @@ export default function OperationsTable({ operations, categories = [], banks = [
                   </Select>
                 )}
               </div>
-              <span className={cn('text-sm font-semibold shrink-0', op.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
+              <span className={cn('text-sm font-semibold shrink-0', amountClass(op.amount))}>
                 {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
               </span>
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               {isFromRecurring(op) && (
                 <span title="Opération récurrente" className="shrink-0">
-                  <Repeat className="h-3 w-3 text-violet-500" />
+                  <Repeat className="h-3 w-3 text-slate-500 dark:text-slate-400" />
                 </span>
               )}
               <span className="text-xs text-muted-foreground truncate min-w-0 flex-1">{op.label}</span>
-              <Switch checked={op.pointed} onCheckedChange={() => onPoint(op._id)} />
             </div>
           </SwipeableCard>
         ))}
       </div>
 
-      <div className="hidden md:block">
-      <Table>
-        <TableHeader>
+      <div
+        ref={tableScrollRef}
+        className="hidden md:block rounded-md border border-border"
+      >
+      <Table wrapperClassName="relative w-full">
+        <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_var(--border)]">
           <TableRow>
+            {selectable && (
+              <TableHead className="w-8 text-center">
+                <input
+                  ref={headerCheckboxRef}
+                  type="checkbox"
+                  checked={selectionStats.all}
+                  onChange={onToggleSelectAll}
+                  aria-label="Sélectionner toutes les opérations visibles"
+                  className="h-4 w-4 cursor-pointer accent-primary"
+                />
+              </TableHead>
+            )}
             <TableHead>
               <button type="button" onClick={() => toggleSort('date')} className="inline-flex items-center gap-1 hover:text-foreground">
                 Date {sortIcon('date')}
@@ -373,24 +364,68 @@ export default function OperationsTable({ operations, categories = [], banks = [
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((op) => (
+          {paddingTop > 0 && (
+            <tr aria-hidden="true"><td colSpan={selectable ? 7 : 6} style={{ height: paddingTop, padding: 0, border: 0 }} /></tr>
+          )}
+          {virtualItems.map((virtualRow) => {
+            const op = sorted[virtualRow.index];
+            const isSelected = selectable && selectedIds.has(op._id);
+            return (
             <TableRow
               key={op._id}
-              className={cn(op.pointed && 'opacity-50', 'md:cursor-default cursor-pointer active:opacity-70')}
-              onClick={(e) => {
-                // Sur mobile uniquement : clic sur la ligne pointe/dépointe
-                if (window.innerWidth < 768 && !e.target.closest('button, [role="switch"], [role="combobox"]')) {
+              ref={rowVirtualizer.measureElement}
+              data-index={virtualRow.index}
+              data-state={isSelected ? 'selected' : undefined}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                // Ignore les combinaisons avec Cmd/Ctrl (laisse passer Cmd+K etc.)
+                // et les modifiers usuels. Ignore aussi si la cible est un champ.
+                if (e.metaKey || e.ctrlKey || e.altKey) return;
+                const tag = e.target.tagName;
+                if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+                if (e.key === 'p' || e.key === 'P') {
+                  e.preventDefault();
                   onPoint(op._id);
+                } else if (e.key === 'e' || e.key === 'E') {
+                  e.preventDefault();
+                  onEdit(op);
+                } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.preventDefault();
+                  setDeleteTarget(op._id);
+                } else if (selectable && (e.key === 'x' || e.key === 'X' || e.key === ' ')) {
+                  e.preventDefault();
+                  onToggleSelect(op._id);
                 }
               }}
+              className={cn(
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
+                op.pointed && 'opacity-50',
+                isSelected && 'bg-muted/40',
+              )}
             >
+              {selectable && (
+                <TableCell className="w-8 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleSelect(op._id)}
+                    aria-label={`Sélectionner ${op.label}`}
+                    className="h-4 w-4 cursor-pointer accent-primary"
+                  />
+                </TableCell>
+              )}
               <TableCell className="text-muted-foreground">{dayjs(op.date).format('DD/MM/YYYY')}</TableCell>
               <TableCell>
                 <div className="flex flex-col gap-1">
                   <span className="inline-flex items-center gap-1.5 font-medium">
+                    {op.transferId && (
+                      <span title="Virement entre banques" className="shrink-0">
+                        <ArrowLeftRight className="h-3.5 w-3.5 text-primary" />
+                      </span>
+                    )}
                     {isFromRecurring(op) && (
                       <span title="Opération récurrente" className="shrink-0">
-                        <Repeat className="h-3.5 w-3.5 text-violet-500" />
+                        <Repeat className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                       </span>
                     )}
                     {op.label}
@@ -404,7 +439,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
                         ? 'h-auto w-fit border-0 bg-transparent p-0 shadow-none focus:ring-0 [&>svg]:hidden'
                         : 'h-6 w-36 border-dashed text-xs text-muted-foreground'}>
                         {op.categoryId ? (
-                          <CategoryBadge categoryId={op.categoryId} categories={categories} />
+                          <CategoryBadge categoryId={op.categoryId} categories={categories} source={op.categorySource} />
                         ) : (
                           <SelectValue placeholder="Catégorie…" />
                         )}
@@ -420,7 +455,7 @@ export default function OperationsTable({ operations, categories = [], banks = [
               <TableCell>
                 <Badge variant="secondary">{op.bankId?.label}</Badge>
               </TableCell>
-              <TableCell className={cn('text-right font-semibold', op.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400')}>
+              <TableCell className={cn('text-right font-semibold', amountClass(op.amount))}>
                 {op.amount > 0 ? '+' : ''}{formatEur(op.amount)}
               </TableCell>
               <TableCell className="text-center">
@@ -428,12 +463,28 @@ export default function OperationsTable({ operations, categories = [], banks = [
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-1">
-                  {onMakeRecurring && (
+                  {onMakeRecurring && !op.transferId && (
                     <Button variant="ghost" size="icon" aria-label="convertir en récurrente"
-                      className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50"
+                      className="text-primary hover:bg-primary/10"
                       onClick={(e) => { e.stopPropagation(); onMakeRecurring(op); }}
                       title="Convertir en récurrente">
                       <Repeat2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {onLinkTransfer && !op.transferId && (
+                    <Button variant="ghost" size="icon" aria-label="lier comme virement interbanque"
+                      className="text-muted-foreground hover:text-primary"
+                      onClick={(e) => { e.stopPropagation(); onLinkTransfer(op); }}
+                      title="Lier comme virement interbanque">
+                      <Link2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {onUnlinkTransfer && op.transferId && (
+                    <Button variant="ghost" size="icon" aria-label="délier le virement"
+                      className="text-muted-foreground hover:text-debit"
+                      onClick={(e) => { e.stopPropagation(); onUnlinkTransfer(op); }}
+                      title="Délier le virement">
+                      <Unlink2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                   <Button variant="ghost" size="icon" aria-label="éditer" onClick={(e) => { e.stopPropagation(); onEdit(op); }}>
@@ -446,57 +497,20 @@ export default function OperationsTable({ operations, categories = [], banks = [
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
+          {paddingBottom > 0 && (
+            <tr aria-hidden="true"><td colSpan={selectable ? 7 : 6} style={{ height: paddingBottom, padding: 0, border: 0 }} /></tr>
+          )}
         </TableBody>
       </Table>
       </div>
 
-      {/* Pagination — toujours visible (le sélecteur de taille reste utile même
-          quand il n'y a qu'une seule page). */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <span>Lignes par page</span>
-          <Select
-            value={String(pageSize)}
-            onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
-          >
-            <SelectTrigger className="h-8 w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZES.map((n) => (
-                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {total > 0 && (
+        <div className="mt-2 text-right text-xs text-muted-foreground tabular-nums">
+          {total} opération{total > 1 ? 's' : ''}
         </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-muted-foreground">
-            {total === 0 ? '0' : `${start + 1}–${Math.min(start + pageSize, total)} sur ${total}`}
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="page précédente"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="page suivante"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
+      )}
 
       <DeleteConfirmDialog
         open={!!deleteTarget}

@@ -1,7 +1,7 @@
 import { memo, useState, useEffect } from 'react';
 import { Building2, Pencil, Check } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { cn, formatEur } from '@/lib/utils';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 
 // BankCard affiche pour une banque :
 //   - Solde actuel (currentBalance)         → éditable via inline input
@@ -30,9 +30,9 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
       {/* Mobile : une ligne compacte. Tap sur le crayon pour révéler/éditer le solde actuel. */}
       <div className="sm:hidden">
         <div className="flex items-center gap-2 px-3 py-2">
-          <Building2 className="h-5 w-5 text-indigo-600 shrink-0" />
+          <Building2 className="h-5 w-5 text-primary shrink-0" />
           <span className="text-sm font-semibold truncate flex-1 min-w-0">{bank.label}</span>
-          <span className={cn('text-sm font-bold whitespace-nowrap', projected >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+          <span className={cn('text-sm font-bold whitespace-nowrap', amountClass(projected))}>
             {formatEur(projected)}
           </span>
           <button
@@ -51,6 +51,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
               <>
                 <input
                   type="number"
+                  inputMode="decimal"
                   autoFocus
                   step="0.01"
                   value={draft ?? ''}
@@ -59,7 +60,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
                   onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                   className="h-7 flex-1 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
-                <button type="button" onClick={handleSave} className="text-emerald-600">
+                <button type="button" onClick={handleSave} className="text-credit">
                   <Check className="h-4 w-4" />
                 </button>
               </>
@@ -83,7 +84,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
       {/* Desktop : carte verticale d'origine. */}
       <div className="hidden sm:block p-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Building2 className="h-4 w-4 text-indigo-600" />
+          <Building2 className="h-4 w-4 text-primary" />
           {bank.label}
         </div>
         <Separator className="my-3" />
@@ -95,6 +96,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
               <>
                 <input
                   type="number"
+                  inputMode="decimal"
                   autoFocus
                   role="spinbutton"
                   step="0.01"
@@ -104,7 +106,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
                   onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                   className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
-                <button type="button" onClick={handleSave} className="text-emerald-600 hover:text-emerald-700">
+                <button type="button" onClick={handleSave} className="text-credit hover:opacity-80">
                   <Check className="h-4 w-4" />
                 </button>
               </>
@@ -126,7 +128,7 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
 
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prévisionnel</p>
-          <span className={cn('text-2xl font-bold', projected >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+          <span className={cn('text-2xl font-bold tabular-nums', amountClass(projected))}>
             {formatEur(projected)}
           </span>
         </div>
@@ -138,27 +140,43 @@ const BankCard = memo(function BankCard({ bank, onSaveBalance }) {
 export default function BankBalances({ banks, onSaveBalance }) {
   // Total prévisionnel toutes banques confondues — somme des projectedBalance.
   const totalProjected = banks.reduce((s, b) => s + (b.projectedBalance ?? 0), 0);
+  const unpointed = banks.reduce((s, b) => s + ((b.projectedBalance ?? 0) - (b.currentBalance ?? 0)), 0);
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-      {banks.map((bank) => (
-        <BankCard key={bank._id} bank={bank} onSaveBalance={onSaveBalance} />
-      ))}
+    <div className="space-y-3 sm:space-y-4">
       {banks.length > 1 && (
         <div
           data-testid="total-card"
-          className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/30"
+          className="rounded-xl bg-primary shadow-lg shadow-primary/30 px-5 py-4 sm:px-7 sm:py-6"
         >
-          <div className="sm:hidden flex items-center gap-2 px-3 py-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-indigo-200 flex-1">Total prévisionnel</span>
-            <span className="text-sm font-extrabold text-white whitespace-nowrap">{formatEur(totalProjected)}</span>
-          </div>
-          <div className="hidden sm:block p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-200">Total prévisionnel</p>
-            <span className="text-2xl font-extrabold text-white">{formatEur(totalProjected)}</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
+                Total prévisionnel
+              </span>
+              <span className="text-xs text-primary-foreground/70">
+                sur {banks.length} banques
+                {Math.abs(unpointed) > 0.005 && (
+                  <>
+                    {' · '}
+                    <span className="tabular-nums">
+                      {unpointed > 0 ? '+' : ''}{formatEur(unpointed)} à pointer
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+            <span className="text-3xl sm:text-4xl font-extrabold tabular-nums leading-none text-primary-foreground">
+              {formatEur(totalProjected)}
+            </span>
           </div>
         </div>
       )}
+      <div className="grid grid-cols-1 gap-2 sm:gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {banks.map((bank) => (
+          <BankCard key={bank._id} bank={bank} onSaveBalance={onSaveBalance} />
+        ))}
+      </div>
     </div>
   );
 }

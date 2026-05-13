@@ -10,6 +10,7 @@
 //  - findOneAndUpdate avec { returnDocument: 'after' } retourne le document mis à jour
 //  - Le code d'erreur 11000 (duplicate key) est natif MongoDB pour la contrainte d'unicité
 
+const { randomUUID } = require('crypto');
 const mongoose = require('mongoose');
 const Bank = require('../models/Bank');
 const User = require('../models/User');
@@ -19,6 +20,8 @@ const PasswordResetToken = require('../models/PasswordResetToken');
 const Category = require('../models/Category');
 const CategoryHint = require('../models/CategoryHint');
 const DismissedRecurringSuggestion = require('../models/DismissedRecurringSuggestion');
+const MfaEmailCode = require('../models/MfaEmailCode');
+const RefreshToken = require('../models/RefreshToken');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -35,14 +38,14 @@ const users = {
     User.findByIdAndUpdate(
       id,
       { $set: { title, firstName, lastName, nickname } },
-      { new: true },
+      { returnDocument: 'after' },
     ).select('-passwordHash'),
 
   updateEmail: (id, email) =>
-    User.findByIdAndUpdate(id, { $set: { email } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { email } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   updateAvatar: (id, avatarUrl) =>
-    User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { avatarUrl } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   findAll: () =>
     User.find({}).select('-passwordHash').sort({ createdAt: -1 }),
@@ -51,22 +54,59 @@ const users = {
     User.findByIdAndUpdate(
       id,
       { $set: { email, role, ...(emailVerified !== undefined && { emailVerified }) } },
-      { new: true },
+      { returnDocument: 'after' },
     ).select('-passwordHash'),
 
   deleteUser: (id) => User.findByIdAndDelete(id),
 
   setPassword: (id, passwordHash) =>
-    User.findByIdAndUpdate(id, { $set: { passwordHash } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { passwordHash } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   setEmailVerified: (id) =>
-    User.findByIdAndUpdate(id, { $set: { emailVerified: true } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { emailVerified: true } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   applyPendingEmail: (id, email) =>
-    User.findByIdAndUpdate(id, { $set: { email, emailVerified: true } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { email, emailVerified: true } }, { returnDocument: 'after' }).select('-passwordHash'),
 
   acceptToS: (id) =>
-    User.findByIdAndUpdate(id, { $set: { acceptedToSAt: new Date() } }, { new: true }).select('-passwordHash'),
+    User.findByIdAndUpdate(id, { $set: { acceptedToSAt: new Date() } }, { returnDocument: 'after' }).select('-passwordHash'),
+
+  updateMfa: (id, fields) => {
+    const $set = {};
+    if (Object.prototype.hasOwnProperty.call(fields, 'totpSecret'))     $set.totpSecret = fields.totpSecret;
+    if (Object.prototype.hasOwnProperty.call(fields, 'totpEnabled'))    $set.totpEnabled = fields.totpEnabled;
+    if (Object.prototype.hasOwnProperty.call(fields, 'emailMfaEnabled'))$set.emailMfaEnabled = fields.emailMfaEnabled;
+    if (Object.prototype.hasOwnProperty.call(fields, 'recoveryCodes'))  $set.recoveryCodes = fields.recoveryCodes;
+    return User.findByIdAndUpdate(id, { $set }, { returnDocument: 'after' }).select('-passwordHash');
+  },
+
+  // Retrait atomique d'un hash de recovery code. Retourne true si retiré, false si déjà absent.
+  // Empêche la consommation concurrente d'un même code par 2 requêtes parallèles.
+  pullRecoveryCode: async (id, hash) => {
+    const result = await User.updateOne(
+      { _id: id, recoveryCodes: hash },
+      { $pull: { recoveryCodes: hash } },
+    );
+    return result.modifiedCount > 0;
+  },
+
+  // Incrémente atomiquement le compteur d'échecs MFA et renvoie la nouvelle valeur.
+  incrementMfaFailures: async (id) => {
+    const u = await User.findByIdAndUpdate(
+      id,
+      { $inc: { mfaFailedAttempts: 1 } },
+      { returnDocument: 'after', select: 'mfaFailedAttempts' },
+    );
+    return u ? u.mfaFailedAttempts : 0;
+  },
+
+  // Pose un verrou temporaire (date) sur le MFA. Conserve mfaFailedAttempts pour suivi.
+  setMfaLock: (id, until) =>
+    User.findByIdAndUpdate(id, { $set: { mfaLockedUntil: until } }),
+
+  // Remet à zéro le compteur et le lock (utilisé après un succès).
+  resetMfaFailures: (id) =>
+    User.findByIdAndUpdate(id, { $set: { mfaFailedAttempts: 0, mfaLockedUntil: null } }),
 };
 
 // ─── BANKS ───────────────────────────────────────────────────────────────────
@@ -109,9 +149,23 @@ const operations = {
       .populate('bankId', 'label').sort('-date');
   },
 
-  findByDateRange(start, end, userId) {
-    return Operation.find({ userId, date: { $gte: start, $lt: end } })
-      .populate('bankId', 'label').sort('-date');
+  findByDateRange(start, end, userId, filters = {}) {
+    const query = { userId, date: { $gte: start, $lt: end } };
+    if (filters.q) query.label = { $regex: filters.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    if (filters.categoryId === 'none') query.categoryId = null;
+    else if (filters.categoryId) query.categoryId = filters.categoryId;
+    if (filters.pointed === true || filters.pointed === false) query.pointed = filters.pointed;
+    if (filters.bankId) query.bankId = filters.bankId;
+    return Operation.find(query).populate('bankId', 'label').sort('-date');
+  },
+
+  // Toutes les opérations non pointées de l'utilisateur (toutes dates confondues).
+  // Endpoint dédié pour HomePage.UnpointedOperationsList — évite de rapatrier
+  // l'historique complet et de filtrer côté client.
+  findUnpointed(userId) {
+    return Operation.find({ userId, pointed: false })
+      .populate('bankId', 'label')
+      .sort('-date');
   },
 
   findByMonthMinimal(month, year, userId) {
@@ -125,7 +179,7 @@ const operations = {
   // Utilisée par l'import (CSV/QIF/OFX) pour dédup globale + réconciliation
   // par montant : besoin de _id pour le tracking et pointed pour filtrer.
   findAllMinimal(userId) {
-    return Operation.find({ userId }).select('label bankId amount date pointed categoryId');
+    return Operation.find({ userId }).select('label bankId amount date pointed categoryId transferId');
   },
 
   async sumUnpointedByBank(userId) {
@@ -139,17 +193,66 @@ const operations = {
   },
 
   create: async (data) => {
-    const op = await Operation.create(data);
+    // Auto-déduction : catégorie posée sans source explicite → manuel.
+    // Les ops auto-classifiées passent leur source explicite ('auto').
+    const payload = { ...data };
+    if (payload.categoryId && payload.categorySource === undefined) {
+      payload.categorySource = 'manual';
+    }
+    const op = await Operation.create(payload);
     return op.populate('bankId', 'label');
   },
 
-  update: (id, userId, data) =>
-    Operation.findOneAndUpdate({ _id: id, userId }, data, { returnDocument: 'after' })
-      .populate('bankId', 'label'),
+  update: (id, userId, data) => {
+    // Si on touche à categoryId sans préciser categorySource, on bascule
+    // automatiquement la provenance (utilisateur a tranché → 'manual',
+    // catégorie effacée → null). Garantit la même règle pour tous les callers
+    // (route PUT, bulk-categorize, etc.).
+    const patch = { ...data };
+    if (patch.categoryId !== undefined && patch.categorySource === undefined) {
+      patch.categorySource = patch.categoryId ? 'manual' : null;
+    }
+    return Operation.findOneAndUpdate({ _id: id, userId }, patch, { returnDocument: 'after' })
+      .populate('bankId', 'label');
+  },
 
   delete: (id, userId) => Operation.findOneAndDelete({ _id: id, userId }),
 
   findById: (id, userId) => Operation.findOne({ _id: id, userId }),
+
+  findByTransferId: (transferId, userId) =>
+    Operation.find({ transferId, userId }).populate('bankId', 'label'),
+
+  deleteByTransferId: (transferId, userId) =>
+    Operation.deleteMany({ transferId, userId }),
+
+  // Lie deux opérations en virement interne via un transferId commun.
+  // Validations strictes (banques différentes, montants opposés, pas déjà
+  // liées). On lit les deux ops, on vérifie, puis on écrit en parallèle.
+  async linkAsTransfer(idA, idB, userId) {
+    const [a, b] = await Promise.all([
+      Operation.findOne({ _id: idA, userId }),
+      Operation.findOne({ _id: idB, userId }),
+    ]);
+    if (!a || !b) return { error: 'NOT_FOUND' };
+    if (String(a._id) === String(b._id)) return { error: 'SAME_OP' };
+    if (a.transferId || b.transferId) return { error: 'ALREADY_LINKED' };
+    if (String(a.bankId) === String(b.bankId)) return { error: 'SAME_BANK' };
+    if (Math.round(a.amount * 100) !== -Math.round(b.amount * 100)) return { error: 'AMOUNT_MISMATCH' };
+
+    const transferId = randomUUID();
+    await Operation.updateMany({ _id: { $in: [idA, idB] }, userId }, { $set: { transferId } });
+    const [opA, opB] = await Promise.all([
+      Operation.findOne({ _id: idA }).populate('bankId', 'label'),
+      Operation.findOne({ _id: idB }).populate('bankId', 'label'),
+    ]);
+    return { transferId, opA, opB };
+  },
+
+  async unlinkTransfer(transferId, userId) {
+    const res = await Operation.updateMany({ transferId, userId }, { $set: { transferId: null } });
+    return res.modifiedCount ?? 0;
+  },
 
   togglePointed: async (id, userId) => {
     const op = await Operation.findOne({ _id: id, userId });
@@ -326,6 +429,66 @@ const dismissedRecurringSuggestions = {
     DismissedRecurringSuggestion.deleteOne({ userId, key }),
 };
 
+// ─── MFA EMAIL CODES ──────────────────────────────────────────────────────────
+const mfaCodes = {
+  create: ({ userId, codeHash, purpose, expiresAt }) =>
+    MfaEmailCode.create({ userId, codeHash, purpose, expiresAt }),
+
+  findLatestValid: ({ userId, purpose }) =>
+    MfaEmailCode.findOne({ userId, purpose, used: false, expiresAt: { $gt: new Date() } })
+      .sort({ createdAt: -1 }),
+
+  markUsed: (id) =>
+    MfaEmailCode.findByIdAndUpdate(id, { $set: { used: true } }),
+
+  countRecent: async ({ userId, purpose, sinceMs }) => {
+    const since = new Date(Date.now() - sinceMs);
+    return MfaEmailCode.countDocuments({ userId, purpose, createdAt: { $gt: since } });
+  },
+
+  deleteExpired: () =>
+    MfaEmailCode.deleteMany({ expiresAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
+};
+
+// ─── REFRESH TOKENS ───────────────────────────────────────────────────────────
+const refreshTokens = {
+  create: ({ userId, tokenHash, userAgent, ip, expiresAt }) =>
+    RefreshToken.create({ userId, tokenHash, userAgent, ip, expiresAt }),
+
+  findByHash: (tokenHash) =>
+    RefreshToken.findOne({ tokenHash, revokedAt: null, expiresAt: { $gt: new Date() } }),
+
+  findActive: (userId) =>
+    RefreshToken.find({ userId, revokedAt: null, expiresAt: { $gt: new Date() } })
+      .sort({ lastUsedAt: -1 }),
+
+  touchAndRotate: (id, newHash, newExpiresAt) =>
+    RefreshToken.findByIdAndUpdate(
+      id,
+      { $set: { tokenHash: newHash, lastUsedAt: new Date(), expiresAt: newExpiresAt } },
+    ),
+
+  revokeById: (id, userId) =>
+    RefreshToken.updateOne({ _id: id, userId, revokedAt: null }, { $set: { revokedAt: new Date() } }),
+
+  revokeOthers: (userId, exceptId) =>
+    RefreshToken.updateMany(
+      { userId, _id: { $ne: exceptId }, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    ),
+
+  revokeAll: (userId) =>
+    RefreshToken.updateMany({ userId, revokedAt: null }, { $set: { revokedAt: new Date() } }),
+
+  deleteExpired: () =>
+    RefreshToken.deleteMany({
+      $or: [
+        { expiresAt: { $lt: new Date() } },
+        { revokedAt: { $lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+      ],
+    }),
+};
+
 // ─── MIGRATION LEGACY : category (string) → categoryId (ObjectId) ────────────
 // One-shot au boot. Chaque appel parcourt les collections concernées et résout
 // le label texte vers l'_id de Category correspondant pour ce user. Idempotent :
@@ -376,10 +539,33 @@ async function migrateLegacyCategoryFields() {
     { excludedFromBudget: { $exists: true } },
     { $unset: { excludedFromBudget: '' } },
   );
+
+  // Migration : kind='transfer' supprimé au profit du transferId sur les opérations.
+  // Les anciennes catégories 'transfer' redeviennent 'debit'. Idempotent.
+  await Category.updateMany({ kind: 'transfer' }, { $set: { kind: 'debit' } });
+
+  // Migration : suppression de l'index unique legacy `username_1` sur User.
+  // L'app a migré vers l'auth par email il y a longtemps (cf. sqlite.js: DROP
+  // COLUMN username). L'index Mongo reste cependant orphelin dans les bases
+  // existantes : tous les nouveaux users ayant `username: undefined`, un seul
+  // peut coexister à cause de l'unicité (Mongo traite les multiples null comme
+  // doublons sauf index sparse). On le drop si encore présent. Idempotent.
+  try {
+    const idx = await User.collection.indexes();
+    if (idx.some((i) => i.name === 'username_1')) {
+      await User.collection.dropIndex('username_1');
+    }
+  } catch (err) {
+    // Ne pas bloquer le boot si la collection n'existe pas encore ou si l'index
+    // a déjà été supprimé par une instance concurrente.
+    if (err?.codeName !== 'IndexNotFound' && err?.codeName !== 'NamespaceNotFound') {
+      console.warn('[migrate] dropIndex username_1 failed:', err?.message);
+    }
+  }
 }
 
 module.exports = {
   users, banks, operations, recurringOps, resetTokens,
-  categories, categoryHints, dismissedRecurringSuggestions,
+  categories, categoryHints, dismissedRecurringSuggestions, mfaCodes, refreshTokens,
   migrateLegacyCategoryFields,
 };

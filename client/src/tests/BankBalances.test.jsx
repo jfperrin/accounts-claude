@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import BankBalances from '../components/BankBalances';
@@ -13,8 +13,10 @@ const banks = [
 describe('BankBalances', () => {
   it('affiche le nom et le solde actuel de chaque banque', () => {
     render(<BankBalances banks={banks} />);
-    expect(screen.getByText('BNP')).toBeInTheDocument();
-    expect(screen.getByText('Société Générale')).toBeInTheDocument();
+    // Le composant rend deux variantes (mobile sm:hidden + desktop hidden sm:block) :
+    // sous jsdom les deux DOM nodes existent. On scope sur la carte.
+    expect(within(screen.getByTestId('bank-card-1')).getAllByText('BNP').length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('bank-card-2')).getAllByText('Société Générale').length).toBeGreaterThan(0);
     expect(screen.getByTestId('bank-card-1').textContent).toMatch(/1[.,\s]?000/);
   });
 

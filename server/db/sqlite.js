@@ -98,6 +98,31 @@ function initSchema(db) {
       UNIQUE(user_id, key)
     );
     CREATE INDEX IF NOT EXISTS idx_dismissed_recur_user ON dismissed_recurring_suggestions(user_id);
+
+    CREATE TABLE IF NOT EXISTS mfa_email_codes (
+      id          TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL REFERENCES users(id),
+      code_hash   TEXT NOT NULL,
+      purpose     TEXT NOT NULL,
+      expires_at  TEXT NOT NULL,
+      used        INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_mfa_codes_user ON mfa_email_codes(user_id);
+
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id           TEXT PRIMARY KEY,
+      user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash   TEXT NOT NULL UNIQUE,
+      user_agent   TEXT,
+      ip           TEXT,
+      created_at   TEXT DEFAULT (datetime('now')),
+      last_used_at TEXT DEFAULT (datetime('now')),
+      expires_at   TEXT NOT NULL,
+      revoked_at   TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_refresh_expires ON refresh_tokens(expires_at);
   `);
 
   // Migration: drop username column if it exists (schema change from username to email)
@@ -165,6 +190,22 @@ function initSchema(db) {
     // du même utilisateur. ON DELETE SET NULL → l'enfant remonte en racine si le
     // parent disparaît. Validation "1 niveau" + "même kind" côté route.
     'ALTER TABLE categories ADD COLUMN parent_id TEXT REFERENCES categories(id) ON DELETE SET NULL',
+    // Virements internes : 2 ops liées par un même transfer_id (UUID).
+    // null pour les opérations normales.
+    'ALTER TABLE operations ADD COLUMN transfer_id TEXT',
+    // Virement interne récurrent : si to_bank_id est posé, la génération mensuelle
+    // crée 2 opérations liées au lieu d'1.
+    'ALTER TABLE recurring_operations ADD COLUMN to_bank_id TEXT REFERENCES banks(id) ON DELETE SET NULL',
+    'ALTER TABLE users ADD COLUMN totp_secret TEXT',
+    'ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN email_mfa_enabled INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN recovery_codes TEXT',
+    'ALTER TABLE users ADD COLUMN mfa_failed_attempts INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN mfa_locked_until TEXT',
+    // Provenance de la catégorie : 'auto' (inférée par hint à l'import),
+    // 'manual' (saisie/modifiée par l'utilisateur). Permet d'afficher un indice
+    // visuel discret côté UI sur les ops auto-classifiées (DESIGN.md, hint UX).
+    'ALTER TABLE operations ADD COLUMN category_source TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -205,6 +246,11 @@ function initSchema(db) {
     db.exec("UPDATE categories SET kind = 'transfer' WHERE excluded_from_budget = 1");
     db.exec('ALTER TABLE categories DROP COLUMN excluded_from_budget');
   } catch (_) { /* colonne déjà supprimée */ }
+
+  // Migration : kind='transfer' supprimé au profit du transferId sur les opérations.
+  // Les anciennes catégories 'transfer' redeviennent 'debit'. Idempotent.
+  try { db.exec("UPDATE categories SET kind = 'debit' WHERE kind = 'transfer'"); }
+  catch (_) { /* table inexistante */ }
 }
 
 // --- Fonctions de mapping SQLite row → objet métier ---
@@ -224,6 +270,12 @@ const mapUser = (row) => row && {
   nickname:     row.nickname ?? null,
   avatarUrl:    row.avatar_url ?? null,
   acceptedToSAt: row.accepted_tos_at ? new Date(row.accepted_tos_at) : null,
+  totpSecret:        row.totp_secret ?? null,
+  totpEnabled:       row.totp_enabled === 1,
+  emailMfaEnabled:   row.email_mfa_enabled === 1,
+  recoveryCodes:     row.recovery_codes ? JSON.parse(row.recovery_codes) : [],
+  mfaFailedAttempts: row.mfa_failed_attempts ?? 0,
+  mfaLockedUntil:    row.mfa_locked_until ? new Date(row.mfa_locked_until) : null,
 };
 
 const mapBank = (row) => row && {
@@ -243,6 +295,8 @@ const mapOp = (row) => row && {
   date: row.date,
   pointed: row.pointed === 1,
   categoryId: row.category_id ?? null,
+  categorySource: row.category_source ?? null,
+  transferId: row.transfer_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
 };
@@ -254,6 +308,7 @@ const mapRecurring = (row) => row && {
   dayOfMonth: row.day_of_month,
   categoryId: row.category_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
+  toBankId: row.to_bank_id ?? null,
   userId: row.user_id,
 };
 
@@ -283,6 +338,27 @@ const mapResetToken = (row) => row && {
   type:            row.type ?? 'password_reset',
   pendingEmail:    row.pending_email ?? null,
   oldPasswordHash: row.old_password_hash ?? null,
+};
+
+const mapMfaCode = (row) => row && {
+  _id:        row.id,
+  userId:     row.user_id,
+  codeHash:   row.code_hash,
+  purpose:    row.purpose,
+  expiresAt:  new Date(row.expires_at),
+  used:       row.used === 1,
+};
+
+const mapRefreshToken = (row) => row && {
+  _id:         row.id,
+  userId:      row.user_id,
+  tokenHash:   row.token_hash,
+  userAgent:   row.user_agent ?? null,
+  ip:          row.ip ?? null,
+  createdAt:   new Date(row.created_at),
+  lastUsedAt:  new Date(row.last_used_at),
+  expiresAt:   new Date(row.expires_at),
+  revokedAt:   row.revoked_at ? new Date(row.revoked_at) : null,
 };
 
 // Fragments SQL réutilisés pour les SELECT avec JOIN banks.
@@ -320,7 +396,7 @@ module.exports = function createSQLiteRepos() {
       mapUser(db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId)),
 
     findById: (id) =>
-      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at FROM users WHERE id = ?').get(id)),
+      mapUser(db.prepare('SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_enabled, email_mfa_enabled, recovery_codes, mfa_failed_attempts, mfa_locked_until FROM users WHERE id = ?').get(id)),
 
     findByIdWithHash: (id) =>
       mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)),
@@ -359,7 +435,7 @@ module.exports = function createSQLiteRepos() {
 
     findAll() {
       return db.prepare(
-        'SELECT id, email, email_verified, role, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, created_at FROM users ORDER BY created_at DESC',
+        'SELECT id, email, email_verified, role, google_id, title, first_name, last_name, nickname, avatar_url, accepted_tos_at, totp_enabled, email_mfa_enabled, created_at FROM users ORDER BY created_at DESC',
       ).all().map(mapUser);
     },
 
@@ -401,6 +477,58 @@ module.exports = function createSQLiteRepos() {
         `UPDATE users SET accepted_tos_at = ?, updated_at = datetime('now') WHERE id = ?`
       ).run(now, uid(id));
       return this.findById(id);
+    },
+
+    updateMfa(id, fields) {
+      const sets = [];
+      const params = [];
+      if (Object.prototype.hasOwnProperty.call(fields, 'totpSecret')) {
+        sets.push('totp_secret = ?'); params.push(fields.totpSecret ?? null);
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, 'totpEnabled')) {
+        sets.push('totp_enabled = ?'); params.push(fields.totpEnabled ? 1 : 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, 'emailMfaEnabled')) {
+        sets.push('email_mfa_enabled = ?'); params.push(fields.emailMfaEnabled ? 1 : 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, 'recoveryCodes')) {
+        sets.push('recovery_codes = ?');
+        params.push(fields.recoveryCodes ? JSON.stringify(fields.recoveryCodes) : null);
+      }
+      if (sets.length === 0) return this.findById(id);
+      params.push(uid(id));
+      db.prepare(`UPDATE users SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...params);
+      return this.findById(id);
+    },
+
+    // Retrait atomique d'un hash de recovery code (better-sqlite3 = synchrone,
+    // donc l'event loop garantit l'atomicité sans transaction explicite).
+    pullRecoveryCode(id, hash) {
+      const row = db.prepare('SELECT recovery_codes FROM users WHERE id = ?').get(uid(id));
+      if (!row) return false;
+      const codes = row.recovery_codes ? JSON.parse(row.recovery_codes) : [];
+      const idx = codes.indexOf(hash);
+      if (idx === -1) return false;
+      codes.splice(idx, 1);
+      db.prepare('UPDATE users SET recovery_codes = ?, updated_at = datetime(\'now\') WHERE id = ?')
+        .run(JSON.stringify(codes), uid(id));
+      return true;
+    },
+
+    incrementMfaFailures(id) {
+      db.prepare('UPDATE users SET mfa_failed_attempts = mfa_failed_attempts + 1 WHERE id = ?').run(uid(id));
+      const row = db.prepare('SELECT mfa_failed_attempts FROM users WHERE id = ?').get(uid(id));
+      return row ? row.mfa_failed_attempts : 0;
+    },
+
+    setMfaLock(id, until) {
+      db.prepare('UPDATE users SET mfa_locked_until = ? WHERE id = ?')
+        .run(until ? new Date(until).toISOString() : null, uid(id));
+    },
+
+    resetMfaFailures(id) {
+      db.prepare('UPDATE users SET mfa_failed_attempts = 0, mfa_locked_until = NULL WHERE id = ?')
+        .run(uid(id));
     },
   };
 
@@ -464,10 +592,30 @@ module.exports = function createSQLiteRepos() {
       ).all(uid(userId), prefix).map(mapOp);
     },
 
-    findByDateRange(start, end, userId) {
+    findByDateRange(start, end, userId, filters = {}) {
+      const where = ['o.user_id = ?', 'o.date >= ?', 'o.date < ?'];
+      const params = [uid(userId), start.toISOString(), end.toISOString()];
+      if (filters.q) {
+        where.push('LOWER(o.label) LIKE ?');
+        params.push(`%${String(filters.q).toLowerCase()}%`);
+      }
+      if (filters.categoryId === 'none') {
+        where.push('o.category_id IS NULL');
+      } else if (filters.categoryId) {
+        where.push('o.category_id = ?');
+        params.push(filters.categoryId);
+      }
+      if (filters.pointed === true || filters.pointed === false) {
+        where.push('o.pointed = ?');
+        params.push(filters.pointed ? 1 : 0);
+      }
+      if (filters.bankId) {
+        where.push('o.bank_id = ?');
+        params.push(filters.bankId);
+      }
       return db.prepare(
-        `${OPS_WITH_BANK} WHERE o.user_id = ? AND o.date >= ? AND o.date < ? ORDER BY o.date DESC`,
-      ).all(uid(userId), start.toISOString(), end.toISOString()).map(mapOp);
+        `${OPS_WITH_BANK} WHERE ${where.join(' AND ')} ORDER BY o.date DESC`,
+      ).all(...params).map(mapOp);
     },
 
     findByMonthMinimal(month, year, userId) {
@@ -484,7 +632,7 @@ module.exports = function createSQLiteRepos() {
     //     filtrer les candidats déjà rapprochés et éviter de consommer 2× la même).
     findAllMinimal(userId) {
       return db.prepare(
-        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category_id AS categoryId FROM operations WHERE user_id = ?',
+        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category_id AS categoryId, transfer_id AS transferId FROM operations WHERE user_id = ?',
       ).all(uid(userId)).map((r) => ({
         _id: r._id,
         label: r.label,
@@ -493,7 +641,15 @@ module.exports = function createSQLiteRepos() {
         date: r.date,
         pointed: r.pointed === 1,
         categoryId: r.categoryId ?? null,
+        transferId: r.transferId ?? null,
       }));
+    },
+
+    // Toutes les opérations non pointées de l'utilisateur (toutes dates confondues).
+    findUnpointed(userId) {
+      return db.prepare(
+        `${OPS_WITH_BANK} WHERE o.user_id = ? AND o.pointed = 0 ORDER BY o.date DESC`,
+      ).all(uid(userId)).map(mapOp);
     },
 
     sumUnpointedByBank(userId) {
@@ -505,13 +661,59 @@ module.exports = function createSQLiteRepos() {
       return out;
     },
 
-    create({ label, amount, date, pointed = false, categoryId = null, bankId, userId }) {
+    create({ label, amount, date, pointed = false, categoryId = null, categorySource = null, transferId = null, bankId, userId }) {
       const id = randomUUID();
       const dateStr = date instanceof Date ? date.toISOString() : date;
+      // Auto-déduction : si une catégorie est fournie sans source explicite, c'est manuel.
+      const source = categoryId ? (categorySource ?? 'manual') : null;
       db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, uid(bankId), uid(userId));
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, source, transferId ?? null, uid(bankId), uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
+    },
+
+    findByTransferId(transferId, userId) {
+      return db.prepare(
+        `${OPS_WITH_BANK} WHERE o.transfer_id = ? AND o.user_id = ?`,
+      ).all(transferId, uid(userId)).map(mapOp);
+    },
+
+    deleteByTransferId(transferId, userId) {
+      return db.prepare('DELETE FROM operations WHERE transfer_id = ? AND user_id = ?')
+        .run(transferId, uid(userId));
+    },
+
+    // Lie deux opérations en virement interne en leur attribuant un même
+    // transferId. Validations en série (banques différentes, montants opposés
+    // au centime près, pas déjà liées). Transactionnel : on n'écrit que si
+    // les deux ops passent les contrôles.
+    linkAsTransfer(idA, idB, userId) {
+      const u = uid(userId);
+      const stmt = db.prepare('SELECT * FROM operations WHERE id = ? AND user_id = ?');
+      const a = stmt.get(idA, u);
+      const b = stmt.get(idB, u);
+      if (!a || !b) return { error: 'NOT_FOUND' };
+      if (a.id === b.id) return { error: 'SAME_OP' };
+      if (a.transfer_id || b.transfer_id) return { error: 'ALREADY_LINKED' };
+      if (a.bank_id === b.bank_id) return { error: 'SAME_BANK' };
+      if (Math.round(a.amount * 100) !== -Math.round(b.amount * 100)) return { error: 'AMOUNT_MISMATCH' };
+
+      const transferId = randomUUID();
+      db.transaction(() => {
+        const upd = db.prepare("UPDATE operations SET transfer_id = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?");
+        upd.run(transferId, idA, u);
+        upd.run(transferId, idB, u);
+      })();
+      const get = db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`);
+      return { transferId, opA: mapOp(get.get(idA)), opB: mapOp(get.get(idB)) };
+    },
+
+    // Retire le transferId des deux jambes d'un virement (sans les supprimer).
+    // Sans effet si transferId est inconnu.
+    unlinkTransfer(transferId, userId) {
+      const info = db.prepare("UPDATE operations SET transfer_id = NULL, updated_at = datetime('now') WHERE transfer_id = ? AND user_id = ?")
+        .run(transferId, uid(userId));
+      return info.changes;
     },
 
     update(id, userId, body) {
@@ -523,12 +725,20 @@ module.exports = function createSQLiteRepos() {
       const categoryId = body.categoryId !== undefined
         ? (body.categoryId ? uid(body.categoryId) : null)
         : (cur.category_id ?? null);
+      // Source : si categoryId est modifié → manuel (l'utilisateur a tranché).
+      // Sinon on garde la valeur courante. Si la catégorie est effacée → null.
+      let categorySource;
+      if (body.categoryId !== undefined) {
+        categorySource = body.categoryId ? 'manual' : null;
+      } else {
+        categorySource = cur.category_source ?? null;
+      }
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(`
         UPDATE operations
-        SET label = ?, amount = ?, date = ?, pointed = ?, category_id = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, date = ?, pointed = ?, category_id = ?, category_source = ?, bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dateStr, pointed, categoryId, uid(bankId), id, uid(userId));
+      `).run(label, amount, dateStr, pointed, categoryId, categorySource, uid(bankId), id, uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -550,13 +760,14 @@ module.exports = function createSQLiteRepos() {
     // Transaction : toutes les insertions réussissent ou aucune n'est commitée
     insertMany(items) {
       const stmt = db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       );
       db.transaction((ops) => {
         for (const op of ops) {
           const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
+          const source = op.categoryId ? (op.categorySource ?? 'manual') : null;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
-            op.categoryId ? uid(op.categoryId) : null, uid(op.bankId), uid(op.userId));
+            op.categoryId ? uid(op.categoryId) : null, source, op.transferId ?? null, uid(op.bankId), uid(op.userId));
         }
       })(items);
     },
@@ -581,14 +792,15 @@ module.exports = function createSQLiteRepos() {
         dayOfMonth: r.day_of_month,
         categoryId: r.category_id ?? null,
         bankId: r.bank_id, // ID brut pour la déduplication
+        toBankId: r.to_bank_id ?? null,
         userId: r.user_id,
       })),
 
-    create({ label, amount, dayOfMonth, categoryId = null, bankId, userId }) {
+    create({ label, amount, dayOfMonth, categoryId = null, bankId, toBankId = null, userId }) {
       const id = randomUUID();
       db.prepare(
-        'INSERT INTO recurring_operations (id, label, amount, day_of_month, category_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dayOfMonth, categoryId ? uid(categoryId) : null, uid(bankId), uid(userId));
+        'INSERT INTO recurring_operations (id, label, amount, day_of_month, category_id, bank_id, to_bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dayOfMonth, categoryId ? uid(categoryId) : null, uid(bankId), toBankId ? uid(toBankId) : null, uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
@@ -599,11 +811,14 @@ module.exports = function createSQLiteRepos() {
       const categoryId = body.categoryId !== undefined
         ? (body.categoryId ? uid(body.categoryId) : null)
         : (cur.category_id ?? null);
+      const toBankId = body.toBankId !== undefined
+        ? (body.toBankId ? uid(body.toBankId) : null)
+        : (cur.to_bank_id ?? null);
       db.prepare(`
         UPDATE recurring_operations
-        SET label = ?, amount = ?, day_of_month = ?, category_id = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, day_of_month = ?, category_id = ?, bank_id = ?, to_bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dayOfMonth, categoryId, uid(bankId), id, uid(userId));
+      `).run(label, amount, dayOfMonth, categoryId, uid(bankId), toBankId, id, uid(userId));
       return mapRecurring(db.prepare(`${RECUR_WITH_BANK} WHERE r.id = ?`).get(id));
     },
 
@@ -789,8 +1004,100 @@ module.exports = function createSQLiteRepos() {
     },
   };
 
+  const mfaCodes = {
+    create({ userId, codeHash, purpose, expiresAt }) {
+      const id = randomUUID();
+      db.prepare(
+        'INSERT INTO mfa_email_codes (id, user_id, code_hash, purpose, expires_at) VALUES (?, ?, ?, ?, ?)',
+      ).run(id, uid(userId), codeHash, purpose, expiresAt.toISOString());
+      return mapMfaCode(db.prepare('SELECT * FROM mfa_email_codes WHERE id = ?').get(id));
+    },
+
+    findLatestValid({ userId, purpose }) {
+      return mapMfaCode(db.prepare(
+        `SELECT * FROM mfa_email_codes
+         WHERE user_id = ? AND purpose = ? AND used = 0 AND expires_at > datetime('now')
+         ORDER BY created_at DESC LIMIT 1`,
+      ).get(uid(userId), purpose));
+    },
+
+    markUsed(id) {
+      db.prepare('UPDATE mfa_email_codes SET used = 1 WHERE id = ?').run(id);
+    },
+
+    countRecent({ userId, purpose, sinceMs }) {
+      const since = new Date(Date.now() - sinceMs).toISOString();
+      return db.prepare(
+        'SELECT COUNT(*) AS n FROM mfa_email_codes WHERE user_id = ? AND purpose = ? AND created_at > ?',
+      ).get(uid(userId), purpose, since).n;
+    },
+
+    deleteExpired() {
+      db.prepare(`DELETE FROM mfa_email_codes WHERE expires_at < datetime('now', '-1 day')`).run();
+    },
+  };
+
+  const refreshTokens = {
+    create({ userId, tokenHash, userAgent, ip, expiresAt }) {
+      const id = randomUUID();
+      db.prepare(
+        'INSERT INTO refresh_tokens (id, user_id, token_hash, user_agent, ip, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, uid(userId), tokenHash, userAgent ?? null, ip ?? null, new Date(expiresAt).toISOString());
+      return mapRefreshToken(db.prepare('SELECT * FROM refresh_tokens WHERE id = ?').get(id));
+    },
+
+    findByHash(tokenHash) {
+      return mapRefreshToken(db.prepare(
+        `SELECT * FROM refresh_tokens
+         WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > datetime('now')`,
+      ).get(tokenHash));
+    },
+
+    findActive(userId) {
+      return db.prepare(
+        `SELECT * FROM refresh_tokens
+         WHERE user_id = ? AND revoked_at IS NULL AND expires_at > datetime('now')
+         ORDER BY last_used_at DESC`,
+      ).all(uid(userId)).map(mapRefreshToken);
+    },
+
+    touchAndRotate(id, newHash, newExpiresAt) {
+      db.prepare(
+        `UPDATE refresh_tokens
+         SET token_hash = ?, last_used_at = datetime('now'), expires_at = ?
+         WHERE id = ?`,
+      ).run(newHash, new Date(newExpiresAt).toISOString(), id);
+    },
+
+    revokeById(id, userId) {
+      const r = db.prepare(
+        `UPDATE refresh_tokens SET revoked_at = datetime('now')
+         WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
+      ).run(id, uid(userId));
+      return { modifiedCount: r.changes };
+    },
+
+    revokeOthers(userId, exceptId) {
+      db.prepare(
+        `UPDATE refresh_tokens SET revoked_at = datetime('now')
+         WHERE user_id = ? AND id != ? AND revoked_at IS NULL`,
+      ).run(uid(userId), exceptId);
+    },
+
+    revokeAll(userId) {
+      db.prepare(
+        `UPDATE refresh_tokens SET revoked_at = datetime('now')
+         WHERE user_id = ? AND revoked_at IS NULL`,
+      ).run(uid(userId));
+    },
+
+    deleteExpired() {
+      db.prepare(`DELETE FROM refresh_tokens WHERE expires_at < datetime('now', '-1 day') OR revoked_at < datetime('now', '-30 days')`).run();
+    },
+  };
+
   return {
     users, banks, operations, recurringOps, resetTokens,
-    categories, categoryHints, dismissedRecurringSuggestions,
+    categories, categoryHints, dismissedRecurringSuggestions, mfaCodes, refreshTokens,
   };
 };

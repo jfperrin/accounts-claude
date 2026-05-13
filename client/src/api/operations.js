@@ -1,14 +1,20 @@
 import client from './client';
 
 // Sans paramètre, le serveur renvoie les 30 derniers jours.
-export const list = ({ startDate, endDate } = {}) =>
-  client.get('/operations', { params: { startDate, endDate } });
+export const list = ({ startDate, endDate, q, categoryId, pointed, bankId } = {}) =>
+  client.get('/operations', { params: { startDate, endDate, q, categoryId, pointed, bankId } });
+
+// Toutes les opérations non pointées (toutes dates confondues). Endpoint dédié
+// pour éviter de rapatrier 200 ans d'opérations et de filtrer côté client.
+export const listUnpointed = () => client.get('/operations/unpointed');
 export const create = (data) => client.post('/operations', data);
 export const update = (id, data) => client.put(`/operations/${id}`, data);
 export const remove = (id) => client.delete(`/operations/${id}`);
 export const point = (id) => client.patch(`/operations/${id}/point`);
-export const generateRecurring = ({ month, year }) =>
-  client.post('/operations/generate-recurring', { month, year });
+export const generateRecurring = ({ month, year, recurringIds }) =>
+  client.post('/operations/generate-recurring', { month, year, recurringIds });
+export const previewRecurring = ({ month, year }) =>
+  client.get('/operations/recurring-preview', { params: { month, year } });
 // Upload d'un fichier QIF / OFX / ZIP pour la banque cible.
 // Le serveur réconcilie automatiquement avec les ops existantes (par montant)
 // et peut renvoyer `pendingMatches` à résoudre via resolveImport().
@@ -46,3 +52,27 @@ export const findSimilarUncategorized = ({ label, bankId, excludeId }) =>
 // Affecte une catégorie à plusieurs opérations en une requête.
 export const bulkCategorize = (ids, categoryId) =>
   client.post('/operations/bulk-categorize', { ids, categoryId });
+
+// Bascule l'état pointé d'un lot d'opérations.
+export const bulkPoint = (ids, pointed) =>
+  client.post('/operations/bulk-point', { ids, pointed });
+
+// Supprime un lot d'opérations (jambes de virement supprimées en cascade).
+export const bulkDelete = (ids) =>
+  client.post('/operations/bulk-delete', { ids });
+
+// Virement interne : crée 2 ops liées sur les banques source/destination.
+export const transfer = ({ fromBankId, toBankId, amount, date, label }) =>
+  client.post('/operations/transfer', { fromBankId, toBankId, amount, date, label });
+
+// Paires d'opérations détectées comme candidates à un virement interbanque.
+export const getTransferCandidates = () =>
+  client.get('/operations/transfer-candidates');
+
+// Lie 2 opérations existantes en virement interne (partagent un transferId).
+export const linkTransfer = (idA, idB) =>
+  client.post(`/operations/${idA}/link-transfer`, { otherId: idB });
+
+// Retire le transferId des deux jambes (sans supprimer les ops).
+export const unlinkTransfer = (id) =>
+  client.delete(`/operations/${id}/transfer-link`);

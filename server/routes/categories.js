@@ -2,7 +2,7 @@ const router = require('express').Router();
 const wrap = require('../utils/asyncHandler');
 const { CATEGORIES: DEFAULTS } = require('../constants/categories');
 
-const KINDS = ['debit', 'credit', 'transfer'];
+const KINDS = ['debit', 'credit'];
 
 // Normalise maxAmount : "" / null / undefined → null ; sinon Number positif fini
 function parseMaxAmount(raw) {

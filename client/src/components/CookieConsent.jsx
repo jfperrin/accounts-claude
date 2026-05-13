@@ -70,7 +70,7 @@ export default function CookieConsentBanner() {
                       {
                         name: 'connect.sid',
                         domain: window.location.hostname,
-                        desc: 'Cookie de session — maintient votre connexion active',
+                        desc: 'Cookie de session : maintient votre connexion active',
                         duration: 'Session (jusqu\'à fermeture du navigateur ou déconnexion)',
                       },
                     ],

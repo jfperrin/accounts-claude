@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { CircleDashed, ChevronDown } from 'lucide-react';
-import { cn, formatEur } from '@/lib/utils';
+import { Check, CircleDashed, ChevronDown } from 'lucide-react';
+import { cn, formatEur, amountClass } from '@/lib/utils';
+import EmptyState from '@/components/EmptyState';
 
 // Liste compacte des opérations non pointées (toutes dates).
 // Les opérations futures sont surlignées (date > aujourd'hui).
@@ -31,7 +32,12 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Opérations non pointées</h2>
         </div>
-        <p className="text-sm text-muted-foreground">Tout est pointé.</p>
+        <EmptyState
+          variant="card"
+          icon={Check}
+          title="Tout est pointé"
+          description="Les opérations passées sont rapprochées du relevé bancaire."
+        />
       </div>
     );
   }
@@ -42,10 +48,7 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
         <h2 className="text-sm font-semibold">Opérations non pointées</h2>
         <div className="flex items-center gap-2 text-xs">
           <span className="text-muted-foreground">{sorted.length}</span>
-          <span className={cn(
-            'tabular-nums font-semibold',
-            total >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-          )}>
+          <span className={cn('tabular-nums font-semibold', amountClass(total))}>
             {formatEur(total)}
           </span>
         </div>
@@ -63,7 +66,7 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
                 type="button"
                 onClick={() => onPoint(op._id)}
                 aria-label="pointer"
-                className="text-muted-foreground hover:text-emerald-600 transition-colors"
+                className="text-muted-foreground hover:text-credit transition-colors"
                 title="Pointer"
               >
                 <CircleDashed className="h-5 w-5" />
@@ -72,7 +75,7 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium">{op.label}</span>
                   {isFuture && (
-                    <span className="shrink-0 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                    <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                       à venir
                     </span>
                   )}
@@ -87,10 +90,7 @@ export default function UnpointedOperationsList({ operations, onPoint }) {
                   )}
                 </div>
               </div>
-              <span className={cn(
-                'tabular-nums text-sm font-semibold whitespace-nowrap',
-                op.amount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-              )}>
+              <span className={cn('tabular-nums text-sm font-semibold whitespace-nowrap', amountClass(op.amount))}>
                 {formatEur(op.amount)}
               </span>
             </li>

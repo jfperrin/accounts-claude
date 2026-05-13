@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Wallet, Globe, Mail } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Wallet, Globe, Mail, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/store/AuthContext';
-import { config as fetchConfig, resendVerification } from '@/api/auth';
+import { config as fetchConfig, resendVerification, requestPasswordReset } from '@/api/auth';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,13 +29,20 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [form, setForm] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberDays, setRememberDays] = useState(30);
   const [acceptedToS, setAcceptedToS] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState(null);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendDone, setResendDone] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const { login, register } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const googleError = searchParams.get('error') === 'google';
   const emailTaken = searchParams.get('error') === 'email_taken';
@@ -44,12 +59,16 @@ export default function LoginPage() {
     setLoading(true);
     setUnverifiedEmail(null);
     setResendDone(false);
+    setFormError('');
     try {
       if (tab === 'login') {
-        await login({ ...form, rememberDays });
+        const res = await login({ ...form, rememberDays });
+        if (res && res.mfaRequired) {
+          navigate('/login/mfa');
+        }
       } else {
         if (!acceptedToS) {
-          toast.error('Vous devez accepter les conditions générales d\'utilisation');
+          setFormError('Vous devez accepter les conditions générales d\'utilisation.');
           setLoading(false);
           return;
         }
@@ -60,7 +79,9 @@ export default function LoginPage() {
       if (err.response?.status === 403) {
         setUnverifiedEmail(form.email);
       } else {
-        toast.error(err.response?.data?.message || err.message || 'Erreur de connexion');
+        const msg = err.response?.data?.message || err.message || 'Erreur de connexion';
+        setFormError(msg);
+        toast.error(msg);
       }
     } finally {
       setLoading(false);
@@ -69,9 +90,9 @@ export default function LoginPage() {
 
   if (registered) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900">
-        <div className="relative z-10 w-[420px] rounded-2xl bg-white p-12 shadow-2xl text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-900">
+        <div className="relative z-10 w-full max-w-105 rounded-2xl bg-white p-12 shadow-2xl text-center">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
             <Mail className="h-6 w-6 text-white" />
           </div>
           <h1 className="mb-3 text-2xl font-extrabold tracking-tight text-slate-900">Vérifiez votre email</h1>
@@ -81,24 +102,23 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => { setRegistered(false); setTab('login'); }}
-            className="text-sm text-indigo-600 hover:underline"
+            className="text-sm text-primary hover:underline"
           >
             Retour à la connexion
           </button>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-slate-900">
-      <div className="pointer-events-none absolute -right-20 -top-40 h-[700px] w-[700px] rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18)_0%,transparent_65%)]" />
-      <div className="pointer-events-none absolute -bottom-40 -left-20 h-[600px] w-[600px] rounded-full bg-[radial-gradient(circle,rgba(124,58,237,0.12)_0%,transparent_65%)]" />
-      <div className="flex flex-1 items-center justify-center px-4">
+      <div className="pointer-events-none absolute -right-20 -top-40 h-175 w-175 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18)_0%,transparent_65%)]" />
+      <main className="flex flex-1 items-center justify-center px-4">
 
-      <div className="relative z-10 w-[420px] rounded-2xl bg-white p-12 shadow-2xl">
+      <div className="relative z-10 w-full max-w-105 rounded-2xl bg-white p-12 shadow-2xl">
         <div className="mb-9 text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/40">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/40">
             <Wallet className="h-6 w-6 text-white" />
           </div>
           <h1 className="mb-1.5 text-2xl font-extrabold tracking-tight text-slate-900">Gestion de Comptes</h1>
@@ -183,11 +203,11 @@ export default function LoginPage() {
             <button
               type="button"
               key={key}
-              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setUnverifiedEmail(null); setRememberDays(30); }}
+              onClick={() => { setTab(key); setForm({ email: '', password: '' }); setShowPassword(false); setUnverifiedEmail(null); setFormError(''); setRememberDays(30); }}
               className={cn(
                 'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                 tab === key
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                  ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30'
                   : 'text-slate-500 hover:text-slate-700'
               )}
             >
@@ -203,20 +223,39 @@ export default function LoginPage() {
               id="email"
               type="email"
               autoFocus
+              required
+              autoComplete="email"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              aria-invalid={!!formError}
+              aria-describedby={formError ? 'login-form-error' : undefined}
               className="h-11 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="password" className="text-slate-700">Mot de passe</Label>
-            <Input
-              id="password"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              className="h-11 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete={tab === 'login' ? 'current-password' : 'new-password'}
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                aria-invalid={!!formError}
+                aria-describedby={formError ? 'login-form-error' : undefined}
+                className="h-11 pr-10 bg-white text-slate-900 border-slate-200 placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                aria-pressed={showPassword}
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           {tab === 'register' && (
             <label className="flex items-start gap-2 text-sm text-slate-600 cursor-pointer">
@@ -224,7 +263,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={acceptedToS}
                 onChange={(e) => setAcceptedToS(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-primary focus:ring-ring"
               />
               <span>
                 J'accepte les{' '}
@@ -232,7 +271,7 @@ export default function LoginPage() {
                   href="/cgu"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-indigo-600 hover:underline"
+                  className="font-medium text-primary hover:underline"
                 >
                   conditions générales d'utilisation
                 </a>
@@ -256,7 +295,7 @@ export default function LoginPage() {
                     className={cn(
                       'flex-1 rounded-lg py-2 text-sm font-semibold transition-all',
                       rememberDays === value
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30'
                         : 'text-slate-500 hover:text-slate-700'
                     )}
                   >
@@ -266,17 +305,87 @@ export default function LoginPage() {
               </div>
             </div>
           )}
+          {formError && (
+            <p id="login-form-error" role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {formError}
+            </p>
+          )}
           <Button
             type="submit"
-            className="mt-2 h-11 w-full text-base shadow-md shadow-indigo-500/30"
+            className="mt-2 h-11 w-full text-base shadow-md shadow-primary/30"
             disabled={loading || (tab === 'register' && !acceptedToS)}
           >
             {loading ? 'Chargement…' : tab === 'login' ? 'Se connecter' : "S'inscrire"}
           </Button>
+          {tab === 'login' && (
+            <button
+              type="button"
+              onClick={() => { setForgotEmail(form.email); setForgotSent(false); setForgotOpen(true); }}
+              className="block w-full text-center text-xs text-slate-500 hover:text-slate-700 hover:underline"
+            >
+              Mot de passe oublié ?
+            </button>
+          )}
         </form>
       </div>
-      </div>
+      </main>
       <Footer className="relative z-10 border-white/10 bg-transparent text-slate-500" />
+
+      <Dialog open={forgotOpen} onOpenChange={(v) => { if (!v) { setForgotOpen(false); setForgotSent(false); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mot de passe oublié</DialogTitle>
+            <DialogDescription>
+              Saisissez votre adresse email. Si un compte existe, un lien de réinitialisation y sera envoyé.
+            </DialogDescription>
+          </DialogHeader>
+          {forgotSent ? (
+            <div className="space-y-3">
+              <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                Si un compte existe pour cette adresse, un email vient d'être envoyé. Vérifiez votre boîte (et les spams).
+              </p>
+              <DialogFooter>
+                <Button type="button" onClick={() => setForgotOpen(false)}>Fermer</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setForgotLoading(true);
+                try {
+                  await requestPasswordReset(forgotEmail.trim().toLowerCase());
+                  setForgotSent(true);
+                } catch {
+                  setForgotSent(true); // réponse neutre quoi qu'il arrive
+                } finally {
+                  setForgotLoading(false);
+                }
+              }}
+              className="space-y-3"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="forgot-email">Adresse email</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  autoFocus
+                  required
+                  autoComplete="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Annuler</Button>
+                <Button type="submit" disabled={forgotLoading || !forgotEmail}>
+                  {forgotLoading ? 'Envoi…' : 'Envoyer le lien'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

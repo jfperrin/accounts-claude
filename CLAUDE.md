@@ -14,6 +14,50 @@ pour les détails spécifiques.
 - Code : pas de commentaire qui décrit le QUOI (le code le fait). Commenter le POURQUOI quand non-évident.
 - Ne pas écrire de fichiers `.md` (plans, notes, résumés) sauf demande explicite — travailler dans la conversation.
 
+## Niveau d'exigence
+
+Écrire le code comme un développeur senior front-end **et** back-end :
+typage strict des contrats d'API, séparation claire des couches, gestion explicite
+des erreurs/cas limites, accessibilité de base (rôles ARIA, focus, contraste, états
+de chargement), responsive mobile-first, perfs (rendu inutile, requêtes redondantes,
+bundle size), sécurité (validation côté serveur même si déjà côté client, jamais
+de secret côté client, scoping `userId` systématique). Pas de "ça compile, ça suffit" —
+chaque diff doit être défendable en revue.
+
+## Skills à utiliser
+
+- **`impeccable`** — pour toute modification d'interface (composant, page, layout, formulaire,
+  états vides/erreurs, theming, micro-interactions, accessibilité, responsive). À invoquer
+  via le tool `Skill` avant d'écrire du code UI.
+- **`vercel-react-best-practices`** — à invoquer pour toute écriture/refacto de code React :
+  guide officiel Vercel sur les patterns de perf (mémoïsation, Suspense, data fetching,
+  bundle, hooks). À combiner avec Context7 pour la doc API à jour.
+- **`webapp-testing` (Playwright)** — après toute modification UI ou de flow utilisateur,
+  valider en lançant le client/serveur en local et en pilotant le navigateur via les outils
+  `mcp__playwright__*` : naviguer sur le scénario impacté, vérifier l'absence d'erreurs
+  console, screenshot si pertinent. Le lint et les tests unitaires ne remplacent pas cette
+  vérification — un build vert n'est pas une feature qui marche.
+- **Context7 MCP** — avant tout usage non-trivial d'une lib/framework (React, Vite,
+  Tailwind v4, shadcn/ui, Mongoose, Express 5, Vitest, otplib, Resend, etc.), interroger
+  Context7 (`resolve-library-id` puis `query-docs`) pour récupérer la doc à jour. Les
+  best practices React / Next bougent vite (concurrent features, hooks d'auth, Suspense,
+  Server Components côté Vite-React via libs tierces, etc.) — ne jamais se fier à la
+  mémoire entraînée. Préférer Context7 à WebSearch pour la doc d'API.
+
+## Tests obligatoires à chaque modification
+
+Avant de déclarer une tâche terminée, exécuter **systématiquement** :
+
+```bash
+yarn --cwd server lint && yarn --cwd server test
+yarn --cwd client lint && yarn --cwd client test --run
+```
+
+Objectif : 0 warning, 0 test échoué. Si la modif touche l'UI, **enchaîner avec une
+validation Playwright** (voir section Skills). Ne pas committer ni rendre la main
+sans avoir vu ces commandes passer dans leur intégralité — pas de "j'ai testé le
+fichier modifié, ça suffit".
+
 ## Commands
 
 ```bash
@@ -34,20 +78,23 @@ yarn --cwd server start
 yarn --cwd server lint
 yarn --cwd server test    # vitest run
 
-# Mobile (reactNative/)
-cd reactNative
-yarn start                # Expo dev server
+# E2E (e2e/, Playwright)
+cd e2e && yarn install         # une fois — install + télécharge les navigateurs
+cd e2e && yarn test            # run en mode headless
+cd e2e && yarn test:ui         # mode interactif
 ```
+
+E2E lance automatiquement `yarn dev` à la racine (server + client) si rien ne tourne déjà. Variables d'env hardcodées dans `e2e/playwright.config.js` : `ADMIN_EMAIL=e2e-admin@test.local`, `ADMIN_PASSWORD=e2eAdminPass123`, `MFA_ENCRYPTION_KEY=000…` (64×0), `RATE_LIMIT_MAX=1000`. Le compte admin est seedé au boot par `ensureAdmin` — les tests s'y connectent directement.
 
 ## Architecture
 
-Trois packages indépendants partageant le même modèle de domaine :
+Deux packages applicatifs + tests E2E, partageant le même modèle de domaine :
 
 | Package | Stack | Port |
 |---------|-------|------|
 | `server/` | Node.js / Express 5 / Mongoose ou SQLite | 3001 |
 | `client/` | Vite + React / shadcn/ui + Tailwind CSS v4 | 5173 |
-| `reactNative/` | Expo / React Native | — |
+| `e2e/` | Playwright | — |
 
 ### Modèle de domaine
 
@@ -90,13 +137,8 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 RESEND_API_KEY=
 RATE_LIMIT_MAX=20
-```
-
-### `reactNative/.env` (gitignored)
-
-```
-EXPO_PUBLIC_API_URL=
-EXPO_PUBLIC_USE_LOCAL_DB=
+MFA_ENCRYPTION_KEY=<64 hex chars>
+MFA_ISSUER=Comptes
 ```
 
 ## Conventions cross-cutting
@@ -105,7 +147,3 @@ EXPO_PUBLIC_USE_LOCAL_DB=
 - **Backport SQLite** : toute nouvelle colonne du modèle doit avoir un `ALTER TABLE ADD COLUMN` dans le bloc de migrations idempotentes de `server/db/sqlite.js` (try/catch).
 - **WSL + OneDrive** : HMR Vite avec `usePolling: true, interval: 100` ; nodemon avec `legacyWatch: true`.
 - **Lint à 0 warning** : objectif sur les deux workspaces.
-
-## Mobile
-
-⚠ **Non migré** vers le modèle actuel (pas de `currentBalance`, pas de `categories`, pas de `category_hints`). Cassé en l'état. Le code décrit une architecture précédente avec dual data source (SQLite local en `__DEV__`, HTTP API en prod).

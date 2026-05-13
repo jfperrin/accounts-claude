@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { HelpCircle, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
-import { cn, formatEur } from '@/lib/utils';
+import { HelpCircle, PiggyBank, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { cn, formatEur, amountClass } from '@/lib/utils';
 import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import InfoTip from '@/components/InfoTip';
+import EmptyState from '@/components/EmptyState';
 
 // Budget mensuel d'une catégorie = somme des récurrentes assignées (en valeur
 // directionnelle selon kind) + maxAmount complémentaire. Identique au calcul
@@ -41,9 +42,8 @@ export default function BudgetSummary({
   }, [operations]);
 
   const rows = useMemo(() => {
-    // 1. Calcule budget/actual pour chaque catégorie non-transfer.
+    // 1. Calcule budget/actual pour chaque catégorie.
     const computed = categories
-      .filter((c) => c.kind !== 'transfer')
       .map((c) => {
         const recurringSum = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
         const rawBudget = recurringSum + (c.maxAmount ?? 0);
@@ -103,7 +103,7 @@ export default function BudgetSummary({
     for (const o of operations) {
       if (!o.categoryId) continue;
       const cat = catById.get(String(o.categoryId));
-      if (!cat || cat.kind === 'transfer') continue;
+      if (!cat) continue;
       if (cat.kind === 'credit') actualCredit += Math.max(0, o.amount);
       else actualDebit += Math.max(0, -o.amount);
     }
@@ -118,9 +118,17 @@ export default function BudgetSummary({
     return (
       <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
         <h2 className="mb-1 text-sm font-semibold">Budget</h2>
-        <p className="text-sm text-muted-foreground">
-          Aucune catégorie avec budget ou opération sur la période. Définissez un budget mensuel depuis la page Catégories.
-        </p>
+        <EmptyState
+          variant="card"
+          icon={PiggyBank}
+          title="Aucun budget défini"
+          description="Définis un budget mensuel par catégorie (récurrentes assignées + complément) pour visualiser le réel vs le prévu."
+          actions={
+            <a href="/categories" className="text-xs font-medium text-primary hover:underline">
+              Aller aux catégories →
+            </a>
+          }
+        />
       </div>
     );
   }
@@ -137,7 +145,7 @@ export default function BudgetSummary({
             somme des récurrentes assignées + complément mensuel
             (<em>maxAmount</em>), arrondi à la dizaine supérieure. Les
             transferts internes et les opérations sans catégorie ne
-            comptent pas dans Revenus / Dépenses / Solde — les non
+            comptent pas dans Revenus / Dépenses / Solde ; les non
             catégorisées sont totalisées séparément en bas.
           </InfoTip>
         </h2>
@@ -179,10 +187,7 @@ export default function BudgetSummary({
         <div className="mt-3 pt-3 border-t border-border/60 flex items-center gap-2 text-sm">
           <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="flex-1 truncate font-medium">Sans catégorie</span>
-          <span className={cn(
-            'tabular-nums font-semibold',
-            uncategorized.total >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-          )}>
+          <span className={cn('tabular-nums font-semibold', amountClass(uncategorized.total))}>
             {formatEur(uncategorized.total)}
           </span>
         </div>
@@ -201,7 +206,7 @@ function SummaryCell({ icon: Icon, label, actual, budget, tone, showSign }) {
       </div>
       <div className={cn(
         'mt-1 text-base font-bold tabular-nums',
-        tone === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
+        tone === 'credit' ? 'text-credit' : 'text-debit',
       )}>
         {fmt(actual)}
       </div>
@@ -227,10 +232,7 @@ function BudgetRow({ cat, budget, actual, depth = 0 }) {
         {depth > 0 && <span className="text-muted-foreground text-xs shrink-0">↳</span>}
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
         <span className="flex-1 truncate font-medium">{cat.label}</span>
-        <span className={cn(
-          'tabular-nums font-semibold',
-          overrun && 'text-rose-600 dark:text-rose-400',
-        )}>
+        <span className={cn('tabular-nums font-semibold', overrun && 'text-debit')}>
           {formatEur(actual)}
         </span>
         <span className="text-xs text-muted-foreground tabular-nums">
