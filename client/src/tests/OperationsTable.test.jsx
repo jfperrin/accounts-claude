@@ -3,6 +3,27 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import OperationsTable from '../components/OperationsTable';
 
+// happy-dom n'a pas de layout : getBoundingClientRect renvoie {width:0,height:0},
+// donc @tanstack/react-virtual ne calcule aucune ligne visible et le <Switch>
+// desktop n'apparaît jamais. On mocke le hook pour rendre toutes les opérations.
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count, estimateSize }) => {
+    const size = estimateSize?.() ?? 0;
+    return {
+      getVirtualItems: () =>
+        Array.from({ length: count }, (_, index) => ({
+          index,
+          key: index,
+          start: index * size,
+          end: (index + 1) * size,
+          size,
+        })),
+      getTotalSize: () => count * size,
+      measureElement: () => {},
+    };
+  },
+}));
+
 const ops = [
   { _id: '1', label: 'Loyer', amount: -800, date: '2025-04-28', pointed: false, bankId: { _id: 'b1', label: 'BNP' } },
   { _id: '2', label: 'Salaire', amount: 2500, date: '2025-04-05', pointed: true, bankId: { _id: 'b1', label: 'BNP' } },
