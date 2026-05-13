@@ -4,11 +4,13 @@ const SECTIONS = [
   { id: 'overview', title: "Vue d'ensemble" },
   { id: 'banks', title: 'Banques et solde projeté' },
   { id: 'operations', title: 'Opérations et pointage' },
+  { id: 'transfers', title: 'Virements entre banques' },
   { id: 'recurring', title: 'Opérations récurrentes' },
   { id: 'categories', title: 'Catégories et budget' },
   { id: 'import', title: 'Import de relevés' },
   { id: 'period', title: 'Sélecteur de période' },
   { id: 'insights', title: 'Analyse du mois' },
+  { id: 'palette', title: 'Palette de commandes' },
   { id: 'pwa', title: 'Installation et mises à jour' },
 ];
 
@@ -31,11 +33,13 @@ export default function HelpPage() {
           <Overview />
           <Banks />
           <Operations />
+          <Transfers />
           <Recurring />
           <Categories />
           <Import />
           <Period />
           <Insights />
+          <Palette />
           <Pwa />
         </div>
       </div>
@@ -120,10 +124,12 @@ function Banks() {
         Formule&nbsp;: <code>projetté = courant + Σ montant des opérations non pointées</code>.
       </p>
       <p>
-        L'accueil affiche en haut une carte <em>Soldes</em> globale,
-        indépendante de la période sélectionnée&nbsp;: somme des soldes
-        courants, somme des soldes projetés et total signé des opérations
-        restant à pointer.
+        L'accueil place en évidence le <strong>solde projeté global</strong> en
+        haut de page (somme des projetés de toutes les banques, indépendant de
+        la période sélectionnée), suivi en sous-ligne du solde actuel et du
+        total signé des opérations restant à pointer. La liste des opérations
+        non pointées vient immédiatement après, pour traiter le rapprochement
+        en quelques clics avant toute analyse plus longue.
       </p>
     </Section>
   );
@@ -158,12 +164,73 @@ function Operations() {
         deux marchands différents.
       </p>
       <p>
-        <strong>Recherche et tri</strong>&nbsp;— un champ de recherche au-dessus
-        du tableau filtre les opérations par libellé en temps réel (insensible
-        à la casse). Sur ordinateur, les en-têtes <em>Date</em>,
+        <strong>Recherche et filtres</strong>&nbsp;— la barre au-dessus du
+        tableau combine une recherche libellé (insensible à la casse,
+        debouncée et envoyée au serveur), un filtre par catégorie, un filtre
+        par état (pointé / non pointé) et, dès deux banques, un filtre par
+        banque. Le bouton <em>Réinitialiser</em> apparaît dès qu'un filtre
+        est actif. Sur ordinateur, les en-têtes <em>Date</em>,
         <em> Libellé</em> et <em>Montant</em> sont cliquables pour basculer
         l'ordre croissant/décroissant&nbsp;; sur mobile, un sélecteur dédié
         offre les mêmes options de tri.
+      </p>
+      <p>
+        <strong>Création</strong>&nbsp;— le bouton <em>Nouvelle opération&nbsp;▾</em>
+        ouvre un menu déroulant proposant <em>Nouvelle opération</em> (saisie
+        ponctuelle) ou <em>Virement entre banques</em> (cf. section dédiée).
+        Sur mobile, ce même menu s'ouvre depuis le bouton flottant en bas à
+        droite.
+      </p>
+      <p>
+        <strong>Catégorie suggérée vs validée</strong>&nbsp;— les opérations
+        dont la catégorie a été <em>inférée à l'import</em> (depuis le cache
+        de hints) portent un badge à <strong>bordure pointillée</strong>&nbsp;:
+        c'est une suggestion à valider. Modifier la catégorie (ou la
+        reconfirmer) bascule le badge en bordure pleine, signalant que vous
+        l'avez validée manuellement. Toute catégorie posée à la création
+        manuelle est d'office considérée validée.
+      </p>
+    </Section>
+  );
+}
+
+function Transfers() {
+  return (
+    <Section id="transfers" title="Virements entre banques">
+      <p>
+        Un virement interne déplace de l'argent d'un compte vers un autre.
+        Sur le total global rien ne bouge&nbsp;: la banque source perd le
+        montant, la banque cible le reçoit. L'application matérialise un
+        virement par <strong>deux opérations liées</strong> (un débit et un
+        crédit de même valeur absolue, partageant un identifiant interne).
+      </p>
+      <p>
+        Trois façons de créer la paire&nbsp;:
+      </p>
+      <ul className="ml-5 list-disc space-y-1">
+        <li>
+          <strong>Nouvelle opération&nbsp;▾ → Virement entre banques</strong>&nbsp;—
+          saisie en une étape (banque source, banque destination, montant,
+          date). Disponible dès que vous avez au moins deux banques.
+        </li>
+        <li>
+          <strong>Récurrente de type virement</strong>&nbsp;— une récurrente
+          avec une banque destination génère chaque mois les deux jambes liées.
+        </li>
+        <li>
+          <strong>Lier deux opérations existantes</strong>&nbsp;— sur une
+          opération, l'action <em>Lier comme virement</em> propose les
+          candidats (banque différente, montant opposé, date proche). À
+          inverse, <em>Délier</em> retire le lien sans supprimer les
+          opérations.
+        </li>
+      </ul>
+      <p>
+        Les virements internes sont <strong>exclus des graphes et
+        budgets</strong>&nbsp;: ils ne sont ni un revenu ni une dépense pour
+        la finance globale, et fausseraient les agrégations s'ils étaient
+        comptés. Ils restent visibles dans la liste des opérations et
+        participent au solde projeté de chaque banque.
       </p>
     </Section>
   );
@@ -371,6 +438,45 @@ function Insights() {
         déjà en base (récurrentes générées, ops planifiées). M-2 dépend
         de l'historique 6 mois chargé sur la page&nbsp;: au-delà, sa
         courbe est absente. Transferts internes exclus.
+      </p>
+    </Section>
+  );
+}
+
+function Palette() {
+  return (
+    <Section id="palette" title="Palette de commandes">
+      <p>
+        Le raccourci <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">⌘&nbsp;K</kbd>
+        {' '}(macOS) ou <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">Ctrl&nbsp;K</kbd>
+        {' '}(Windows / Linux) ouvre une palette de commandes accessible depuis
+        n'importe quelle page de l'application.
+      </p>
+      <p>
+        Au repos, la palette propose deux groupes&nbsp;:
+      </p>
+      <ul className="ml-5 list-disc space-y-1">
+        <li>
+          <strong>Actions</strong>&nbsp;— créer une opération sans aller
+          d'abord sur la page Opérations.
+        </li>
+        <li>
+          <strong>Navigation</strong>&nbsp;— sauter sur Accueil, Opérations,
+          Banques, Récurrentes, Catégories, Profil, Réglages ou Aide.
+        </li>
+      </ul>
+      <p>
+        Dès deux caractères tapés dans le champ de recherche, la palette
+        interroge le serveur sur 90 jours d'historique + 1 an de futur et
+        affiche les opérations dont le libellé correspond, avec leur montant
+        et leur date. Valider amène sur la page Opérations.
+      </p>
+      <p>
+        Navigation au clavier&nbsp;: <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">↑</kbd>
+        {' '}/ <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">↓</kbd> pour
+        parcourir, <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">↵</kbd> pour
+        valider, <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">Esc</kbd> pour
+        fermer.
       </p>
     </Section>
   );
