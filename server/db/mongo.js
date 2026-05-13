@@ -193,13 +193,28 @@ const operations = {
   },
 
   create: async (data) => {
-    const op = await Operation.create(data);
+    // Auto-déduction : catégorie posée sans source explicite → manuel.
+    // Les ops auto-classifiées passent leur source explicite ('auto').
+    const payload = { ...data };
+    if (payload.categoryId && payload.categorySource === undefined) {
+      payload.categorySource = 'manual';
+    }
+    const op = await Operation.create(payload);
     return op.populate('bankId', 'label');
   },
 
-  update: (id, userId, data) =>
-    Operation.findOneAndUpdate({ _id: id, userId }, data, { returnDocument: 'after' })
-      .populate('bankId', 'label'),
+  update: (id, userId, data) => {
+    // Si on touche à categoryId sans préciser categorySource, on bascule
+    // automatiquement la provenance (utilisateur a tranché → 'manual',
+    // catégorie effacée → null). Garantit la même règle pour tous les callers
+    // (route PUT, bulk-categorize, etc.).
+    const patch = { ...data };
+    if (patch.categoryId !== undefined && patch.categorySource === undefined) {
+      patch.categorySource = patch.categoryId ? 'manual' : null;
+    }
+    return Operation.findOneAndUpdate({ _id: id, userId }, patch, { returnDocument: 'after' })
+      .populate('bankId', 'label');
+  },
 
   delete: (id, userId) => Operation.findOneAndDelete({ _id: id, userId }),
 

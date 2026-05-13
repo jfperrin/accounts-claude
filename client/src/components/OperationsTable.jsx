@@ -273,7 +273,7 @@ export default function OperationsTable({ operations, categories = [], recurring
                       ? 'h-auto w-fit border-0 bg-transparent p-0 shadow-none focus:ring-0 [&>svg]:hidden'
                       : 'h-6 w-full max-w-32 border-dashed text-xs text-muted-foreground'}>
                       {op.categoryId ? (
-                        <CategoryBadge categoryId={op.categoryId} categories={categories} />
+                        <CategoryBadge categoryId={op.categoryId} categories={categories} source={op.categorySource} />
                       ) : (
                         <SelectValue placeholder="Catégorie…" />
                       )}
@@ -367,7 +367,7 @@ export default function OperationsTable({ operations, categories = [], recurring
                         ? 'h-auto w-fit border-0 bg-transparent p-0 shadow-none focus:ring-0 [&>svg]:hidden'
                         : 'h-6 w-36 border-dashed text-xs text-muted-foreground'}>
                         {op.categoryId ? (
-                          <CategoryBadge categoryId={op.categoryId} categories={categories} />
+                          <CategoryBadge categoryId={op.categoryId} categories={categories} source={op.categorySource} />
                         ) : (
                           <SelectValue placeholder="Catégorie…" />
                         )}

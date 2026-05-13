@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload, Search, X, ArrowLeftRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -128,6 +129,20 @@ export default function OperationsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editOp, setEditOp] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
+
+  // Entry point depuis la palette Cmd+K : `/operations?new=1` ouvre directement
+  // le formulaire de création. On consomme le param dès qu'il est lu pour ne
+  // pas rouvrir le modal à chaque navigation.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditOp(null);
+      setFormOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [transferOpen, setTransferOpen] = useState(false);
   const [linkTransferOp, setLinkTransferOp] = useState(null);
   // Bumpé après import ou link/unlink pour forcer un re-scan des candidats.

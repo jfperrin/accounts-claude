@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from '@/lib/utils';
 import Footer from '@/components/layout/Footer';
 import ThemeToggle from '@/components/ThemeToggle';
+import CommandPalette from '@/components/CommandPalette';
 import DbToggle from '@/components/DbToggle';
 
 export default function AppShell() {
@@ -166,6 +167,8 @@ export default function AppShell() {
 
         <Footer className="hidden md:block" />
       </div>
+
+      <CommandPalette />
 
       {/* ── Bottom navigation mobile uniquement ── */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden border-t border-border bg-card">

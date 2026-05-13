@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, lazy, Suspense } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -9,15 +9,18 @@ import { useOperations } from '@/hooks/useOperations';
 import { useRecurringOperations } from '@/hooks/useRecurringOperations';
 import { useUnpointedOperations } from '@/hooks/useUnpointedOperations';
 import BudgetSummary from '@/components/BudgetSummary';
-import ExpensesByCategoryChart from '@/components/ExpensesByCategoryChart';
 import MonthlyComparison from '@/components/MonthlyComparison';
 import ExpenseRatioCard from '@/components/ExpenseRatioCard';
 import BalanceSummary from '@/components/BalanceSummary';
 import MonthlyInsights from '@/components/MonthlyInsights';
-import RealBalanceChart from '@/components/RealBalanceChart';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
 import OnboardingSteps from '@/components/OnboardingSteps';
+import ChartFallback from '@/components/ChartFallback';
 import { TooltipProvider } from '@/components/ui/tooltip';
+
+// recharts représente ~120 ko gzip — sorti du chunk principal via lazy().
+const ExpensesByCategoryChart = lazy(() => import('@/components/ExpensesByCategoryChart'));
+const RealBalanceChart = lazy(() => import('@/components/RealBalanceChart'));
 
 // Cookie propre à HomePage (désynchronisé de OperationsPage). Stocke juste
 // le `monthOffset` (0 = mois en cours, défaut quand aucun cookie).
@@ -99,6 +102,10 @@ export default function HomePage() {
 
       {banks.length > 0 && <BalanceSummary banks={banks} />}
 
+      {banks.length > 0 && (
+        <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
+      )}
+
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">
         <CalendarDays className="h-5 w-5 text-primary shrink-0" />
         <div className="flex items-center gap-1">
@@ -110,7 +117,7 @@ export default function HomePage() {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="min-w-[140px] text-center text-sm font-medium tabular-nums capitalize">
+          <span className="min-w-35 text-center text-sm font-medium tabular-nums capitalize">
             {dayjs().add(monthOffset, 'month').format('MMMM YYYY')}
           </span>
           <button
@@ -152,12 +159,14 @@ export default function HomePage() {
           recurring={recurring}
           operations={operations}
         />
-        <ExpensesByCategoryChart
-          categories={categories}
-          operations={operations}
-          startDate={startDate}
-          endDate={endDate}
-        />
+        <Suspense fallback={<ChartFallback height={300} />}>
+          <ExpensesByCategoryChart
+            categories={categories}
+            operations={operations}
+            startDate={startDate}
+            endDate={endDate}
+          />
+        </Suspense>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -170,15 +179,15 @@ export default function HomePage() {
       </div>
 
       {banks.length > 0 && (
-        <RealBalanceChart
-          banks={banks}
-          operations={operations}
-          history={history}
-          monthOffset={monthOffset}
-        />
+        <Suspense fallback={<ChartFallback height={320} />}>
+          <RealBalanceChart
+            banks={banks}
+            operations={operations}
+            history={history}
+            monthOffset={monthOffset}
+          />
+        </Suspense>
       )}
-
-      <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
     </div>
     </TooltipProvider>
   );

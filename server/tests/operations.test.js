@@ -227,6 +227,17 @@ describe('POST /api/operations', () => {
     const res = await agent.post('/api/operations').send(makeOp({ categoryId: cat._id }));
     expect(String(res.body.categoryId)).toBe(String(cat._id));
   });
+
+  it("marque categorySource='manual' à la création avec catégorie", async () => {
+    const cat = (await agent.post('/api/categories').send({ label: 'Logement' })).body;
+    const res = await agent.post('/api/operations').send(makeOp({ categoryId: cat._id }));
+    expect(res.body.categorySource).toBe('manual');
+  });
+
+  it('laisse categorySource null sans catégorie', async () => {
+    const res = await agent.post('/api/operations').send(makeOp());
+    expect(res.body.categorySource ?? null).toBeNull();
+  });
 });
 
 describe('PUT /api/operations/:id', () => {
@@ -243,6 +254,21 @@ describe('PUT /api/operations/:id', () => {
     const { body: op } = await agent.post('/api/operations').send(makeOp());
     const res = await agent.put(`/api/operations/${op._id}`).send({ categoryId: cat._id });
     expect(String(res.body.categoryId)).toBe(String(cat._id));
+  });
+
+  it("PUT categoryId → categorySource='manual'", async () => {
+    const cat = (await agent.post('/api/categories').send({ label: 'Loisirs' })).body;
+    const { body: op } = await agent.post('/api/operations').send(makeOp());
+    const res = await agent.put(`/api/operations/${op._id}`).send({ categoryId: cat._id });
+    expect(res.body.categorySource).toBe('manual');
+  });
+
+  it('PUT categoryId=null → categorySource null', async () => {
+    const cat = (await agent.post('/api/categories').send({ label: 'Loisirs' })).body;
+    const { body: op } = await agent.post('/api/operations').send(makeOp({ categoryId: cat._id }));
+    expect(op.categorySource).toBe('manual');
+    const res = await agent.put(`/api/operations/${op._id}`).send({ categoryId: null });
+    expect(res.body.categorySource ?? null).toBeNull();
   });
 
   it("retourne 404 si l'opération appartient à un autre utilisateur", async () => {

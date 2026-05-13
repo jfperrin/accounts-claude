@@ -78,8 +78,11 @@ router.get('/', wrap(async (req, res) => {
 // POST /api/operations → crée une opération (body sans periodId).
 router.post('/', wrap(async (req, res) => {
   const { categoryHints } = req.app.locals.db;
-  const op = await req.app.locals.db.operations.create({ ...req.body, userId: req.user._id });
-  // Synchronise le cache hints : nouvelle op catégorisée → upsert
+  // Toute catégorie posée par cette route est une saisie utilisateur → 'manual'.
+  // Les ops auto-classifiées passent par le service d'import, pas par /POST.
+  const payload = { ...req.body, userId: req.user._id };
+  if (payload.categoryId) payload.categorySource = 'manual';
+  const op = await req.app.locals.db.operations.create(payload);
   if (op && op.categoryId) {
     await categoryHints.upsert(req.user._id, op.label, op.categoryId);
   }
@@ -89,7 +92,13 @@ router.post('/', wrap(async (req, res) => {
 // PUT /api/operations/:id → met à jour label, montant, date, banque ou pointed
 router.put('/:id', wrap(async (req, res) => {
   const { operations, categoryHints } = req.app.locals.db;
-  const op = await operations.update(req.params.id, req.user._id, req.body);
+  // Si l'utilisateur touche la catégorie, on bascule la source en 'manual'
+  // (ou null si la catégorie est effacée).
+  const body = { ...req.body };
+  if (body.categoryId !== undefined) {
+    body.categorySource = body.categoryId ? 'manual' : null;
+  }
+  const op = await operations.update(req.params.id, req.user._id, body);
   if (!op) return res.status(404).json({ message: 'Introuvable' });
   // Synchronise le cache hints sur changement de catégorie :
   //  - catégorie posée → upsert (label, categoryId)
@@ -258,6 +267,7 @@ function planRecurring(r, month, year, bankLabelById, userId) {
       userId,
       pointed: false,
       categoryId: r.categoryId ?? null,
+      categorySource: r.categoryId ? 'manual' : null,
     }],
   };
 }

@@ -225,6 +225,7 @@ async function processImportFile(file, bankId, userId, db) {
         label: r.label, amount: r.amount, date: r.date,
         bankId, userId, pointed: true,
         categoryId,
+        categorySource: categoryId ? 'auto' : null,
       });
       existingKeys.add(exactKey(r.label, String(bankId), amountKey(r.amount), r.date));
       // On enrichit le cache avec le libellé importé pour les imports futurs
@@ -283,6 +284,7 @@ async function resolveImportMatches(resolutions, userId, db) {
         userId,
         pointed: true,
         categoryId,
+        categorySource: categoryId ? 'auto' : null,
       });
       if (categoryId) newHints.push({ label: row.label, categoryId });
     } else {

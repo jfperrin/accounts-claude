@@ -202,6 +202,10 @@ function initSchema(db) {
     'ALTER TABLE users ADD COLUMN recovery_codes TEXT',
     'ALTER TABLE users ADD COLUMN mfa_failed_attempts INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE users ADD COLUMN mfa_locked_until TEXT',
+    // Provenance de la catégorie : 'auto' (inférée par hint à l'import),
+    // 'manual' (saisie/modifiée par l'utilisateur). Permet d'afficher un indice
+    // visuel discret côté UI sur les ops auto-classifiées (DESIGN.md, hint UX).
+    'ALTER TABLE operations ADD COLUMN category_source TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -291,6 +295,7 @@ const mapOp = (row) => row && {
   date: row.date,
   pointed: row.pointed === 1,
   categoryId: row.category_id ?? null,
+  categorySource: row.category_source ?? null,
   transferId: row.transfer_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
@@ -656,12 +661,14 @@ module.exports = function createSQLiteRepos() {
       return out;
     },
 
-    create({ label, amount, date, pointed = false, categoryId = null, transferId = null, bankId, userId }) {
+    create({ label, amount, date, pointed = false, categoryId = null, categorySource = null, transferId = null, bankId, userId }) {
       const id = randomUUID();
       const dateStr = date instanceof Date ? date.toISOString() : date;
+      // Auto-déduction : si une catégorie est fournie sans source explicite, c'est manuel.
+      const source = categoryId ? (categorySource ?? 'manual') : null;
       db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, transferId ?? null, uid(bankId), uid(userId));
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, source, transferId ?? null, uid(bankId), uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -718,12 +725,20 @@ module.exports = function createSQLiteRepos() {
       const categoryId = body.categoryId !== undefined
         ? (body.categoryId ? uid(body.categoryId) : null)
         : (cur.category_id ?? null);
+      // Source : si categoryId est modifié → manuel (l'utilisateur a tranché).
+      // Sinon on garde la valeur courante. Si la catégorie est effacée → null.
+      let categorySource;
+      if (body.categoryId !== undefined) {
+        categorySource = body.categoryId ? 'manual' : null;
+      } else {
+        categorySource = cur.category_source ?? null;
+      }
       const dateStr = date instanceof Date ? date.toISOString() : date;
       db.prepare(`
         UPDATE operations
-        SET label = ?, amount = ?, date = ?, pointed = ?, category_id = ?, bank_id = ?, updated_at = datetime('now')
+        SET label = ?, amount = ?, date = ?, pointed = ?, category_id = ?, category_source = ?, bank_id = ?, updated_at = datetime('now')
         WHERE id = ? AND user_id = ?
-      `).run(label, amount, dateStr, pointed, categoryId, uid(bankId), id, uid(userId));
+      `).run(label, amount, dateStr, pointed, categoryId, categorySource, uid(bankId), id, uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -745,13 +760,14 @@ module.exports = function createSQLiteRepos() {
     // Transaction : toutes les insertions réussissent ou aucune n'est commitée
     insertMany(items) {
       const stmt = db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       );
       db.transaction((ops) => {
         for (const op of ops) {
           const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
+          const source = op.categoryId ? (op.categorySource ?? 'manual') : null;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
-            op.categoryId ? uid(op.categoryId) : null, op.transferId ?? null, uid(op.bankId), uid(op.userId));
+            op.categoryId ? uid(op.categoryId) : null, source, op.transferId ?? null, uid(op.bankId), uid(op.userId));
         }
       })(items);
     },
