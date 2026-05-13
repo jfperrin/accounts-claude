@@ -88,7 +88,14 @@ export default function OperationsPage() {
   const setRangeMode = (mode) => { setRangeModeRaw(mode); persist({ mode }); };
   const updateCustomStart = (v) => { setCustomStart(v); persist({ start: v }); };
   const updateCustomEnd = (v) => { setCustomEnd(v); persist({ end: v }); };
-  const setMonthOffset = (v) => { setMonthOffsetRaw(v); persist({ monthOffset: v }); };
+  // Wrapper compatible avec la forme fonctionnelle (Vercel `rerender-functional-setstate`).
+  const setMonthOffset = (next) => {
+    setMonthOffsetRaw((prev) => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      persist({ monthOffset: v });
+      return v;
+    });
+  };
 
   const { startDate, endDate } = useMemo(() => {
     if (rangeMode === '30d') return { startDate: dayjs().subtract(29, 'day').format('YYYY-MM-DD'), endDate: '2099-12-31' };
@@ -501,7 +508,7 @@ export default function OperationsPage() {
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => setMonthOffset(monthOffset - 1)}
+              onClick={() => setMonthOffset((o) => o - 1)}
               aria-label="Mois précédent"
               className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
             >
@@ -512,7 +519,7 @@ export default function OperationsPage() {
             </span>
             <button
               type="button"
-              onClick={() => setMonthOffset(monthOffset + 1)}
+              onClick={() => setMonthOffset((o) => o + 1)}
               aria-label="Mois suivant"
               className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
             >

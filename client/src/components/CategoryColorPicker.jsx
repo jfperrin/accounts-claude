@@ -35,15 +35,20 @@ export default function CategoryColorPicker({ color, onChange, size = 'sm' }) {
     };
     const escHandler = (e) => { if (e.key === 'Escape') setOpen(false); };
     const closeOnScrollResize = () => setOpen(false);
+    // Listeners passifs sur scroll/resize : le handler ne fait que fermer le
+    // popover, il ne preventDefault() jamais. Passer `passive: true` libère le
+    // scroll natif sur mobile (Vercel `client-passive-event-listeners`).
+    const scrollOpts = { passive: true, capture: true };
+    const resizeOpts = { passive: true };
     document.addEventListener('mousedown', handler);
     document.addEventListener('keydown', escHandler);
-    window.addEventListener('scroll', closeOnScrollResize, true);
-    window.addEventListener('resize', closeOnScrollResize);
+    window.addEventListener('scroll', closeOnScrollResize, scrollOpts);
+    window.addEventListener('resize', closeOnScrollResize, resizeOpts);
     return () => {
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('keydown', escHandler);
-      window.removeEventListener('scroll', closeOnScrollResize, true);
-      window.removeEventListener('resize', closeOnScrollResize);
+      window.removeEventListener('scroll', closeOnScrollResize, scrollOpts);
+      window.removeEventListener('resize', closeOnScrollResize, resizeOpts);
     };
   }, [open]);
 

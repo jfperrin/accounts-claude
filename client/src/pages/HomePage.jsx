@@ -44,9 +44,14 @@ export default function HomePage() {
   const { operations: unpointed, reload: reloadUnpointed } = useUnpointedOperations();
 
   const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
-  const setMonthOffset = (v) => {
-    setMonthOffsetRaw(v);
-    setCookiePref({ monthOffset: v });
+  // Wrapper compatible avec la forme fonctionnelle (Vercel `rerender-functional-setstate`).
+  // Le cookie est écrit à partir de la valeur résolue, pas du callback.
+  const setMonthOffset = (next) => {
+    setMonthOffsetRaw((prev) => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      setCookiePref({ monthOffset: v });
+      return v;
+    });
   };
 
   const { startDate, endDate } = useMemo(() => {
@@ -111,7 +116,7 @@ export default function HomePage() {
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setMonthOffset(monthOffset - 1)}
+            onClick={() => setMonthOffset((o) => o - 1)}
             aria-label="Mois précédent"
             className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
           >
@@ -122,7 +127,7 @@ export default function HomePage() {
           </span>
           <button
             type="button"
-            onClick={() => setMonthOffset(monthOffset + 1)}
+            onClick={() => setMonthOffset((o) => o + 1)}
             aria-label="Mois suivant"
             className="rounded-md border border-border bg-card p-1 text-muted-foreground hover:bg-muted"
           >
