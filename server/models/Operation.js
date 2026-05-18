@@ -15,6 +15,11 @@ const schema = new Schema({
   // 'manual' (saisie/modifiée par l'utilisateur). null sans catégorie.
   categorySource: { type: String, enum: ['auto', 'manual', null], default: null },
   transferId: { type: String, default: null, index: true },
+  // Identifiant unique de transaction OFX (Financial Institution Transaction ID).
+  // null pour les ops créées manuellement ou importées depuis QIF (format sans ID).
+  // Permet une dédup parfaite des imports OFX successifs (même fitId + même
+  // bankId = même transaction). Index sparse pour ne pas peser sur les ops null.
+  fitId:      { type: String, default: null, index: true, sparse: true },
   bankId:     { type: Schema.Types.ObjectId, ref: 'Bank', required: true },
   userId:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });

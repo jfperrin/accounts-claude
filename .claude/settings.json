@@ -26,6 +26,7 @@
       "Bash(git *)"
     ],
     "deny": [
+      "EnterWorktree",
       "Read(//lib/**)",
       "Edit(//lib/**)",
       "Read(~/**)",

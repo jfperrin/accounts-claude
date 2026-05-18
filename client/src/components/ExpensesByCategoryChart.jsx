@@ -14,34 +14,39 @@ function isoDay(d) {
 
 export default function ExpensesByCategoryChart({ categories, operations, startDate, endDate }) {
   const { slices, total, uncategorized } = useMemo(() => {
+    // Somme signée par categoryId : un remboursement (amount > 0) dans une
+    // catégorie debit décrémente le total consommé. Une catégorie dont le
+    // net devient ≥ 0 (remboursements ≥ dépenses) n'apparaît pas dans le
+    // chart — sémantiquement, ce n'est plus une dépense sur la période.
     const sumById = new Map();
-    let uncat = 0;
+    let uncatSpend = 0;
     for (const o of operations) {
-      if (o.amount >= 0) continue;
       if (startDate || endDate) {
         const day = isoDay(o.date);
         if (startDate && day < startDate) continue;
         if (endDate && day > endDate) continue;
       }
       if (!o.categoryId) {
-        uncat += Math.abs(o.amount);
+        if (o.amount < 0) uncatSpend += -o.amount;
         continue;
       }
-      sumById.set(o.categoryId, (sumById.get(o.categoryId) ?? 0) + Math.abs(o.amount));
+      sumById.set(o.categoryId, (sumById.get(o.categoryId) ?? 0) + o.amount);
     }
     const catById = new Map(categories.map((c) => [c._id, c]));
     const list = [];
-    for (const [id, value] of sumById.entries()) {
+    for (const [id, signedSum] of sumById.entries()) {
       const cat = catById.get(id);
-      // On ne garde que les catégories de type "debit" — un débit posé sur
-      // une catégorie credit (remboursement) ou transfer (virement interne)
-      // n'est pas une dépense.
+      // Catégories debit uniquement (un débit posé sur une catégorie credit
+      // ou transfer n'est pas une dépense). Net = -signedSum : positif quand
+      // la catégorie est en dépense nette sur la période.
       if (!cat || cat.kind !== 'debit') continue;
+      const value = -signedSum;
+      if (value <= 0) continue;
       list.push({ id, label: cat.label, fill: cat.color || DEFAULT_COLOR, value });
     }
     list.sort((a, b) => b.value - a.value);
     const tot = list.reduce((s, r) => s + r.value, 0);
-    return { slices: list, total: tot, uncategorized: uncat };
+    return { slices: list, total: tot, uncategorized: uncatSpend };
   }, [categories, operations, startDate, endDate]);
 
   if (slices.length === 0) {

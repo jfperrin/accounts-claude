@@ -15,8 +15,11 @@ import InfoTip from '@/components/InfoTip';
 // Les signaux dépendant du temps réel (rythme, projection, récurrentes
 // manquantes) ne sortent que si on regarde le mois en cours.
 
+// Signé : pas de clipping à 0 pour qu'un remboursement (positive amount sur
+// une catégorie debit) décrémente bien l'actuel consommé. Le clipping pour
+// les budgets prévus est appliqué localement (cf. budgets/recurringSum).
 function directional(sum, kind) {
-  return kind === 'credit' ? Math.max(0, sum) : Math.max(0, -sum);
+  return kind === 'credit' ? sum : -sum;
 }
 
 const SEVERITY_ORDER = { critical: 0, warning: 1, info: 2, positive: 3 };
@@ -40,8 +43,8 @@ export default function MonthlyInsights({
       if (!o.categoryId) continue;
       const cat = catById.get(String(o.categoryId?._id ?? o.categoryId));
       if (!cat) continue;
-      if (cat.kind === 'credit') revenus += Math.max(0, o.amount);
-      else depenses += Math.max(0, -o.amount);
+      if (cat.kind === 'credit') revenus += o.amount;
+      else depenses += -o.amount;
     }
     const net = revenus - depenses;
 
@@ -114,7 +117,7 @@ export default function MonthlyInsights({
     const overruns = [];
     for (const c of categories) {
       if (c.kind !== 'debit') continue;
-      const recSum = directional(recByCat.get(String(c._id)) ?? 0, c.kind);
+      const recSum = Math.max(0, directional(recByCat.get(String(c._id)) ?? 0, c.kind));
       const rawBudget = recSum + (c.maxAmount ?? 0);
       const budget = Math.ceil(rawBudget / 10) * 10;
       const actual = directional(actualByCat.get(String(c._id)) ?? 0, c.kind);
@@ -143,7 +146,7 @@ export default function MonthlyInsights({
         let budgetDebit = 0;
         for (const c of categories) {
           if (c.kind !== 'debit') continue;
-          const recSum = directional(recByCat.get(String(c._id)) ?? 0, c.kind);
+          const recSum = Math.max(0, directional(recByCat.get(String(c._id)) ?? 0, c.kind));
           const rawBudget = recSum + (c.maxAmount ?? 0);
           budgetDebit += Math.ceil(rawBudget / 10) * 10;
         }
@@ -218,8 +221,8 @@ export default function MonthlyInsights({
         if (!cat) continue;
         const d = dayjs(o.date);
         if (d.isBefore(prevStart) || d.isAfter(prevEnd)) continue;
-        if (cat.kind === 'credit') prevRevenus += Math.max(0, o.amount);
-        else prevDepenses += Math.max(0, -o.amount);
+        if (cat.kind === 'credit') prevRevenus += o.amount;
+        else prevDepenses += -o.amount;
       }
       const prevNet = prevRevenus - prevDepenses;
       if (Math.abs(prevNet) > 50 && (revenus + depenses) > 0) {

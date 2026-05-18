@@ -174,7 +174,7 @@ describe('POST /api/operations/import', () => {
     expect(ops).toHaveLength(1);
   });
 
-  it('exclut les ops pointées des candidats à la réconciliation', async () => {
+  it('une op pointée matchant le libellé/montant/date est considérée comme duplicate', async () => {
     const { body: op } = await agent.post('/api/operations').send({
       label: 'Loyer', amount: -800, date: '2026-04-05T00:00:00.000Z', bankId,
     });
@@ -183,9 +183,10 @@ describe('POST /api/operations/import', () => {
     const buf = qifBuffer([{ label: 'PRLV LOYER', amount: -800, date: '04/04/2026' }]);
     const res = await importFile(buf);
 
-    // Op pointée → ignorée → 0 candidat → insertion
-    expect(res.body.imported).toBe(1);
-    expect(res.body.autoReconciled).toBe(0);
+    // Op pointée + libellé similaire + montant identique + fenêtre date OK
+    // → même transaction (date de valeur vs comptabilisation) → duplicate.
+    expect(res.body.imported).toBe(0);
+    expect(res.body.duplicates).toBe(1);
   });
 
   describe('fenêtre temporelle (±15 jours)', () => {
@@ -314,6 +315,131 @@ describe('POST /api/operations/import', () => {
 
       const res = await agent.put(`/api/operations/${auto._id}`).send({ categoryId: other._id });
       expect(res.body.categorySource).toBe('manual');
+    });
+  });
+
+  describe('dédup contre op pointée pré-existante', () => {
+    it('ne recrée pas un doublon si une op pointée a même libellé/montant à quelques jours près', async () => {
+      // Op pointée saisie/importée à la date de valeur (01/05), avec libellé exact.
+      const { body: existing } = await agent.post('/api/operations').send({
+        label: 'VIR ARTMARKET.COM', amount: 4596.03,
+        date: '2026-05-01T00:00:00.000Z', bankId, pointed: true,
+      });
+
+      // Ligne du fichier à la date de comptabilisation (28/04), même libellé,
+      // même montant. Cas réel : la banque pose la date d'opération différente
+      // de la date de valeur. Doit être détecté comme duplicate, pas inséré.
+      const buf = qifBuffer([{ label: 'VIR ARTMARKET.COM', amount: 4596.03, date: '28/04/2026' }]);
+      const res = await importFile(buf);
+
+      expect(res.body.imported).toBe(0);
+      expect(res.body.duplicates).toBe(1);
+
+      const ops = (await agent.get('/api/operations').query({
+        startDate: '2026-04-01', endDate: '2026-05-31',
+      })).body;
+      expect(ops).toHaveLength(1);
+      expect(ops[0]._id).toBe(existing._id);
+      expect(ops[0].date.slice(0, 10)).toBe('2026-05-01');
+    });
+  });
+
+  describe('re-import d\'un QIF déjà réconcilié', () => {
+    it('crédit prévu réconcilié puis re-import → pas de doublon', async () => {
+      // Op prévue : +4000€ le 1er mai (récurrente générée, non pointée).
+      const { body: forecast } = await agent.post('/api/operations').send({
+        label: 'Salaire', amount: 4000, date: '2026-05-01T00:00:00.000Z', bankId,
+      });
+
+      // Import 1 : ligne QIF +3800€ le 27 avril (~5 j d'écart, ~5 % d'écart).
+      const buf = qifBuffer([{ label: 'VIR SALAIRE AVR', amount: 3800, date: '27/04/2026' }]);
+      const r1 = await importFile(buf);
+      expect(r1.body.autoReconciled).toBe(1);
+      expect(r1.body.imported).toBe(0);
+
+      // L'op a été pointée, montant écrasé à 3800, libellé suffixé.
+      const opsAfter1 = (await agent.get('/api/operations').query({
+        startDate: '2026-04-01', endDate: '2026-05-31',
+      })).body;
+      expect(opsAfter1).toHaveLength(1);
+      expect(opsAfter1[0]._id).toBe(forecast._id);
+      expect(opsAfter1[0].amount).toBe(3800);
+      expect(opsAfter1[0].pointed).toBe(true);
+      expect(opsAfter1[0].label).toBe('Salaire (VIR SALAIRE AVR)');
+
+      // Import 2 : même fichier. Le suffixe ` (VIR SALAIRE AVR)` est détecté
+      // sur l'op déjà pointée → marqué duplicate, pas de nouvelle op.
+      const r2 = await importFile(buf);
+      expect(r2.body.imported).toBe(0);
+      expect(r2.body.autoReconciled).toBe(0);
+      expect(r2.body.duplicates).toBe(1);
+
+      const opsAfter2 = (await agent.get('/api/operations').query({
+        startDate: '2026-04-01', endDate: '2026-05-31',
+      })).body;
+      expect(opsAfter2).toHaveLength(1);
+    });
+  });
+
+  describe('dédup OFX via FITID', () => {
+    function ofxBuffer(entries) {
+      const lines = [
+        'OFXHEADER:100', 'DATA:OFXSGML', 'ENCODING:USASCII', '',
+        '<OFX>', '<BANKMSGSRSV1>',
+      ];
+      for (const e of entries) {
+        lines.push(
+          '<STMTTRN>',
+          `<TRNAMT>${e.amount}`,
+          `<DTPOSTED>${e.date}`,
+          `<NAME>${e.label}`,
+          ...(e.fitId ? [`<FITID>${e.fitId}`] : []),
+          '</STMTTRN>',
+        );
+      }
+      lines.push('</BANKMSGSRSV1>', '</OFX>');
+      return Buffer.from(lines.join('\n'), 'utf8');
+    }
+
+    it('importe une 1re fois, puis re-import du même fichier OFX → tout en doublons', async () => {
+      const buf = ofxBuffer([
+        { label: 'LOYER',  amount: -800, date: '20260405', fitId: 'OFX-001' },
+        { label: 'COURSES', amount: -50,  date: '20260410', fitId: 'OFX-002' },
+      ]);
+      const r1 = await importFile(buf, { filename: 'a.ofx' });
+      expect(r1.body.imported).toBe(2);
+      expect(r1.body.duplicates).toBe(0);
+
+      const r2 = await importFile(buf, { filename: 'a.ofx' });
+      expect(r2.body.imported).toBe(0);
+      expect(r2.body.duplicates).toBe(2);
+    });
+
+    it('le fitId écrase l\'heuristique : même fitId + libellé différent = duplicate', async () => {
+      const first = ofxBuffer([{ label: 'LOYER', amount: -800, date: '20260405', fitId: 'OFX-DUP' }]);
+      await importFile(first, { filename: 'a.ofx' });
+
+      // 2e fichier : même fitId mais libellé et montant différents → quand
+      // même considéré comme la même transaction (FITID est la vérité).
+      const second = ofxBuffer([{ label: 'AUTRE', amount: -1234, date: '20260420', fitId: 'OFX-DUP' }]);
+      const res = await importFile(second, { filename: 'b.ofx' });
+      expect(res.body.duplicates).toBe(1);
+      expect(res.body.imported).toBe(0);
+    });
+
+    it('réconciliation OFX : stocke le fitId sur l\'op pré-saisie', async () => {
+      await agent.post('/api/operations').send({
+        label: 'Loyer', amount: -800, date: '2026-04-05T00:00:00.000Z', bankId,
+      });
+
+      const buf = ofxBuffer([{ label: 'PRLV LOYER', amount: -800, date: '20260404', fitId: 'OFX-RECO' }]);
+      const r1 = await importFile(buf, { filename: 'a.ofx' });
+      expect(r1.body.autoReconciled).toBe(1);
+
+      // Re-import → la même ligne (même fitId) est considérée comme duplicate.
+      const r2 = await importFile(buf, { filename: 'a.ofx' });
+      expect(r2.body.duplicates).toBe(1);
+      expect(r2.body.imported).toBe(0);
     });
   });
 });

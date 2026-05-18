@@ -192,6 +192,116 @@ describe('MFA login flow', () => {
   });
 });
 
+describe('MFA trusted device', () => {
+  async function activateTotp(agent) {
+    const setupRes = await agent.post('/api/auth/mfa/totp/setup').send({ password: ALICE.password });
+    const code = authenticator.generate(setupRes.body.secret);
+    await agent.post('/api/auth/mfa/totp/enable').send({ code });
+    return setupRes.body.secret;
+  }
+
+  it('après verify avec rememberDays, un login suivant saute le challenge MFA', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await loginAlice(agent);
+    const secret = await activateTotp(agent);
+    await agent.post('/api/auth/logout').send();
+
+    await agent.post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
+    const verify = await agent.post('/api/auth/mfa/challenge/verify')
+      .send({ method: 'totp', code: authenticator.generate(secret) });
+    expect(verify.status).toBe(200);
+
+    await agent.post('/api/auth/logout').send();
+
+    // 2ᵉ login : le cookie mfa_trusted_device fait sauter le challenge.
+    const login2 = await agent.post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
+    expect(login2.status).toBe(200);
+    expect(login2.body.mfaRequired).toBeUndefined();
+    expect(login2.body.email).toBe(ALICE.email);
+    expect(login2.body.totpEnabled).toBe(true);
+
+    const me = await agent.get('/api/auth/me');
+    expect(me.status).toBe(200);
+  });
+
+  it('changer le mot de passe invalide le trusted device (fingerprint)', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await loginAlice(agent);
+    const secret = await activateTotp(agent);
+    await agent.post('/api/auth/logout').send();
+    await agent.post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
+    await agent.post('/api/auth/mfa/challenge/verify')
+      .send({ method: 'totp', code: authenticator.generate(secret) });
+
+    // Changement du mot de passe → fingerprint modifié.
+    const newPassword = 'newPass1234';
+    const chg = await agent.put('/api/auth/password')
+      .send({ currentPassword: ALICE.password, newPassword });
+    expect(chg.status).toBe(200);
+    await agent.post('/api/auth/logout').send();
+
+    // Login avec le nouveau mdp : malgré le cookie, le fingerprint ne match plus
+    // → on retombe sur le challenge MFA.
+    const login2 = await agent.post('/api/auth/login')
+      .send({ email: ALICE.email, password: newPassword, rememberDays: 30 });
+    expect(login2.status).toBe(200);
+    expect(login2.body).toEqual({ mfaRequired: true, methods: ['totp'] });
+  });
+
+  it('désactiver puis réactiver TOTP invalide le trusted device', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    const agent = request.agent(app);
+    await loginAlice(agent);
+    let secret = await activateTotp(agent);
+    await agent.post('/api/auth/logout').send();
+    await agent.post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
+    await agent.post('/api/auth/mfa/challenge/verify')
+      .send({ method: 'totp', code: authenticator.generate(secret) });
+
+    // Désactivation TOTP
+    const dis = await agent.post('/api/auth/mfa/totp/disable')
+      .send({ password: ALICE.password, code: authenticator.generate(secret) });
+    expect(dis.status).toBe(200);
+
+    // Réactivation → nouveau totpSecret → fingerprint modifié.
+    const setupRes = await agent.post('/api/auth/mfa/totp/setup').send({ password: ALICE.password });
+    secret = setupRes.body.secret;
+    await agent.post('/api/auth/mfa/totp/enable').send({ code: authenticator.generate(secret) });
+    await agent.post('/api/auth/logout').send();
+
+    const login2 = await agent.post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
+    expect(login2.body).toEqual({ mfaRequired: true, methods: ['totp'] });
+  });
+
+  it('le cookie d\'un user ne saute pas la MFA d\'un autre user', async () => {
+    await createVerifiedUser(app, ALICE.email, ALICE.password);
+    await createVerifiedUser(app, 'bob@test.com', 'bobPass1234');
+    const agent = request.agent(app);
+
+    // Alice active TOTP + passe le challenge → cookie trusted_device pour Alice.
+    await loginAlice(agent);
+    const secret = await activateTotp(agent);
+    await agent.post('/api/auth/logout').send();
+    await agent.post('/api/auth/login').send({ ...ALICE, rememberDays: 30 });
+    await agent.post('/api/auth/mfa/challenge/verify')
+      .send({ method: 'totp', code: authenticator.generate(secret) });
+
+    // Bob active TOTP avec le même navigateur (cookie d'Alice toujours présent).
+    await agent.post('/api/auth/logout').send();
+    await agent.post('/api/auth/login').send({ email: 'bob@test.com', password: 'bobPass1234' });
+    const setupBob = await agent.post('/api/auth/mfa/totp/setup').send({ password: 'bobPass1234' });
+    await agent.post('/api/auth/mfa/totp/enable').send({ code: authenticator.generate(setupBob.body.secret) });
+    await agent.post('/api/auth/logout').send();
+
+    // Bob se reconnecte → le cookie d'Alice ne doit pas sauter la MFA.
+    const loginBob = await agent.post('/api/auth/login')
+      .send({ email: 'bob@test.com', password: 'bobPass1234', rememberDays: 30 });
+    expect(loginBob.body).toEqual({ mfaRequired: true, methods: ['totp'] });
+  });
+});
+
 describe('MFA disable', () => {
   it('disable TOTP exige password + code', async () => {
     await createVerifiedUser(app, ALICE.email, ALICE.password);

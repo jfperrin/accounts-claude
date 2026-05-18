@@ -171,6 +171,15 @@ async function processImportFile(file, bankId, userId, db) {
       .map((o) => exactKey(o.label, bankIdOf(o), amountKey(o.amount), o.date)),
   );
 
+  // Index des fitId déjà connus pour cette banque. Sert à la dédup parfaite
+  // des imports OFX successifs : si une ligne porte un fitId déjà en DB pour
+  // la même banque, c'est exactement la même transaction. On scope à bankId
+  // car les fitId ne sont uniques qu'au sein d'une même institution.
+  const existingFitIds = new Set();
+  for (const o of existing) {
+    if (o.fitId) existingFitIds.add(`${bankIdOf(o)}|${o.fitId}`);
+  }
+
   // Index par banque uniquement : on filtrera ensuite par fenêtre temporelle
   // ET tolérance de montant (le montant n'est plus une clé exacte).
   const byBank = new Map();
@@ -192,6 +201,12 @@ async function processImportFile(file, bankId, userId, db) {
   let duplicates = 0;
 
   for (const r of rows) {
+    // Dédup OFX par fitId : prend précédence sur l'heuristique. Si la même
+    // transaction (même bank + même fitId) est déjà en DB, on saute.
+    if (r.fitId && existingFitIds.has(`${String(bankId)}|${r.fitId}`)) {
+      duplicates++; continue;
+    }
+
     const sameBank = byBank.get(String(bankId)) || [];
     // Candidats à la réconciliation : même banque, montant dans la fourchette
     // ±AMOUNT_TOLERANCE et date dans la fenêtre ±DATE_WINDOW_DAYS.
@@ -202,8 +217,19 @@ async function processImportFile(file, bankId, userId, db) {
     if (existingKeys.has(exactKey(r.label, String(bankId), amountKey(r.amount), r.date))) {
       duplicates++; continue;
     }
+    // Dédup contre op déjà pointée dans la fenêtre amont (même banque,
+    // montant ±10 %, date ±15 j) :
+    //   - suffixe ` (libellé)` d'un import précédent → ligne déjà vue
+    //   - libellé identique ou similaire (≥ SIMILARITY_THRESHOLD) → même
+    //     transaction sous une date différente (cas typique : date de valeur
+    //     ≠ date de comptabilisation, op saisie manuellement après coup).
     const reconciledMarker = ` (${r.label})`;
-    if (sameAmountNear.some((o) => o.pointed && typeof o.label === 'string' && o.label.endsWith(reconciledMarker))) {
+    const pointedDup = sameAmountNear.some((o) => {
+      if (!o.pointed || typeof o.label !== 'string') return false;
+      if (o.label.endsWith(reconciledMarker)) return true;
+      return labelSimilarity(o.label, r.label) >= SIMILARITY_THRESHOLD;
+    });
+    if (pointedDup) {
       duplicates++; continue;
     }
 
@@ -218,6 +244,7 @@ async function processImportFile(file, bankId, userId, db) {
         id: String(target._id),
         newLabel: appendImportLabel(target.label, r.label),
         newAmount: r.amount,
+        fitId: r.fitId ?? null,
       });
     } else {
       const categoryId = inferCategoryFromHints(hints, tokenIndex, r.label);
@@ -226,8 +253,10 @@ async function processImportFile(file, bankId, userId, db) {
         bankId, userId, pointed: true,
         categoryId,
         categorySource: categoryId ? 'auto' : null,
+        fitId: r.fitId ?? null,
       });
       existingKeys.add(exactKey(r.label, String(bankId), amountKey(r.amount), r.date));
+      if (r.fitId) existingFitIds.add(`${String(bankId)}|${r.fitId}`);
       // On enrichit le cache avec le libellé importé pour les imports futurs
       if (categoryId) newHints.push({ label: r.label, categoryId });
     }
@@ -235,7 +264,9 @@ async function processImportFile(file, bankId, userId, db) {
 
   if (toInsert.length) await operations.insertMany(toInsert);
   for (const r of toReconcile) {
-    await operations.update(r.id, userId, { pointed: true, label: r.newLabel, amount: r.newAmount });
+    const patch = { pointed: true, label: r.newLabel, amount: r.newAmount };
+    if (r.fitId) patch.fitId = r.fitId;
+    await operations.update(r.id, userId, patch);
   }
   for (const h of newHints) {
     await categoryHints.upsert(userId, h.label, h.categoryId);
@@ -285,6 +316,7 @@ async function resolveImportMatches(resolutions, userId, db) {
         pointed: true,
         categoryId,
         categorySource: categoryId ? 'auto' : null,
+        fitId: row.fitId ?? null,
       });
       if (categoryId) newHints.push({ label: row.label, categoryId });
     } else {
@@ -292,11 +324,13 @@ async function resolveImportMatches(resolutions, userId, db) {
         const cur = await operations.findById(opId, userId);
         if (!cur) continue;
         // Le montant du fichier fait foi (cf. processImportFile)
-        await operations.update(opId, userId, {
+        const patch = {
           pointed: true,
           label: appendImportLabel(cur.label, row.label),
           amount: row.amount,
-        });
+        };
+        if (row.fitId) patch.fitId = row.fitId;
+        await operations.update(opId, userId, patch);
         reconciled++;
       }
     }

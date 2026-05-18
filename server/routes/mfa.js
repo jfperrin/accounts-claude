@@ -12,7 +12,14 @@ const cryptoBox = require('../utils/cryptoBox');
 const { generateEmailCode, generateRecoveryCodes } = require('../utils/mfaCodes');
 const mailer = require('../utils/mailer');
 
-const { verifyMfaChallenge, authCookieOptions } = require('../utils/tokens');
+const {
+  verifyMfaChallenge,
+  signTrustedDevice,
+  trustFingerprint,
+  authCookieOptions,
+  TRUSTED_DEVICE_COOKIE,
+  TRUSTED_DEVICE_COOKIE_PATH,
+} = require('../utils/tokens');
 const { issueAuthCookies } = require('../utils/issueAuth');
 
 const MFA_ISSUER = process.env.MFA_ISSUER || 'Comptes';
@@ -382,7 +389,22 @@ router.post('/challenge/verify', wrap(async (req, res) => {
 
   clearChallengeCookie(res);
   await db.users.resetMfaFailures(ch.userId);
-  const userForLogin = await db.users.findById(ch.userId);
+  const userForLogin = await db.users.findByIdWithHash(ch.userId);
+
+  // Trusted device : on émet un cookie signé qui permettra de sauter le
+  // challenge MFA sur ce navigateur tant qu'il n'a pas expiré et que le
+  // fingerprint MFA/password reste inchangé.
+  const trustDays = Number(ch.rememberDays) > 0 ? Number(ch.rememberDays) : 30;
+  const trustedToken = signTrustedDevice({
+    userId: ch.userId,
+    days: trustDays,
+    fingerprint: trustFingerprint(userForLogin),
+  });
+  res.cookie(TRUSTED_DEVICE_COOKIE, trustedToken, authCookieOptions({
+    maxAgeMs: trustDays * 24 * 60 * 60 * 1000,
+    path: TRUSTED_DEVICE_COOKIE_PATH,
+  }));
+
   await issueAuthCookies(req, res, userForLogin, { rememberDays: ch.rememberDays });
   res.json({
     _id:             userForLogin._id ?? userForLogin.id,

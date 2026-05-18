@@ -47,8 +47,9 @@ async function main() {
 
   const app = createApp(db, mongoUri, { dualMode });
 
-  if (process.env.MFA_BYPASS_DEV === '1') {
-    console.warn('[security] MFA_BYPASS_DEV=1 : le second facteur est court-circuité au login. À NE JAMAIS utiliser en production.');
+  if (process.env.MFA_BYPASS_DEV === '1' || process.env.NODE_ENV === 'development') {
+    const reason = process.env.MFA_BYPASS_DEV === '1' ? 'MFA_BYPASS_DEV=1' : 'NODE_ENV=development';
+    console.warn(`[security] Bypass MFA actif (${reason}) : le second facteur est court-circuité au login. À NE JAMAIS utiliser en production.`);
   }
 
   // Purge initiale + récurrente (1h) des codes MFA expirés + refresh tokens expirés.

@@ -13,12 +13,15 @@ const mailer = require('../utils/mailer');
 const { router: mfaRouter, helpers: mfaHelpers } = require('./mfa');
 const {
   signMfaChallenge,
+  verifyTrustedDevice,
+  trustFingerprint,
   hashRefreshToken,
   generateRefreshToken,
   signAccessToken,
   authCookieOptions,
   ACCESS_TTL_SEC,
   MFA_CHALLENGE_TTL_SEC,
+  TRUSTED_DEVICE_COOKIE,
 } = require('../utils/tokens');
 const { issueAuthCookies, clearAuthCookies, REFRESH_COOKIE_PATH } = require('../utils/issueAuth');
 
@@ -101,9 +104,28 @@ router.post('/login', authLimiter, (req, res, next) => {
       ? Number(req.body.rememberDays)
       : 30;
 
-    const bypassMfa = process.env.MFA_BYPASS_DEV === '1';
+    // Bypass MFA : explicite (MFA_BYPASS_DEV=1) ou auto en dev local
+    // (NODE_ENV=development). NODE_ENV=test (vitest, e2e) et production
+    // gardent le flow 2FA réel.
+    const bypassMfa = process.env.MFA_BYPASS_DEV === '1'
+      || process.env.NODE_ENV === 'development';
     const hasMfa = !bypassMfa && !user.googleId && (user.totpEnabled || user.emailMfaEnabled);
     if (hasMfa) {
+      // Trusted device : si le navigateur a passé un challenge MFA récent
+      // (cookie toujours valide ET fingerprint MFA/password inchangé), on saute
+      // le challenge. Le cookie a été émis lors du /mfa/challenge/verify avec
+      // TTL = rememberDays choisi à ce moment-là.
+      const trustedToken = req.cookies?.[TRUSTED_DEVICE_COOKIE];
+      if (trustedToken) {
+        const trusted = verifyTrustedDevice(trustedToken);
+        if (trusted
+            && trusted.sub === String(user._id ?? user.id)
+            && trusted.fp === trustFingerprint(user)) {
+          await issueAuthCookies(req, res, user, { rememberDays: days });
+          return res.json(serializeUser(user));
+        }
+      }
+
       if (mfaHelpers.isMfaLocked(user)) {
         return res.status(423).json({
           message: 'Trop de tentatives, compte temporairement verrouillé',

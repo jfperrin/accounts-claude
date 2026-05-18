@@ -5,12 +5,13 @@ import { DEFAULT_COLOR } from '@/lib/categoryColors';
 import InfoTip from '@/components/InfoTip';
 import EmptyState from '@/components/EmptyState';
 
-// Budget mensuel d'une catégorie = somme des récurrentes assignées (en valeur
-// directionnelle selon kind) + maxAmount complémentaire. Identique au calcul
-// de CategoriesPage — gardé inline pour ne pas coupler les deux pages via un
-// util qui figerait la sémantique trop tôt.
+// Valeur "directionnelle" signée selon le kind : pour une catégorie debit on
+// renvoie -sum (une dépense pure → positif ; un remboursement net → négatif,
+// ce qui réduit l'actuel consommé). On ne clippe pas à 0 : sinon une opération
+// positive dans une catégorie debit (remboursement) serait silencieusement
+// ignorée. Pour le budget prévu, le clipping est appliqué localement.
 function directional(sum, kind) {
-  return kind === 'credit' ? Math.max(0, sum) : Math.max(0, -sum);
+  return kind === 'credit' ? sum : -sum;
 }
 
 export default function BudgetSummary({
@@ -45,7 +46,7 @@ export default function BudgetSummary({
     // 1. Calcule budget/actual pour chaque catégorie.
     const computed = categories
       .map((c) => {
-        const recurringSum = directional(recurringByCategory.get(c._id) ?? 0, c.kind);
+        const recurringSum = Math.max(0, directional(recurringByCategory.get(c._id) ?? 0, c.kind));
         const rawBudget = recurringSum + (c.maxAmount ?? 0);
         const budget = Math.ceil(rawBudget / 10) * 10;
         const actual = directional(actualByCategory.get(c._id) ?? 0, c.kind);
@@ -104,8 +105,8 @@ export default function BudgetSummary({
       if (!o.categoryId) continue;
       const cat = catById.get(String(o.categoryId));
       if (!cat) continue;
-      if (cat.kind === 'credit') actualCredit += Math.max(0, o.amount);
-      else actualDebit += Math.max(0, -o.amount);
+      if (cat.kind === 'credit') actualCredit += o.amount;
+      else actualDebit += -o.amount;
     }
     return {
       budgetCredit, budgetDebit, actualCredit, actualDebit,

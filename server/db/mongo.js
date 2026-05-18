@@ -179,7 +179,7 @@ const operations = {
   // Utilisée par l'import (CSV/QIF/OFX) pour dédup globale + réconciliation
   // par montant : besoin de _id pour le tracking et pointed pour filtrer.
   findAllMinimal(userId) {
-    return Operation.find({ userId }).select('label bankId amount date pointed categoryId transferId');
+    return Operation.find({ userId }).select('label bankId amount date pointed categoryId transferId fitId');
   },
 
   async sumUnpointedByBank(userId) {

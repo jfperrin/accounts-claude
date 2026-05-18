@@ -206,6 +206,10 @@ function initSchema(db) {
     // 'manual' (saisie/modifiée par l'utilisateur). Permet d'afficher un indice
     // visuel discret côté UI sur les ops auto-classifiées (DESIGN.md, hint UX).
     'ALTER TABLE operations ADD COLUMN category_source TEXT',
+    // Identifiant unique de transaction OFX (FITID). null pour ops manuelles
+    // ou imports QIF. Sert à dédupliquer parfaitement les imports OFX
+    // successifs (cf. importService).
+    'ALTER TABLE operations ADD COLUMN fit_id TEXT',
   ]) {
     try { db.exec(col); } catch (_) { /* column already exists */ }
   }
@@ -297,6 +301,7 @@ const mapOp = (row) => row && {
   categoryId: row.category_id ?? null,
   categorySource: row.category_source ?? null,
   transferId: row.transfer_id ?? null,
+  fitId: row.fit_id ?? null,
   bankId: row.bank_label != null ? { _id: row.bank_id, label: row.bank_label } : row.bank_id,
   userId: row.user_id,
 };
@@ -632,7 +637,7 @@ module.exports = function createSQLiteRepos() {
     //     filtrer les candidats déjà rapprochés et éviter de consommer 2× la même).
     findAllMinimal(userId) {
       return db.prepare(
-        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category_id AS categoryId, transfer_id AS transferId FROM operations WHERE user_id = ?',
+        'SELECT id AS _id, label, bank_id AS bankId, amount, date, pointed, category_id AS categoryId, transfer_id AS transferId, fit_id AS fitId FROM operations WHERE user_id = ?',
       ).all(uid(userId)).map((r) => ({
         _id: r._id,
         label: r.label,
@@ -642,6 +647,7 @@ module.exports = function createSQLiteRepos() {
         pointed: r.pointed === 1,
         categoryId: r.categoryId ?? null,
         transferId: r.transferId ?? null,
+        fitId: r.fitId ?? null,
       }));
     },
 
@@ -661,14 +667,14 @@ module.exports = function createSQLiteRepos() {
       return out;
     },
 
-    create({ label, amount, date, pointed = false, categoryId = null, categorySource = null, transferId = null, bankId, userId }) {
+    create({ label, amount, date, pointed = false, categoryId = null, categorySource = null, transferId = null, fitId = null, bankId, userId }) {
       const id = randomUUID();
       const dateStr = date instanceof Date ? date.toISOString() : date;
       // Auto-déduction : si une catégorie est fournie sans source explicite, c'est manuel.
       const source = categoryId ? (categorySource ?? 'manual') : null;
       db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, source, transferId ?? null, uid(bankId), uid(userId));
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, fit_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(id, label, amount, dateStr, pointed ? 1 : 0, categoryId ? uid(categoryId) : null, source, transferId ?? null, fitId ?? null, uid(bankId), uid(userId));
       return mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ?`).get(id));
     },
 
@@ -760,14 +766,14 @@ module.exports = function createSQLiteRepos() {
     // Transaction : toutes les insertions réussissent ou aucune n'est commitée
     insertMany(items) {
       const stmt = db.prepare(
-        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO operations (id, label, amount, date, pointed, category_id, category_source, transfer_id, fit_id, bank_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       );
       db.transaction((ops) => {
         for (const op of ops) {
           const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
           const source = op.categoryId ? (op.categorySource ?? 'manual') : null;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
-            op.categoryId ? uid(op.categoryId) : null, source, op.transferId ?? null, uid(op.bankId), uid(op.userId));
+            op.categoryId ? uid(op.categoryId) : null, source, op.transferId ?? null, op.fitId ?? null, uid(op.bankId), uid(op.userId));
         }
       })(items);
     },

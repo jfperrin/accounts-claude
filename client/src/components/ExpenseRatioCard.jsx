@@ -18,8 +18,10 @@ export default function ExpenseRatioCard({ operations, categories, history = [] 
           if (start && d.isBefore(start)) continue;
           if (end && d.isAfter(end)) continue;
         }
-        if (cat.kind === 'credit') income += Math.max(0, o.amount);
-        else expense += Math.max(0, -o.amount);
+        // Pas de clipping à 0 : une opération positive sur une catégorie
+        // debit est un remboursement net, qui doit décrémenter la dépense.
+        if (cat.kind === 'credit') income += o.amount;
+        else expense += -o.amount;
       }
       return { income, expense };
     };
