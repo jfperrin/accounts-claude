@@ -29,8 +29,6 @@
       "EnterWorktree",
       "Read(//lib/**)",
       "Edit(//lib/**)",
-      "Read(~/**)",
-      "Edit(~/**)",
       "Bash(rm -rf *)",
       "Bash(rm -fr *)",
       "Bash(sudo *)",

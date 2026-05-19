@@ -54,6 +54,7 @@ import EmptyState from '@/components/EmptyState';
 import TableSkeleton from '@/components/TableSkeleton';
 import { Building2, ListOrdered } from 'lucide-react';
 import { formatEur, amountClass } from '@/lib/utils';
+import { parseOperationSearch, matchesOperationAmount } from '@/lib/searchOperations';
 
 const COOKIE_NAME = 'dash_date_range';
 const RANGE_MODES = [
@@ -122,10 +123,14 @@ export default function OperationsPage() {
     setFilterCategory('all'); setFilterPointed('all'); setFilterBank('all');
   };
 
+  // Saisie unique « libellé + montant » : « free 1,99 » → libellé « free » envoyé
+  // au serveur, montant 1,99 filtré côté client après réception.
+  const parsedSearch = useMemo(() => parseOperationSearch(q), [q]);
+
   const { operations, reload: reloadOperations, loading: operationsLoading } = useOperations({
     startDate,
     endDate,
-    q: q || undefined,
+    q: parsedSearch.label || undefined,
     categoryId: filterCategory === 'all' ? undefined : filterCategory,
     pointed: filterPointed === 'all' ? undefined : filterPointed === 'true',
     bankId: filterBank === 'all' ? undefined : filterBank,
@@ -136,10 +141,13 @@ export default function OperationsPage() {
     () => operations.filter((o) => !o.categoryId).length,
     [operations],
   );
-  const visibleOperations = useMemo(
-    () => (onlyUncategorized ? operations.filter((o) => !o.categoryId) : operations),
-    [operations, onlyUncategorized],
-  );
+  const visibleOperations = useMemo(() => {
+    let ops = onlyUncategorized ? operations.filter((o) => !o.categoryId) : operations;
+    if (parsedSearch.amount !== null) {
+      ops = ops.filter((o) => matchesOperationAmount(o, parsedSearch.amount, parsedSearch.amountSign));
+    }
+    return ops;
+  }, [operations, onlyUncategorized, parsedSearch]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editOp, setEditOp] = useState(null);
@@ -638,7 +646,7 @@ export default function OperationsPage() {
               type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Rechercher dans le libellé…"
+              placeholder="Rechercher : libellé et/ou montant (ex. free 1,99)…"
               className="pl-9 pr-9"
               aria-label="Rechercher dans les opérations"
             />
@@ -761,7 +769,7 @@ export default function OperationsPage() {
             </span>
             <span className="text-sm text-muted-foreground tabular-nums shrink-0">
               {visibleOperations.length} opération(s)
-              {onlyUncategorized && operations.length !== visibleOperations.length && (
+              {operations.length !== visibleOperations.length && (
                 <span> / {operations.length}</span>
               )}
             </span>
