@@ -11,8 +11,8 @@ import { useUnpointedOperations } from '@/hooks/useUnpointedOperations';
 import BudgetSummary from '@/components/BudgetSummary';
 import MonthlyComparison from '@/components/MonthlyComparison';
 import ExpenseRatioCard from '@/components/ExpenseRatioCard';
-import BalanceSummary from '@/components/BalanceSummary';
-import MonthlyInsights from '@/components/MonthlyInsights';
+import HeroHorizon from '@/components/HeroHorizon';
+import HeroAlerts from '@/components/HeroAlerts';
 import UnpointedOperationsList from '@/components/UnpointedOperationsList';
 import OnboardingSteps from '@/components/OnboardingSteps';
 import ChartFallback from '@/components/ChartFallback';
@@ -105,12 +105,6 @@ export default function HomePage() {
     <div className="space-y-4">
       <OnboardingSteps banks={banks} operations={rawOperations} categories={categories} recurring={recurring} />
 
-      {banks.length > 0 && <BalanceSummary banks={banks} />}
-
-      {banks.length > 0 && (
-        <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
-      )}
-
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-xl border border-border bg-card p-2 sm:p-4 shadow-xs">
         <CalendarDays className="h-5 w-5 text-primary shrink-0" />
         <div className="flex items-center gap-1">
@@ -145,7 +139,18 @@ export default function HomePage() {
         </div>
       </div>
 
-      <MonthlyInsights
+      {banks.length > 0 && (
+        <HeroHorizon
+          banks={banks}
+          unpointed={unpointed}
+          recurring={recurring}
+          operations={operations}
+          monthOffset={monthOffset}
+          endDate={endDate}
+        />
+      )}
+
+      <HeroAlerts
         operations={operations}
         comparisonOps={comparisonOps}
         history={history}
@@ -157,6 +162,10 @@ export default function HomePage() {
         startDate={startDate}
         endDate={endDate}
       />
+
+      {banks.length > 0 && (
+        <UnpointedOperationsList operations={unpointed} onPoint={handlePoint} />
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BudgetSummary
