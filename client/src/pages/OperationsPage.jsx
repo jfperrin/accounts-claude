@@ -27,7 +27,8 @@ import { useBanks } from '@/hooks/useBanks';
 import { useOperations } from '@/hooks/useOperations';
 import { useRecurringOperations } from '@/hooks/useRecurringOperations';
 import BankBalances from '@/components/BankBalances';
-import OperationsTable from '@/components/OperationsTable';
+import OperationsTimeline from '@/components/OperationsTimeline';
+import { computeRecurringPreviews } from '@/lib/recurringPreview';
 import OperationForm from '@/components/OperationForm';
 import ImportDialog from '@/components/ImportDialog';
 import MakeRecurringDialog from '@/components/MakeRecurringDialog';
@@ -148,6 +149,18 @@ export default function OperationsPage() {
     }
     return ops;
   }, [operations, onlyUncategorized, parsedSearch]);
+
+  // Récurrentes prévues mais non encore matérialisées dans operations.
+  // N'a de sens qu'en mode mensuel — sur 30d/90d/custom on n'a pas de cible
+  // claire pour étendre la projection. Filtres actifs (catégorie/banque/pointé/recherche)
+  // → masque les previews aussi pour éviter de polluer un résultat ciblé.
+  const recurringPreviews = useMemo(() => {
+    if (rangeMode !== 'month') return [];
+    if (filterCategory !== 'all' || filterPointed !== 'all' || filterBank !== 'all') return [];
+    if (parsedSearch.label || parsedSearch.amount !== null) return [];
+    if (onlyUncategorized) return [];
+    return computeRecurringPreviews({ recurring, operations, banks, monthOffset });
+  }, [rangeMode, monthOffset, recurring, operations, banks, filterCategory, filterPointed, filterBank, parsedSearch, onlyUncategorized]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editOp, setEditOp] = useState(null);
@@ -774,8 +787,9 @@ export default function OperationsPage() {
               )}
             </span>
           </div>
-          <OperationsTable
+          <OperationsTimeline
             operations={visibleOperations}
+            recurringPreviews={recurringPreviews}
             categories={categories}
             recurring={recurring}
             onPoint={handlePoint}
