@@ -117,6 +117,9 @@ export default function RealBalanceChart({
     if (min === Infinity) return [0];
     if (ref < min) min = ref;
     if (ref > max) max = ref;
+    // Forcer le 0 dans l'axe : repère visuel constant pour situer le solde.
+    if (min > 0) min = 0;
+    if (max < 0) max = 0;
     const range = Math.max(1, max - min);
     const rough = range / 6;
     const mag = 10 ** Math.floor(Math.log10(rough));
