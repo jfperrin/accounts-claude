@@ -17,6 +17,7 @@ import UnpointedOperationsList from '@/components/UnpointedOperationsList';
 import OnboardingSteps from '@/components/OnboardingSteps';
 import ChartFallback from '@/components/ChartFallback';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { getCookiePref, setCookiePref } from '@/lib/cookieUtils';
 
 // recharts représente ~120 ko gzip — sorti du chunk principal via lazy().
 const ExpensesByCategoryChart = lazy(() => import('@/components/ExpensesByCategoryChart'));
@@ -26,30 +27,19 @@ const RealBalanceChart = lazy(() => import('@/components/RealBalanceChart'));
 // le `monthOffset` (0 = mois en cours, défaut quand aucun cookie).
 const COOKIE_NAME = 'home_month';
 
-function getCookiePref() {
-  const match = document.cookie.match(new RegExp('(?:^|; )' + COOKIE_NAME + '=([^;]*)'));
-  if (!match) return null;
-  try { return JSON.parse(decodeURIComponent(match[1])); } catch { return null; }
-}
-
-function setCookiePref(val) {
-  const encoded = encodeURIComponent(JSON.stringify(val));
-  document.cookie = `${COOKIE_NAME}=${encoded}; path=/; max-age=${60 * 60 * 24 * 365}`;
-}
-
 export default function HomePage() {
   const { banks } = useBanks();
   const { categories } = useCategories();
   const { recurring } = useRecurringOperations();
   const { operations: unpointed, reload: reloadUnpointed } = useUnpointedOperations();
 
-  const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
+  const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref(COOKIE_NAME)?.monthOffset ?? 0);
   // Wrapper compatible avec la forme fonctionnelle (Vercel `rerender-functional-setstate`).
   // Le cookie est écrit à partir de la valeur résolue, pas du callback.
   const setMonthOffset = (next) => {
     setMonthOffsetRaw((prev) => {
       const v = typeof next === 'function' ? next(prev) : next;
-      setCookiePref({ monthOffset: v });
+      setCookiePref(COOKIE_NAME, { monthOffset: v });
       return v;
     });
   };

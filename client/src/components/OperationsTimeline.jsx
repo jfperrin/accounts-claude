@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Pencil, Trash2, Repeat, Repeat2, ArrowLeftRight, Link2, Unlink2, Check,
-  Clock,
+  Clock, Sparkles,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -13,13 +13,13 @@ import { cn, formatEur, amountClass } from '@/lib/utils';
 import CategoryBadge from '@/components/CategoryBadge';
 import CategorySelectItems from '@/components/CategorySelectItems';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
-import { buildTimelineItems } from '@/lib/timeline';
+import { buildTimelineItems, formatLongDayLabel } from '@/lib/timeline';
 
 const POINT_REVEAL = 88;
 const ACTION_WIDTH = 80;
 const DRAG_THRESHOLD = 6;
 
-function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, children }) {
+function SwipeableCard({ op, isToday, onPoint, onEdit, onDelete, onMakeRecurring, children }) {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const startX = useRef(0);
@@ -139,7 +139,11 @@ function SwipeableCard({ op, onPoint, onEdit, onDelete, onMakeRecurring, childre
         className={cn(
           'relative border border-border px-2 py-2',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background',
-          op.pointed ? 'bg-muted text-muted-foreground' : 'bg-card',
+          op.pointed
+            ? 'bg-muted text-muted-foreground'
+            : isToday
+              ? 'border-primary/30 bg-primary/[0.04]'
+              : 'bg-card',
         )}
       >
         {children}
@@ -250,6 +254,22 @@ export default function OperationsTimeline({
             );
           }
           if (it.type === 'day') {
+            if (it.isToday) {
+              return (
+                <div
+                  key={`d-${idx}`}
+                  role="region"
+                  aria-label="Opérations d'aujourd'hui"
+                  className="mt-2 mb-0.5 flex items-center gap-2.5 rounded-lg bg-primary/10 px-3 py-2 text-primary"
+                >
+                  <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <div className="flex-1 leading-tight">
+                    <div className="text-sm font-semibold">Aujourd'hui</div>
+                    <div className="text-[11px] capitalize text-primary/70">{formatLongDayLabel(it.date)}</div>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div
                 key={`d-${idx}`}
@@ -267,6 +287,7 @@ export default function OperationsTimeline({
             <SwipeableCard
               key={op._id}
               op={op}
+              isToday={it.isToday}
               onPoint={onPoint}
               onEdit={onEdit}
               onDelete={(id) => setDeleteTarget(id)}
@@ -353,6 +374,25 @@ export default function OperationsTimeline({
               );
             }
             if (it.type === 'day') {
+              if (it.isToday) {
+                return (
+                  <TableRow key={`d-${idx}`} className="hover:bg-transparent">
+                    <TableCell colSpan={colSpan} className="bg-primary/10 py-2.5">
+                      <div
+                        role="region"
+                        aria-label="Opérations d'aujourd'hui"
+                        className="flex items-baseline gap-2 text-primary"
+                      >
+                        <Sparkles className="h-4 w-4 shrink-0 self-center" aria-hidden="true" />
+                        <span className="text-sm font-semibold">Aujourd'hui</span>
+                        <span className="text-xs capitalize text-primary/70">
+                          · {formatLongDayLabel(it.date)}
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              }
               return (
                 <TableRow key={`d-${idx}`} className="hover:bg-transparent">
                   <TableCell colSpan={colSpan} className="bg-muted/30 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -420,6 +460,7 @@ export default function OperationsTimeline({
                 className={cn(
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                   op.pointed && 'opacity-50',
+                  it.isToday && !op.pointed && !isSelected && 'bg-primary/[0.04] hover:bg-primary/[0.07]',
                   isSelected && 'bg-muted/40',
                 )}
               >

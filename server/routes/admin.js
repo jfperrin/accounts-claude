@@ -7,27 +7,11 @@ const bcrypt = require('bcryptjs');
 const { randomUUID } = require('crypto');
 const wrap = require('../utils/asyncHandler');
 const { sendPasswordResetEmail } = require('../utils/mailer');
+const { serializeAdminUser } = require('../utils/serializeUser');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-
-// Sérialise un user pour la liste admin (pas de passwordHash)
-function serializeAdminUser(u) {
-  return {
-    _id:             u._id ?? u.id,
-    email:           u.email ?? null,
-    emailVerified:   u.emailVerified ?? false,
-    role:            u.role ?? 'user',
-    firstName:       u.firstName ?? null,
-    lastName:        u.lastName ?? null,
-    nickname:        u.nickname ?? null,
-    createdAt:       u.createdAt ?? null,
-    isGoogle:        !!u.googleId,
-    totpEnabled:     !!u.totpEnabled,
-    emailMfaEnabled: !!u.emailMfaEnabled,
-  };
-}
 
 // GET /api/admin/users — liste tous les utilisateurs
 router.get('/users', wrap(async (req, res) => {

@@ -168,7 +168,13 @@
       "Bash(cmd /c \"dir .claude\\\\skills\")",
       "Bash(cmd //c \"fsutil reparsepoint query .claude\\\\\\\\skills\\\\\\\\frontend-design\")",
       "Bash(cmd //c \"dir .claude\\\\\\\\skills\\\\\\\\frontend-design\")",
-      "Bash(wsl --status)"
+      "Bash(wsl --status)",
+      "Bash(./node_modules/.bin/eslint src *)",
+      "Bash(where eslint *)",
+      "Bash(where node *)",
+      "Skill(vercel-react-best-practices)",
+      "Skill(vercel-react-best-practices:*)",
+      "Bash(xargs basename -a)"
     ]
   }
 }

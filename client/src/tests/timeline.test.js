@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import dayjs from 'dayjs';
-import { buildTimelineItems } from '../lib/timeline';
+import { buildTimelineItems, formatLongDayLabel } from '../lib/timeline';
 
 const NOW = dayjs('2026-05-19');
 
@@ -73,5 +73,26 @@ describe('buildTimelineItems — desc', () => {
       now: NOW,
     });
     expect(items[0]).toEqual({ type: 'section', label: 'À venir' });
+  });
+
+  it('annote isToday=true sur le day-header et les ops du jour', () => {
+    const items = buildTimelineItems({
+      ops: [o('a', '2026-05-19'), o('b', '2026-05-18'), o('c', '2026-05-20')],
+      now: NOW,
+    });
+    const todayDay = items.find((i) => i.type === 'day' && i.label === "Aujourd'hui");
+    const yesterdayDay = items.find((i) => i.type === 'day' && i.label === 'Hier');
+    const todayOp = items.find((i) => i.type === 'op' && i.op._id === 'a');
+    const futureOp = items.find((i) => i.type === 'op' && i.op._id === 'c');
+    expect(todayDay.isToday).toBe(true);
+    expect(yesterdayDay.isToday).toBe(false);
+    expect(todayOp.isToday).toBe(true);
+    expect(futureOp.isToday).toBe(false);
+  });
+});
+
+describe('formatLongDayLabel', () => {
+  it('rend la forme longue française « jeudi 21 mai »', () => {
+    expect(formatLongDayLabel('2026-05-21')).toBe('jeudi 21 mai');
   });
 });

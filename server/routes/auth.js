@@ -24,25 +24,7 @@ const {
   TRUSTED_DEVICE_COOKIE,
 } = require('../utils/tokens');
 const { issueAuthCookies, clearAuthCookies, REFRESH_COOKIE_PATH } = require('../utils/issueAuth');
-
-// Helper : sérialise un user Mongoose ou SQLite en réponse JSON uniforme
-function serializeUser(u) {
-  return {
-    _id:           u._id ?? u.id,
-    email:         u.email ?? null,
-    emailVerified: u.emailVerified ?? false,
-    role:          u.role ?? 'user',
-    title:         u.title     ?? null,
-    firstName:     u.firstName ?? null,
-    lastName:      u.lastName  ?? null,
-    nickname:      u.nickname  ?? null,
-    avatarUrl:     u.avatarUrl ?? null,
-    acceptedToSAt: u.acceptedToSAt ?? null,
-    totpEnabled:     !!u.totpEnabled,
-    emailMfaEnabled: !!u.emailMfaEnabled,
-    recoveryCodesRemaining: (u.recoveryCodes || []).length,
-  };
-}
+const { serializeSelf: serializeUser } = require('../utils/serializeUser');
 
 const ALLOWED_DAYS = [1, 30, 365];
 

@@ -56,6 +56,7 @@ import TableSkeleton from '@/components/TableSkeleton';
 import { Building2, ListOrdered } from 'lucide-react';
 import { formatEur, amountClass } from '@/lib/utils';
 import { parseOperationSearch, matchesOperationAmount } from '@/lib/searchOperations';
+import { getCookiePref, setCookiePref } from '@/lib/cookieUtils';
 
 const COOKIE_NAME = 'dash_date_range';
 const RANGE_MODES = [
@@ -65,28 +66,17 @@ const RANGE_MODES = [
   { value: 'custom', label: 'Perso' },
 ];
 
-function getCookiePref() {
-  const match = document.cookie.match(new RegExp('(?:^|; )' + COOKIE_NAME + '=([^;]*)'));
-  if (!match) return null;
-  try { return JSON.parse(decodeURIComponent(match[1])); } catch { return null; }
-}
-
-function setCookiePref(val) {
-  const encoded = encodeURIComponent(JSON.stringify(val));
-  document.cookie = `${COOKIE_NAME}=${encoded}; path=/; max-age=${60 * 60 * 24 * 365}`;
-}
-
 export default function OperationsPage() {
   const { categories } = useCategories();
   const { banks, reload: reloadBanks } = useBanks();
   const { recurring } = useRecurringOperations();
 
-  const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref()?.mode ?? 'month');
-  const [customStart, setCustomStart] = useState(() => getCookiePref()?.start ?? dayjs().subtract(29, 'day').format('YYYY-MM-DD'));
-  const [customEnd, setCustomEnd] = useState(() => getCookiePref()?.end ?? dayjs().format('YYYY-MM-DD'));
-  const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref()?.monthOffset ?? 0);
+  const [rangeMode, setRangeModeRaw] = useState(() => getCookiePref(COOKIE_NAME)?.mode ?? 'month');
+  const [customStart, setCustomStart] = useState(() => getCookiePref(COOKIE_NAME)?.start ?? dayjs().subtract(29, 'day').format('YYYY-MM-DD'));
+  const [customEnd, setCustomEnd] = useState(() => getCookiePref(COOKIE_NAME)?.end ?? dayjs().format('YYYY-MM-DD'));
+  const [monthOffset, setMonthOffsetRaw] = useState(() => getCookiePref(COOKIE_NAME)?.monthOffset ?? 0);
 
-  const persist = (next) => setCookiePref({ mode: rangeMode, start: customStart, end: customEnd, monthOffset, ...next });
+  const persist = (next) => setCookiePref(COOKIE_NAME, { mode: rangeMode, start: customStart, end: customEnd, monthOffset, ...next });
   const setRangeMode = (mode) => { setRangeModeRaw(mode); persist({ mode }); };
   const updateCustomStart = (v) => { setCustomStart(v); persist({ start: v }); };
   const updateCustomEnd = (v) => { setCustomEnd(v); persist({ end: v }); };

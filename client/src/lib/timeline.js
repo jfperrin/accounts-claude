@@ -18,7 +18,14 @@ const MONTHS_FR = [
   'juill.', 'août', 'sept.', 'oct.', 'nov.', 'déc.',
 ];
 
+const MONTHS_FR_LONG = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
 const DAYS_FR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+
+const DAYS_FR_LONG = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
 function formatDayLabel(date, today) {
   const d = dayjs(date);
@@ -28,6 +35,13 @@ function formatDayLabel(date, today) {
   const diff = d.startOf('day').diff(today.startOf('day'), 'day');
   if (diff > 1 && diff < 7) return DAYS_FR[d.day()];
   return `${DAYS_FR[d.day()]} ${d.date()} ${MONTHS_FR[d.month()]}`;
+}
+
+// Forme longue « jeudi 21 mai » — utilisée pour le sous-titre du bloc
+// « Aujourd'hui » mis en valeur dans OperationsTimeline.
+export function formatLongDayLabel(date) {
+  const d = dayjs(date);
+  return `${DAYS_FR_LONG[d.day()]} ${d.date()} ${MONTHS_FR_LONG[d.month()]}`;
 }
 
 export function buildTimelineItems({ ops = [], sortDir = 'desc', now = dayjs() } = {}) {
@@ -67,11 +81,13 @@ export function buildTimelineItems({ ops = [], sortDir = 'desc', now = dayjs() }
       sectionInserted = true;
     }
 
+    const isToday = d.isSame(today, 'day');
+
     if (dayKey !== lastDay) {
-      items.push({ type: 'day', date: dayKey, label: formatDayLabel(d, today) });
+      items.push({ type: 'day', date: dayKey, label: formatDayLabel(d, today), isToday });
       lastDay = dayKey;
     }
-    items.push({ type: 'op', op });
+    items.push({ type: 'op', op, isToday });
   }
   return items;
 }
