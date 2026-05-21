@@ -21,14 +21,19 @@ export function useMonthlyInsights({
   recurring = [], banks = [], unpointed = [], monthOffset = 0,
   startDate, endDate,
 }) {
+  // Pré-calculé hors du useMemo principal : seul `categories` change rarement
+  // comparé aux ops, on évite de re-construire la Map à chaque scroll/pointage.
+  const catById = useMemo(
+    () => new Map(categories.map((c) => [String(c._id), c])),
+    [categories],
+  );
+
   return useMemo(() => {
     const items = [];
     const isCurrent = monthOffset === 0;
     const today = dayjs();
     const start = dayjs(startDate);
     const end = dayjs(endDate);
-
-    const catById = new Map(categories.map((c) => [String(c._id), c]));
 
     let revenus = 0; let depenses = 0;
     for (const o of operations) {
@@ -48,8 +53,8 @@ export function useMonthlyInsights({
         .filter((o) => {
           const d = dayjs(o.date);
           if (!(d.isBefore(cap) || d.isSame(cap))) return false;
-          if (o.transferId) return false;
-          return true;
+          return !o.transferId;
+
         })
         .reduce((s, o) => s + o.amount, 0);
       const projectedAtEnd = totalCurrent + pending;
@@ -366,5 +371,5 @@ export function useMonthlyInsights({
 
     items.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
     return items;
-  }, [operations, comparisonOps, history, categories, recurring, banks, unpointed, monthOffset, startDate, endDate]);
+  }, [operations, comparisonOps, history, categories, recurring, banks, unpointed, monthOffset, startDate, endDate, catById]);
 }

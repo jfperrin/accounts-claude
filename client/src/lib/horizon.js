@@ -25,20 +25,36 @@ function sameLabel(opLabel, recLabel) {
   return al.includes(bl) || bl.includes(al);
 }
 
-function recurringHasOp({ operations, monthStr }) {
-  return (rec) => operations.some((o) => {
-    if (o.transferId) return false;
-    if (!o.date || o.date.slice(0, 7) !== monthStr) return false;
-    const oBank = String(o.bankId?._id ?? o.bankId);
-    const rBank = String(rec.bankId?._id ?? rec.bankId);
-    if (oBank !== rBank) return false;
-    if (!sameLabel(o.label, rec.label)) return false;
+// Index `Map<"bankId|YYYY-MM", op[]>` pour réduire les recherches O(rec × ops)
+// à O(rec × ops_in_même_bank_même_mois). Les virements internes et les ops
+// sans date sont filtrés en amont, on ne les recroise plus dans la boucle.
+function buildOpsIndex(operations) {
+  const idx = new Map();
+  for (const o of operations) {
+    if (o.transferId) continue;
+    if (!o.date) continue;
+    const bId = String(o.bankId?._id ?? o.bankId);
+    const key = `${bId}|${o.date.slice(0, 7)}`;
+    let arr = idx.get(key);
+    if (!arr) { arr = []; idx.set(key, arr); }
+    arr.push(o);
+  }
+  return idx;
+}
+
+function recurringHasOp(idx, rec, monthStr) {
+  const bId = String(rec.bankId?._id ?? rec.bankId);
+  const arr = idx.get(`${bId}|${monthStr}`);
+  if (!arr) return false;
+  for (const o of arr) {
+    if (!sameLabel(o.label, rec.label)) continue;
     if (rec.amount && o.amount) {
-      if (Math.sign(rec.amount) !== Math.sign(o.amount)) return false;
-      if (Math.abs(o.amount - rec.amount) > Math.abs(rec.amount) * 0.10) return false;
+      if (Math.sign(rec.amount) !== Math.sign(o.amount)) continue;
+      if (Math.abs(o.amount - rec.amount) > Math.abs(rec.amount) * 0.10) continue;
     }
     return true;
-  });
+  }
+  return false;
 }
 
 export function computeHorizon({
@@ -75,14 +91,15 @@ export function computeHorizon({
   let recurringSum = 0;
   let recurringCount = 0;
 
+  const opsIndex = buildOpsIndex(operations);
+
   // Mois courant : seuil = today.date() (jours restants à venir).
   const currentMonthStr = today.format('YYYY-MM');
-  const isRealizedCurrent = recurringHasOp({ operations, monthStr: currentMonthStr });
   const dayToday = today.date();
   for (const r of recurring) {
     if (r.toBankId) continue;
     if (r.dayOfMonth <= dayToday) continue;
-    if (isRealizedCurrent(r)) continue;
+    if (recurringHasOp(opsIndex, r, currentMonthStr)) continue;
     recurringSum += r.amount;
     recurringCount += 1;
   }
@@ -90,12 +107,10 @@ export function computeHorizon({
   // Mois futurs (offset > 0) : chaque mois entre courant+1 et sélectionné
   // contribue toutes ses récurrentes (sauf déjà matérialisées).
   for (let i = 1; i <= monthOffset; i++) {
-    const m = today.add(i, 'month');
-    const mStr = m.format('YYYY-MM');
-    const isRealizedM = recurringHasOp({ operations, monthStr: mStr });
+    const mStr = today.add(i, 'month').format('YYYY-MM');
     for (const r of recurring) {
       if (r.toBankId) continue;
-      if (isRealizedM(r)) continue;
+      if (recurringHasOp(opsIndex, r, mStr)) continue;
       recurringSum += r.amount;
       recurringCount += 1;
     }
@@ -154,16 +169,16 @@ export function computeHorizonSparkline({
 
   // Récurrentes : un point d'impact par mois entre today+1 et eom, au jour
   // r.dayOfMonth. Filtre dédup mensuel via sameLabel.
+  const opsIndex = buildOpsIndex(operations);
   for (let i = 0; i <= totalDays; i++) {
     const d = today.add(i, 'day');
     if (d.isSame(today, 'day') || d.isBefore(today, 'day')) continue;
     const monthStr = d.format('YYYY-MM');
     const dom = d.date();
-    const isRealized = recurringHasOp({ operations, monthStr });
     for (const r of recurring) {
       if (r.toBankId) continue;
       if (r.dayOfMonth !== dom) continue;
-      if (isRealized(r)) continue;
+      if (recurringHasOp(opsIndex, r, monthStr)) continue;
       const k = d.format('YYYY-MM-DD');
       impactByDay.set(k, (impactByDay.get(k) ?? 0) + r.amount);
     }

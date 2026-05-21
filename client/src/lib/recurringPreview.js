@@ -28,15 +28,18 @@ export function computeRecurringPreviews({
 
   // Index des ops existantes pour dédup. La clé exacte ne matche pas toujours
   // les ops importées (suffixe `(rowLabel)` ou montant ajusté à ±10 %), on
-  // double avec un index sameLabel + bankId + amount±10%.
+  // double avec un index par bankId (sameLabel + amount±10 % parcourus dans
+  // le bucket plutôt que sur la liste complète des ops du mois).
   const existingKeys = new Set();
-  const existingFuzzy = []; // [{ label, bankId, amount }]
+  const existingByBank = new Map(); // bankId → [{ label, amount }]
   for (const o of operations) {
     if (!o.date) continue;
     if (o.date.slice(0, 7) !== monthStr) continue;
     const bId = String(o.bankId?._id ?? o.bankId);
     existingKeys.add(`${o.label}|${bId}|${o.amount}|${o.date.slice(0, 10)}`);
-    existingFuzzy.push({ label: o.label, bankId: bId, amount: o.amount });
+    let arr = existingByBank.get(bId);
+    if (!arr) { arr = []; existingByBank.set(bId, arr); }
+    arr.push({ label: o.label, amount: o.amount });
   }
 
   const sameLabel = (a, b) => {
@@ -56,8 +59,8 @@ export function computeRecurringPreviews({
 
     const exactKey = `${r.label}|${rBank}|${r.amount}|${date}`;
     if (existingKeys.has(exactKey)) continue;
-    const fuzzyHit = existingFuzzy.some((o) => {
-      if (o.bankId !== rBank) return false;
+    const bucket = existingByBank.get(rBank);
+    const fuzzyHit = !!bucket && bucket.some((o) => {
       if (!sameLabel(o.label, r.label)) return false;
       if (!r.amount || !o.amount) return false;
       if (Math.sign(r.amount) !== Math.sign(o.amount)) return false;
