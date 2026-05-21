@@ -162,7 +162,9 @@
       "Bash(grep -v \"\\\\.test\\\\.\\\\|null,$\\\\|undefined,$\")",
       "Bash(CLAUDE_PROJECT_DIR=/data/git/github.com/accounts-claude node /data/git/github.com/accounts-claude/.claude/hooks/lint-after-edit.js)",
       "Bash(./node_modules/.bin/eslint src/pages/RecurringPage.jsx)",
-      "Bash(awk -F: '{print $1}')"
+      "Bash(awk -F: '{print $1}')",
+      "Skill(superpowers:systematic-debugging)",
+      "Skill(superpowers:systematic-debugging:*)"
     ]
   }
 }

@@ -5,11 +5,12 @@ const client = axios.create({ baseURL: '/api', withCredentials: true });
 const PUBLIC_PATHS = ['/login', '/cgu', '/reset-password'];
 
 // Routes pour lesquelles on NE tente PAS de refresh sur 401 :
-// - /auth/me   : c'est le check de session au boot, 401 signifie déconnecté
 // - /auth/login, /auth/register, /auth/forgot-password : pas authentifié par essence
 // - /auth/refresh : éviter une boucle infinie
+// /auth/me DOIT pouvoir déclencher un refresh : sinon, dès que l'access (15 min)
+// expire, le boot considère l'utilisateur déconnecté même si son refresh
+// (rememberDays jusqu'à 365j) est toujours valide.
 const NO_REFRESH_PATHS = [
-  '/auth/me',
   '/auth/login',
   '/auth/register',
   '/auth/refresh',
