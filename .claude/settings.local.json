@@ -164,7 +164,11 @@
       "Bash(./node_modules/.bin/eslint src/pages/RecurringPage.jsx)",
       "Bash(awk -F: '{print $1}')",
       "Skill(superpowers:systematic-debugging)",
-      "Skill(superpowers:systematic-debugging:*)"
+      "Skill(superpowers:systematic-debugging:*)",
+      "Bash(cmd /c \"dir .claude\\\\skills\")",
+      "Bash(cmd //c \"fsutil reparsepoint query .claude\\\\\\\\skills\\\\\\\\frontend-design\")",
+      "Bash(cmd //c \"dir .claude\\\\\\\\skills\\\\\\\\frontend-design\")",
+      "Bash(wsl --status)"
     ]
   }
 }
