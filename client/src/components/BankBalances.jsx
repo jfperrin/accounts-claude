@@ -147,14 +147,14 @@ export default function BankBalances({ banks, onSaveBalance }) {
       {banks.length > 1 && (
         <div
           data-testid="total-card"
-          className="rounded-xl bg-primary shadow-lg shadow-primary/30 px-5 py-4 sm:px-7 sm:py-6"
+          className="rounded-xl border border-primary/20 bg-primary/[0.06] px-5 py-4 sm:px-7 sm:py-5"
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
+              <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.18em] text-primary">
                 Total prévisionnel
               </span>
-              <span className="text-xs text-primary-foreground/70">
+              <span className="text-xs text-muted-foreground">
                 sur {banks.length} banques
                 {Math.abs(unpointed) > 0.005 && (
                   <>
@@ -166,7 +166,7 @@ export default function BankBalances({ banks, onSaveBalance }) {
                 )}
               </span>
             </div>
-            <span className="text-3xl sm:text-4xl font-extrabold tabular-nums leading-none text-primary-foreground">
+            <span className={cn('text-3xl sm:text-4xl font-extrabold tabular-nums leading-none', amountClass(totalProjected))}>
               {formatEur(totalProjected)}
             </span>
           </div>
