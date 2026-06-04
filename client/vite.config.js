@@ -10,18 +10,24 @@ import { resolve } from 'path';
 // `var require_isUnsafeProperty = require_isUnsafeProperty()` à l'intérieur
 // d'un IIFE — la `var` hoistée masque la fonction externe → "is not a function".
 // Solution : aliaser chaque chemin profond vers la version `.mjs` correspondante.
+// On utilise des chemins absolus : les `.mjs` ne sont pas dans le champ exports
+// du package, donc un specifier comme `es-toolkit/dist/...mjs` est rejeté par
+// Vite — résoudre vers le fichier sur disque contourne le gating.
+const esCompat = (subdir, name) => resolve(
+  __dirname, 'node_modules/es-toolkit/dist/compat', subdir, `${name}.mjs`,
+);
 const esToolkitCompatMjsAlias = {
-  'es-toolkit/compat/get':           'es-toolkit/dist/compat/object/get.mjs',
-  'es-toolkit/compat/omit':          'es-toolkit/dist/compat/object/omit.mjs',
-  'es-toolkit/compat/isPlainObject': 'es-toolkit/dist/compat/predicate/isPlainObject.mjs',
-  'es-toolkit/compat/last':          'es-toolkit/dist/compat/array/last.mjs',
-  'es-toolkit/compat/sortBy':        'es-toolkit/dist/compat/array/sortBy.mjs',
-  'es-toolkit/compat/uniqBy':        'es-toolkit/dist/compat/array/uniqBy.mjs',
-  'es-toolkit/compat/throttle':      'es-toolkit/dist/compat/function/throttle.mjs',
-  'es-toolkit/compat/maxBy':         'es-toolkit/dist/compat/math/maxBy.mjs',
-  'es-toolkit/compat/minBy':         'es-toolkit/dist/compat/math/minBy.mjs',
-  'es-toolkit/compat/range':         'es-toolkit/dist/compat/math/range.mjs',
-  'es-toolkit/compat/sumBy':         'es-toolkit/dist/compat/math/sumBy.mjs',
+  'es-toolkit/compat/get':           esCompat('object',    'get'),
+  'es-toolkit/compat/omit':          esCompat('object',    'omit'),
+  'es-toolkit/compat/isPlainObject': esCompat('predicate', 'isPlainObject'),
+  'es-toolkit/compat/last':          esCompat('array',     'last'),
+  'es-toolkit/compat/sortBy':        esCompat('array',     'sortBy'),
+  'es-toolkit/compat/uniqBy':        esCompat('array',     'uniqBy'),
+  'es-toolkit/compat/throttle':      esCompat('function',  'throttle'),
+  'es-toolkit/compat/maxBy':         esCompat('math',      'maxBy'),
+  'es-toolkit/compat/minBy':         esCompat('math',      'minBy'),
+  'es-toolkit/compat/range':         esCompat('math',      'range'),
+  'es-toolkit/compat/sumBy':         esCompat('math',      'sumBy'),
 };
 
 export default defineConfig({
