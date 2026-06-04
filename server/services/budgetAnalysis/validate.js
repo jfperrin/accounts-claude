@@ -15,7 +15,12 @@ function checkCatId(id, allowed, path, allowNull = false) {
   if (!allowed.has(id)) fail(`${path}: categoryId inconnu (${id})`);
 }
 
-function validateResponse(r, allowedCatIds) {
+// Tolérance absolue (€) au-dessus de laquelle on considère que Claude a inventé
+// ou recalculé un total. 1 € couvre les arrondis sans laisser passer une vraie
+// hallucination (cas observé : 158 → 382 sur 9 ops).
+const AMOUNT_TOLERANCE_EUR = 1;
+
+function validateResponse(r, allowedCatIds, serverTotals) {
   if (!r || typeof r !== 'object') fail('réponse: objet attendu');
   if (!isStr(r.summary)) fail('summary: string non vide requise');
 
@@ -56,6 +61,19 @@ function validateResponse(r, allowedCatIds) {
     if (!isNum(b.share) || b.share < 0 || b.share > 1)
       fail(`categoryBreakdown[${i}].share hors [0,1]`);
     if (!isNum(b.amount)) fail(`categoryBreakdown[${i}].amount`);
+
+    // Garde-fou anti-hallucination : si le serveur connaît les totaux du mois,
+    // l'amount retourné par Claude doit y coïncider (à 1 € près).
+    if (serverTotals) {
+      const t = serverTotals.get(String(b.categoryId));
+      if (!t) {
+        fail(`categoryBreakdown[${i}]: catégorie ${b.categoryId} sans op réelle ce mois`);
+      }
+      const expected = Math.max(t.totalDebit, t.totalCredit);
+      if (Math.abs(b.amount - expected) > AMOUNT_TOLERANCE_EUR) {
+        fail(`categoryBreakdown[${i}]: amount=${b.amount} ≠ serveur=${expected} (>${AMOUNT_TOLERANCE_EUR}€)`);
+      }
+    }
   });
 }
 

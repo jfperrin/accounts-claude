@@ -1,5 +1,5 @@
 const { digestOps } = require('./budgetAnalysis/digest');
-const { buildPayload } = require('./budgetAnalysis/payload');
+const { buildPayload, computeTotalsByCategory } = require('./budgetAnalysis/payload');
 const { validateResponse } = require('./budgetAnalysis/validate');
 const { ANTHROPIC_MODEL_DEFAULT } = require('./budgetAnalysis/prompt');
 
@@ -53,7 +53,8 @@ async function getOrCompute({ db, userId, year, month, force = false }) {
   // (CJS require() bypasses the ESM mock registry).
   const { callAnthropic } = await import('./budgetAnalysis/anthropic.js');
   const response = await callAnthropic({ payload, allowedCatIds });
-  validateResponse(response, allowedCatIds);
+  const serverTotals = computeTotalsByCategory(currentMonthOps);
+  validateResponse(response, allowedCatIds, serverTotals);
 
   const model = process.env.ANTHROPIC_MODEL || ANTHROPIC_MODEL_DEFAULT;
   await db.budgetAnalyses.upsert({ userId, year, month, opsDigest, response, model });

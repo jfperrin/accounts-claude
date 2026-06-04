@@ -41,4 +41,38 @@ describe('validateResponse', () => {
     const bad = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1.5, amount: 1 }] };
     expect(() => validateResponse(bad, allowed)).toThrow(/share/);
   });
+
+  describe('anti-hallucination — vérification des amount via serverTotals', () => {
+    const serverTotals = new Map([
+      ['c1', { totalDebit: 200, totalCredit: 0, opsCount: 5 }],
+    ]);
+
+    it('accepte un amount qui matche serverTotals (à 1€ près)', () => {
+      const ok = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1, amount: 200.5 }] };
+      expect(() => validateResponse(ok, allowed, serverTotals)).not.toThrow();
+    });
+
+    it('rejette un amount qui diverge du serveur (>1€)', () => {
+      const bad = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1, amount: 382 }] };
+      expect(() => validateResponse(bad, allowed, serverTotals)).toThrow(/serveur=200/);
+    });
+
+    it('rejette une catégorie sans op réelle ce mois', () => {
+      const bad = { ...valid, categoryBreakdown: [{ categoryId: 'c2', share: 1, amount: 50 }] };
+      expect(() => validateResponse(bad, allowed, serverTotals)).toThrow(/sans op réelle/);
+    });
+
+    it('accepte les credits (catégorie où totalCredit > totalDebit)', () => {
+      const totals = new Map([
+        ['c1', { totalDebit: 0, totalCredit: 1500, opsCount: 1 }],
+      ]);
+      const ok = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1, amount: 1500 }] };
+      expect(() => validateResponse(ok, allowed, totals)).not.toThrow();
+    });
+
+    it('serverTotals absent : pas de garde-fou (comportement legacy)', () => {
+      const stillOk = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 0.5, amount: 9999 }] };
+      expect(() => validateResponse(stillOk, allowed)).not.toThrow();
+    });
+  });
 });

@@ -4,9 +4,19 @@ class AnthropicError extends Error {
   constructor(msg, status) { super(msg); this.status = status; this.name = 'AnthropicError'; }
 }
 
-function mockResponse(allowedCatIds) {
+function mockResponse({ payload, allowedCatIds }) {
   const ids = [...allowedCatIds];
   const c1 = ids[0] ?? 'cat_mock';
+  // Pour passer le garde-fou anti-hallucination du validator, le breakdown
+  // doit refléter les totaux réels du payload (pas un nombre arbitraire).
+  const totals = payload?.currentMonth?.totalsByCategory ?? [];
+  const breakdown = totals
+    .filter((t) => t.totalDebit > 0 || t.totalCredit > 0)
+    .map((t, i, arr) => ({
+      categoryId: t.categoryId,
+      share: arr.length > 0 ? 1 / arr.length : 0,
+      amount: Math.max(t.totalDebit, t.totalCredit),
+    }));
   return {
     summary: 'Analyse simulée (MOCK_ANTHROPIC). Pas d\'appel réseau.',
     highlights: [{ title: 'Mock', detail: 'Réponse de test', severity: 'info' }],
@@ -17,15 +27,13 @@ function mockResponse(allowedCatIds) {
     budgetSuggestions: ids.length > 0
       ? [{ categoryId: c1, currentBudget: 100, suggestedBudget: 120, rationale: 'mock' }]
       : [],
-    categoryBreakdown: ids.length > 0
-      ? [{ categoryId: c1, share: 1, amount: 100 }]
-      : [],
+    categoryBreakdown: breakdown,
   };
 }
 
 async function callAnthropic({ payload, allowedCatIds }) {
   if (process.env.MOCK_ANTHROPIC === '1') {
-    return mockResponse(allowedCatIds);
+    return mockResponse({ payload, allowedCatIds });
   }
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new AnthropicError('ANTHROPIC_API_KEY manquante', 503);

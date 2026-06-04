@@ -52,4 +52,16 @@ describe('buildPayload', () => {
     expect(c1May.totalDebit).toBe(100);
     expect(c1May.opsCount).toBe(1);
   });
+
+  it('currentMonth.totalsByCategory : pré-agrégat des ops du mois', () => {
+    const totals = payload.currentMonth.totalsByCategory;
+    expect(totals).toHaveLength(2);
+    const c1 = totals.find((t) => t.categoryId === 'c1');
+    expect(c1.totalDebit).toBe(42.5);
+    expect(c1.totalCredit).toBe(0);
+    expect(c1.opsCount).toBe(1);
+    const c2 = totals.find((t) => t.categoryId === 'c2');
+    expect(c2.totalCredit).toBe(1500);
+    expect(c2.totalDebit).toBe(0);
+  });
 });

@@ -1,3 +1,29 @@
+// Pré-agrégat des opérations d'un set par catégorie (debit/credit/count).
+// Utilisé par buildPayload pour injecter les totaux du mois courant dans le
+// payload Claude, et par le validateur pour vérifier que Claude n'a pas inventé.
+function computeTotalsByCategory(ops) {
+  const map = new Map();
+  for (const o of ops) {
+    const cid = o.categoryId ? String(o.categoryId?._id ?? o.categoryId) : null;
+    if (!cid) continue;
+    const slot = map.get(cid) ?? { totalDebit: 0, totalCredit: 0, opsCount: 0 };
+    const amt = Number(o.amount);
+    if (amt < 0) slot.totalDebit  += -amt;
+    else         slot.totalCredit += amt;
+    slot.opsCount += 1;
+    map.set(cid, slot);
+  }
+  const out = new Map();
+  for (const [cid, agg] of map.entries()) {
+    out.set(cid, {
+      totalDebit:  Math.round(agg.totalDebit  * 100) / 100,
+      totalCredit: Math.round(agg.totalCredit * 100) / 100,
+      opsCount: agg.opsCount,
+    });
+  }
+  return out;
+}
+
 // Construit le payload anonymisé envoyé à Claude.
 // Pas de label d'op, pas de bankId — seulement date/amount/categoryId.
 function buildPayload({ year, month, categories, recurring, currentMonthOps, historyOps }) {
@@ -28,6 +54,13 @@ function buildPayload({ year, month, categories, recurring, currentMonthOps, his
     amount: Number(o.amount),
     categoryId: o.categoryId ? String(o.categoryId?._id ?? o.categoryId) : null,
   }));
+
+  // Pré-agrégat des ops du mois par catégorie. Claude doit reprendre ces
+  // totaux tels quels et ne PAS les recalculer — laisser le LLM sommer induit
+  // des hallucinations sur des volumes même modestes (cf. cas réel où 9 ops
+  // de 158 € ont été rapportées comme 382 €).
+  const totalsByCategory = [...computeTotalsByCategory(currentMonthOps).entries()]
+    .map(([categoryId, agg]) => ({ categoryId, ...agg }));
 
   // Bucket historique en 6 mois N-1..N-6.
   const buckets = new Map();
@@ -63,9 +96,9 @@ function buildPayload({ year, month, categories, recurring, currentMonthOps, his
     month: monthStr,
     currency: 'EUR',
     categories: payloadCats,
-    currentMonth: { operations },
+    currentMonth: { operations, totalsByCategory },
     history,
   };
 }
 
-module.exports = { buildPayload };
+module.exports = { buildPayload, computeTotalsByCategory };

@@ -2,15 +2,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // The `= new Set()` default guards against vitest 4.x calling vi.fn impls with undefined
 // during top-level await import teardown — real calls always pass a populated Set.
+// Le mock renvoie un categoryBreakdown.amount qui matche le total des ops du
+// payload : le validator vérifie maintenant cette cohérence pour bloquer les
+// hallucinations Claude (cf. cas 158→382). Le test ops total = 10 € débit.
 vi.mock('../services/budgetAnalysis/anthropic.js', () => ({
-  callAnthropic: vi.fn(async ({ allowedCatIds = new Set() } = {}) => ({
-    summary: 'live',
-    highlights: [], anomalies: [], trends: [],
-    budgetSuggestions: [...allowedCatIds].length ? [{
-      categoryId: [...allowedCatIds][0], currentBudget: 100, suggestedBudget: 150, rationale: 'r',
-    }] : [],
-    categoryBreakdown: [...allowedCatIds].length ? [{ categoryId: [...allowedCatIds][0], share: 1, amount: 100 }] : [],
-  })),
+  callAnthropic: vi.fn(async ({ payload = {}, allowedCatIds = new Set() } = {}) => {
+    const totals = payload.currentMonth?.totalsByCategory ?? [];
+    const breakdown = totals
+      .filter((t) => t.totalDebit > 0 || t.totalCredit > 0)
+      .map((t) => ({
+        categoryId: t.categoryId,
+        share: 1 / totals.length,
+        amount: Math.max(t.totalDebit, t.totalCredit),
+      }));
+    return {
+      summary: 'live',
+      highlights: [], anomalies: [], trends: [],
+      budgetSuggestions: [...allowedCatIds].length ? [{
+        categoryId: [...allowedCatIds][0], currentBudget: 100, suggestedBudget: 150, rationale: 'r',
+      }] : [],
+      categoryBreakdown: breakdown,
+    };
+  }),
   AnthropicError: class extends Error {},
 }));
 
