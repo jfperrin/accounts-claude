@@ -3,16 +3,13 @@ import dayjs from 'dayjs';
 import {
   AlertCircle, AlertTriangle, Info, Tag, TrendingDown, TrendingUp,
 } from 'lucide-react';
-import { formatEur } from '@/lib/utils';
+import { formatEur, formatSignedEur } from '@/lib/utils';
+import { computeBudgetRows } from '@/lib/budget';
 
 // Heuristiques d'analyse mensuelle. Génère des signaux triés par criticité
 // (critical > warning > info > positive). Logique conservée à l'identique du
 // composant MonthlyInsights précédent, extraite en hook pour permettre la
 // consommation depuis plusieurs vues (Hero alerts, panneau détaillé, etc.).
-
-function directional(sum, kind) {
-  return kind === 'credit' ? sum : -sum;
-}
 
 export const SEVERITY_ORDER = { critical: 0, warning: 1, info: 2, positive: 3 };
 
@@ -34,6 +31,7 @@ export function useMonthlyInsights({
     const today = dayjs();
     const start = dayjs(startDate);
     const end = dayjs(endDate);
+    const budgetData = computeBudgetRows({ categories, recurring, operations });
 
     let revenus = 0; let depenses = 0;
     for (const o of operations) {
@@ -95,39 +93,24 @@ export function useMonthlyInsights({
       }
     }
 
-    // 3. Catégories en dépassement
-    const recByCat = new Map();
-    for (const r of recurring) {
-      const id = r.categoryId ? String(r.categoryId?._id ?? r.categoryId) : null;
-      if (!id) continue;
-      recByCat.set(id, (recByCat.get(id) ?? 0) + r.amount);
-    }
-    const actualByCat = new Map();
-    for (const o of operations) {
-      if (!o.categoryId) continue;
-      const id = String(o.categoryId?._id ?? o.categoryId);
-      actualByCat.set(id, (actualByCat.get(id) ?? 0) + o.amount);
-    }
-    const overruns = [];
-    for (const c of categories) {
-      if (c.kind !== 'debit') continue;
-      const recSum = Math.max(0, directional(recByCat.get(String(c._id)) ?? 0, c.kind));
-      const rawBudget = recSum + (c.maxAmount ?? 0);
-      const budget = Math.ceil(rawBudget / 10) * 10;
-      const actual = directional(actualByCat.get(String(c._id)) ?? 0, c.kind);
-      if (budget > 0 && actual > budget) {
-        overruns.push({ cat: c, over: actual - budget });
-      }
-    }
-    overruns.sort((a, b) => b.over - a.over);
-    if (overruns.length > 0) {
-      const top = overruns.slice(0, 3);
-      const summary = top.map((o) => `${o.cat.label} (+${formatEur(o.over)})`).join(', ');
+    // 3. Catégories en dépassement. Escalade en critique si le dérapage est net :
+    //    dépassement cumulé > 15% du budget dépense, ou une catégorie à +50% au
+    //    moins. `anchor` fait défiler vers le widget Budget au clic.
+    const { overruns } = budgetData;
+    if (overruns.count > 0) {
+      const top = overruns.items.slice(0, 3);
+      const summary = top.map((o) => `${o.cat.label} (${formatSignedEur(o.over)})`).join(', ');
+      const others = overruns.count - top.length;
+      const budgetDebitTotal = budgetData.totals.budgetDebit;
+      const severe = (budgetDebitTotal > 0 && overruns.totalOver > budgetDebitTotal * 0.15)
+        || overruns.items.some((o) => o.actual > o.budget * 1.5);
       items.push({
-        severity: 'warning',
+        severity: severe ? 'critical' : 'warning',
         icon: AlertTriangle,
-        title: `${overruns.length} catégorie${overruns.length > 1 ? 's' : ''} en dépassement`,
-        message: summary + (overruns.length > 3 ? `, et ${overruns.length - 3} autre${overruns.length - 3 > 1 ? 's' : ''}` : '') + '.',
+        title: `${overruns.count} catégorie${overruns.count > 1 ? 's' : ''} en dépassement`,
+        message: `${summary}${others > 0 ? `, et ${others} autre${others > 1 ? 's' : ''}` : ''}. `
+          + `Dépassement cumulé ${formatSignedEur(overruns.totalOver)}.`,
+        anchor: 'budget',
       });
     }
 
@@ -137,13 +120,7 @@ export function useMonthlyInsights({
       const totalDays = end.diff(start, 'day') + 1;
       if (elapsed > 0 && elapsed < totalDays) {
         const pctElapsed = elapsed / totalDays;
-        let budgetDebit = 0;
-        for (const c of categories) {
-          if (c.kind !== 'debit') continue;
-          const recSum = Math.max(0, directional(recByCat.get(String(c._id)) ?? 0, c.kind));
-          const rawBudget = recSum + (c.maxAmount ?? 0);
-          budgetDebit += Math.ceil(rawBudget / 10) * 10;
-        }
+        const budgetDebit = budgetData.totals.budgetDebit;
         if (budgetDebit > 0) {
           const pctSpent = depenses / budgetDebit;
           const overpace = pctSpent - pctElapsed;

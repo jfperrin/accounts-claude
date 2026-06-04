@@ -16,6 +16,18 @@ const { randomUUID } = require('crypto');
 // SQLITE_PATH permet de surcharger l'emplacement (utile pour les tests).
 const DB_PATH = process.env.SQLITE_PATH || path.join(__dirname, '..', 'dev.db');
 
+// Normalise une date (Date ou chaîne) en ISO 8601 complet pour le stockage.
+// findByDateRange compare la colonne TEXT `date` en lexicographique contre des
+// bornes ISO (« ...T00:00:00.000Z »). Une date stockée au format court
+// « YYYY-MM-DD » est alors strictement inférieure à la borne basse du même
+// jour ('2026-06-01' < '2026-06-01T00:00:00.000Z') : l'opération datée du 1er
+// du mois disparaissait de la vue mensuelle. On stocke donc toujours l'ISO
+// complet. Une entrée non parsable est laissée telle quelle.
+const toIsoDate = (d) => {
+  const dt = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(dt.getTime()) ? d : dt.toISOString();
+};
+
 // Crée toutes les tables si elles n'existent pas (idempotent grâce à IF NOT EXISTS).
 // Appelé une seule fois au démarrage du serveur.
 function initSchema(db) {
@@ -230,6 +242,13 @@ function initSchema(db) {
       `);
     } catch (_) { /* table ou colonne inexistante */ }
   }
+
+  // Normalise les dates d'opérations legacy stockées au format court
+  // « YYYY-MM-DD » en ISO 8601 complet (cf. toIsoDate), sinon findByDateRange
+  // les exclut de la borne basse de plage. Idempotent : length != 10 ensuite.
+  try {
+    db.exec("UPDATE operations SET date = date || 'T00:00:00.000Z' WHERE length(date) = 10");
+  } catch (_) { /* table operations inexistante */ }
 
   // Suppression de l'ancienne colonne `category` (SQLite 3.35+).
   // Idempotent : silencieux si la colonne n'existe plus.
@@ -669,7 +688,7 @@ module.exports = function createSQLiteRepos() {
 
     create({ label, amount, date, pointed = false, categoryId = null, categorySource = null, transferId = null, fitId = null, bankId, userId }) {
       const id = randomUUID();
-      const dateStr = date instanceof Date ? date.toISOString() : date;
+      const dateStr = toIsoDate(date);
       // Auto-déduction : si une catégorie est fournie sans source explicite, c'est manuel.
       const source = categoryId ? (categorySource ?? 'manual') : null;
       db.prepare(
@@ -739,7 +758,7 @@ module.exports = function createSQLiteRepos() {
       } else {
         categorySource = cur.category_source ?? null;
       }
-      const dateStr = date instanceof Date ? date.toISOString() : date;
+      const dateStr = toIsoDate(date);
       db.prepare(`
         UPDATE operations
         SET label = ?, amount = ?, date = ?, pointed = ?, category_id = ?, category_source = ?, bank_id = ?, updated_at = datetime('now')
@@ -770,7 +789,7 @@ module.exports = function createSQLiteRepos() {
       );
       db.transaction((ops) => {
         for (const op of ops) {
-          const dateStr = op.date instanceof Date ? op.date.toISOString() : op.date;
+          const dateStr = toIsoDate(op.date);
           const source = op.categoryId ? (op.categorySource ?? 'manual') : null;
           stmt.run(randomUUID(), op.label, op.amount, dateStr, op.pointed ? 1 : 0,
             op.categoryId ? uid(op.categoryId) : null, source, op.transferId ?? null, op.fitId ?? null, uid(op.bankId), uid(op.userId));

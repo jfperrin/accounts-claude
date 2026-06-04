@@ -86,12 +86,12 @@ export default function GenerateRecurringDialog({ open, onConfirm, onCancel, rec
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Générer les opérations récurrentes</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4 pt-1">
+          <div className="grid shrink-0 grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Mois</Label>
               <Select value={month} onValueChange={setMonth}>
@@ -120,7 +120,7 @@ export default function GenerateRecurringDialog({ open, onConfirm, onCancel, rec
             <p className="text-sm text-muted-foreground">Aucune récurrente à générer.</p>
           ) : (
             <>
-              <div className="flex items-center justify-between">
+              <div className="flex shrink-0 items-center justify-between">
                 <p className="text-sm text-muted-foreground">
                   {selected.size} / {sortedRecurring.length} sélectionnée(s)
                 </p>
@@ -134,7 +134,7 @@ export default function GenerateRecurringDialog({ open, onConfirm, onCancel, rec
                   {allEligibleChecked ? 'Tout décocher' : 'Tout cocher'}
                 </Button>
               </div>
-              <div className="max-h-72 overflow-y-auto rounded-md border border-border divide-y divide-border">
+              <div className="max-h-96 min-h-0 overflow-y-auto rounded-md border border-border divide-y divide-border">
                 {sortedRecurring.map((r) => {
                   const id = String(r._id);
                   const info = previewById[id];
@@ -175,7 +175,7 @@ export default function GenerateRecurringDialog({ open, onConfirm, onCancel, rec
             </>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" onClick={onCancel}>Annuler</Button>
             <Button type="submit" disabled={!canSubmit}>
               Générer{selected.size > 0 ? ` (${selected.size})` : ''}
