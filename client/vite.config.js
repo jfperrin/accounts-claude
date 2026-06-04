@@ -69,6 +69,14 @@ export default defineConfig({
       interval: 100,
     },
   },
+  // Pré-bundle recharts et es-toolkit/compat dès le démarrage. Sans ça, Vite
+  // wrap les fichiers CJS de es-toolkit/compat à la volée avec des noms de
+  // variables qui collisionnent avec ceux générés par esbuild (cf. bug
+  // « require_isUnsafeProperty is not a function » dans get.js). En forçant
+  // l'include, esbuild transpile l'ensemble en ESM cohérent une seule fois.
+  optimizeDeps: {
+    include: ['recharts', 'es-toolkit', 'es-toolkit/compat'],
+  },
   test: {
     environment: 'happy-dom',
     setupFiles: ['./src/tests/setup.js'],
