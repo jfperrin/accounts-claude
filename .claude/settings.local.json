@@ -174,7 +174,10 @@
       "Bash(where node *)",
       "Skill(vercel-react-best-practices)",
       "Skill(vercel-react-best-practices:*)",
-      "Bash(xargs basename -a)"
+      "Bash(xargs basename -a)",
+      "Bash(dir \"C:\\\\Users\\\\jf\\\\OneDrive\\\\Github\\\\accounts-claude\\\\server\")",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)"
     ]
   }
 }
