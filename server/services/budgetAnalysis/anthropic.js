@@ -33,7 +33,14 @@ async function callAnthropic({ payload, allowedCatIds }) {
 
   const Anthropic = require('@anthropic-ai/sdk');
   const Ctor = Anthropic.default || Anthropic;
-  const client = new Ctor({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // timeout serveur 60s : par défaut le SDK Anthropic attend 600s, on borne plus
+  // serré pour libérer la connexion Node si Anthropic ralentit. maxRetries=2 :
+  // 1 retry réseau, 1 retry sur 5xx idempotent.
+  const client = new Ctor({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    timeout: 60_000,
+    maxRetries: 2,
+  });
 
   const model = process.env.ANTHROPIC_MODEL || ANTHROPIC_MODEL_DEFAULT;
 
@@ -48,6 +55,12 @@ async function callAnthropic({ payload, allowedCatIds }) {
       messages: [{ role: 'user', content: JSON.stringify(payload) }],
     });
   } catch (e) {
+    // Timeout SDK : APIConnectionTimeoutError / nom ou code dédié → 504.
+    const isTimeout = e?.name === 'APIConnectionTimeoutError'
+      || /timeout/i.test(e?.message ?? '');
+    if (isTimeout) {
+      throw new AnthropicError('Anthropic timeout', 504);
+    }
     const code = e?.status ?? e?.response?.status;
     if (code && code >= 400 && code < 600) {
       throw new AnthropicError(`Anthropic ${code}`, 502);
