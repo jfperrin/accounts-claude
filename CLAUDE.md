@@ -139,6 +139,9 @@ RESEND_API_KEY=
 RATE_LIMIT_MAX=20
 MFA_ENCRYPTION_KEY=<64 hex chars>
 MFA_ISSUER=Comptes
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-6
+MOCK_ANTHROPIC=                              # 1 en test E2E pour bypass de l'appel réseau
 ```
 
 ## Conventions cross-cutting
