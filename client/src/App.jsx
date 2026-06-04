@@ -21,6 +21,7 @@ const HelpPage = lazy(() => import('@/pages/HelpPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/ResetPasswordPage'));
 const ToSPage = lazy(() => import('@/pages/ToSPage'));
 const MfaChallengePage = lazy(() => import('@/pages/MfaChallengePage'));
+const BudgetAnalysisPage = lazy(() => import('@/pages/BudgetAnalysisPage'));
 
 function PageLoader() {
   return (
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="banks" element={<BanksPage />} />
             <Route path="recurring" element={<RecurringPage />} />
             <Route path="categories" element={<CategoriesPage />} />
+            <Route path="analysis" element={<BudgetAnalysisPage />} />
             <Route path="help" element={<HelpPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
