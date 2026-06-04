@@ -6,32 +6,54 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
 
 // recharts importe les helpers via les chemins profonds CJS d'es-toolkit
-// (`es-toolkit/compat/<name>`). esbuild génère un shim avec une collision
-// `var require_isUnsafeProperty = require_isUnsafeProperty()` à l'intérieur
-// d'un IIFE — la `var` hoistée masque la fonction externe → "is not a function".
-// Solution : aliaser chaque chemin profond vers la version `.mjs` correspondante.
-// On utilise des chemins absolus : les `.mjs` ne sont pas dans le champ exports
-// du package, donc un specifier comme `es-toolkit/dist/...mjs` est rejeté par
-// Vite — résoudre vers le fichier sur disque contourne le gating.
-const esCompat = (subdir, name) => resolve(
-  __dirname, 'node_modules/es-toolkit/dist/compat', subdir, `${name}.mjs`,
-);
-const esToolkitCompatMjsAlias = {
-  'es-toolkit/compat/get':           esCompat('object',    'get'),
-  'es-toolkit/compat/omit':          esCompat('object',    'omit'),
-  'es-toolkit/compat/isPlainObject': esCompat('predicate', 'isPlainObject'),
-  'es-toolkit/compat/last':          esCompat('array',     'last'),
-  'es-toolkit/compat/sortBy':        esCompat('array',     'sortBy'),
-  'es-toolkit/compat/uniqBy':        esCompat('array',     'uniqBy'),
-  'es-toolkit/compat/throttle':      esCompat('function',  'throttle'),
-  'es-toolkit/compat/maxBy':         esCompat('math',      'maxBy'),
-  'es-toolkit/compat/minBy':         esCompat('math',      'minBy'),
-  'es-toolkit/compat/range':         esCompat('math',      'range'),
-  'es-toolkit/compat/sumBy':         esCompat('math',      'sumBy'),
+// (`es-toolkit/compat/<name>` → `compat/<name>.js` qui re-require le CJS interne).
+// Le CJS interne `dist/compat/<subdir>/<name>.js` contient des
+// `const require_isUnsafeProperty = require(...)` qu'esbuild bundle dans un
+// IIFE — collision avec la `var` hoistée → "is not a function" au runtime.
+//
+// Solution : plugin Vite qui réécrit chaque `es-toolkit/compat/<name>` en
+// virtual module qui re-export l'export nommé du `.mjs` correspondant comme
+// default (recharts importe en `import x from ...`).
+const ES_COMPAT_MAP = {
+  get:           ['object',    'get'],
+  omit:          ['object',    'omit'],
+  isPlainObject: ['predicate', 'isPlainObject'],
+  last:          ['array',     'last'],
+  sortBy:        ['array',     'sortBy'],
+  uniqBy:        ['array',     'uniqBy'],
+  throttle:      ['function',  'throttle'],
+  maxBy:         ['math',      'maxBy'],
+  minBy:         ['math',      'minBy'],
+  range:         ['math',      'range'],
+  sumBy:         ['math',      'sumBy'],
 };
+function esToolkitCompatDefaultExportPlugin() {
+  const PREFIX = 'es-toolkit/compat/';
+  const VIRTUAL = '\0es-toolkit-compat:';
+  return {
+    name: 'es-toolkit-compat-default-export',
+    enforce: 'pre',
+    resolveId(id) {
+      if (!id.startsWith(PREFIX)) return null;
+      const name = id.slice(PREFIX.length);
+      if (!ES_COMPAT_MAP[name]) return null;
+      return VIRTUAL + name;
+    },
+    load(id) {
+      if (!id.startsWith(VIRTUAL)) return null;
+      const name = id.slice(VIRTUAL.length);
+      const [subdir, file] = ES_COMPAT_MAP[name];
+      const abs = resolve(
+        __dirname, 'node_modules/es-toolkit/dist/compat', subdir, `${file}.mjs`,
+      ).replace(/\\/g, '/');
+      return `export { ${file} as default, ${file} } from ${JSON.stringify(abs)};`;
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [
+    esToolkitCompatDefaultExportPlugin(),
     react(),
     tailwindcss(),
     eslint({
@@ -79,10 +101,7 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
-      ...esToolkitCompatMjsAlias,
-    },
+    alias: { '@': resolve(__dirname, './src') },
   },
   server: {
     proxy: {
