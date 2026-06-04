@@ -27,33 +27,66 @@ const ES_COMPAT_MAP = {
   range:         ['math',      'range'],
   sumBy:         ['math',      'sumBy'],
 };
-function esToolkitCompatDefaultExportPlugin() {
-  const PREFIX = 'es-toolkit/compat/';
+const ES_COMPAT_PREFIX = 'es-toolkit/compat/';
+
+function esCompatAbsPath(name) {
+  const [subdir, file] = ES_COMPAT_MAP[name];
+  return resolve(
+    __dirname, 'node_modules/es-toolkit/dist/compat', subdir, `${file}.mjs`,
+  ).replace(/\\/g, '/');
+}
+
+// Plugin Vite — intercepte les imports `es-toolkit/compat/<name>` côté
+// transform runtime (pour les modules `src/*` qui en importent indirectement
+// au-delà de la pré-bundle).
+function esCompatVitePlugin() {
   const VIRTUAL = '\0es-toolkit-compat:';
   return {
     name: 'es-toolkit-compat-default-export',
     enforce: 'pre',
     resolveId(id) {
-      if (!id.startsWith(PREFIX)) return null;
-      const name = id.slice(PREFIX.length);
+      if (!id.startsWith(ES_COMPAT_PREFIX)) return null;
+      const name = id.slice(ES_COMPAT_PREFIX.length);
       if (!ES_COMPAT_MAP[name]) return null;
       return VIRTUAL + name;
     },
     load(id) {
       if (!id.startsWith(VIRTUAL)) return null;
       const name = id.slice(VIRTUAL.length);
-      const [subdir, file] = ES_COMPAT_MAP[name];
-      const abs = resolve(
-        __dirname, 'node_modules/es-toolkit/dist/compat', subdir, `${file}.mjs`,
-      ).replace(/\\/g, '/');
-      return `export { ${file} as default, ${file} } from ${JSON.stringify(abs)};`;
+      const [, file] = ES_COMPAT_MAP[name];
+      return `export { ${file} as default, ${file} } from ${JSON.stringify(esCompatAbsPath(name))};`;
+    },
+  };
+}
+
+// Plugin esbuild — appliqué pendant la dependency optimization (Vite plugins
+// ne sont PAS exécutés à cette phase). C'est là que recharts est pré-bundlé,
+// donc c'est ICI qu'on doit shim es-toolkit/compat.
+function esCompatEsbuildPlugin() {
+  return {
+    name: 'es-toolkit-compat-default-export',
+    setup(build) {
+      const NS = 'es-toolkit-compat-shim';
+      build.onResolve({ filter: /^es-toolkit\/compat\// }, (args) => {
+        const name = args.path.slice(ES_COMPAT_PREFIX.length);
+        if (!ES_COMPAT_MAP[name]) return null;
+        return { path: name, namespace: NS };
+      });
+      build.onLoad({ filter: /.*/, namespace: NS }, (args) => {
+        const [, file] = ES_COMPAT_MAP[args.path];
+        return {
+          contents: `export { ${file} as default, ${file} } from ${JSON.stringify(esCompatAbsPath(args.path))};`,
+          loader: 'js',
+          resolveDir: __dirname,
+        };
+      });
     },
   };
 }
 
 export default defineConfig({
   plugins: [
-    esToolkitCompatDefaultExportPlugin(),
+    esCompatVitePlugin(),
     react(),
     tailwindcss(),
     eslint({
@@ -114,6 +147,11 @@ export default defineConfig({
     watch: {
       usePolling: true,
       interval: 100,
+    },
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      plugins: [esCompatEsbuildPlugin()],
     },
   },
   test: {
