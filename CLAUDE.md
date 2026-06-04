@@ -106,6 +106,7 @@ Toutes les entités portent `userId` — chaque requête est scopée à l'utilis
 - **Operation** — `label`, `amount`, `date` (ISO 8601), `pointed` (bool), `bankId`, `userId`, `categoryId` (FK → Category)
 - **Category** — `label`, `color`, `maxAmount`, `kind` (`debit`|`credit`), `userId`
 - **CategoryHint** — `label`, `categoryId`, `userId` *(cache d'auto-affectation à l'import — voir `server/CLAUDE.md`)*
+- **BudgetAnalysis** — `userId`, `year`, `month`, `opsDigest`, `response` (JSON Claude), `model`. Cache d'analyse Claude par mois ; invalidé quand `digestOps` des opérations du mois change. Voir `server/services/budgetAnalysisService.js`.
 
 Les opérations et récurrentes pointent une catégorie par `_id` (FK), pas par libellé : renommer une catégorie n'oblige pas à toucher aux opérations. Suppression d'une catégorie : `categoryId` → `null` sur les ops/recurring (ON DELETE SET NULL en SQLite, équivalent en JS dans `categories.delete` côté Mongo) ; les hints associés sont supprimés (CASCADE).
 
@@ -139,6 +140,9 @@ RESEND_API_KEY=
 RATE_LIMIT_MAX=20
 MFA_ENCRYPTION_KEY=<64 hex chars>
 MFA_ISSUER=Comptes
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-6
+MOCK_ANTHROPIC=                              # 1 en test E2E pour bypass de l'appel réseau
 ```
 
 ## Conventions cross-cutting

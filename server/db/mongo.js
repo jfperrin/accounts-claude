@@ -22,6 +22,7 @@ const CategoryHint = require('../models/CategoryHint');
 const DismissedRecurringSuggestion = require('../models/DismissedRecurringSuggestion');
 const MfaEmailCode = require('../models/MfaEmailCode');
 const RefreshToken = require('../models/RefreshToken');
+const BudgetAnalysis = require('../models/BudgetAnalysis');
 
 // ─── USERS ───────────────────────────────────────────────────────────────────
 // findById exclut passwordHash via .select('-passwordHash') pour ne pas
@@ -489,6 +490,36 @@ const refreshTokens = {
     }),
 };
 
+// ─── BUDGET ANALYSES ──────────────────────────────────────────────────────────
+// Cache des analyses IA : une entrée par (userId, year, month).
+// upsert via updateOne + { upsert: true } — pas de create pour garantir l'unicité
+// de l'index composé même en cas d'appels concurrents.
+const budgetAnalyses = {
+  async findOne({ userId, year, month }) {
+    const doc = await BudgetAnalysis.findOne({ userId, year, month }).lean();
+    if (!doc) return null;
+    return {
+      _id: String(doc._id),
+      userId: String(doc.userId),
+      year: doc.year,
+      month: doc.month,
+      opsDigest: doc.opsDigest,
+      response: doc.response,
+      model: doc.model,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+  },
+
+  async upsert({ userId, year, month, opsDigest, response, model }) {
+    await BudgetAnalysis.updateOne(
+      { userId, year, month },
+      { $set: { opsDigest, response, model } },
+      { upsert: true },
+    );
+  },
+};
+
 // ─── MIGRATION LEGACY : category (string) → categoryId (ObjectId) ────────────
 // One-shot au boot. Chaque appel parcourt les collections concernées et résout
 // le label texte vers l'_id de Category correspondant pour ce user. Idempotent :
@@ -567,5 +598,6 @@ async function migrateLegacyCategoryFields() {
 module.exports = {
   users, banks, operations, recurringOps, resetTokens,
   categories, categoryHints, dismissedRecurringSuggestions, mfaCodes, refreshTokens,
+  budgetAnalyses,
   migrateLegacyCategoryFields,
 };

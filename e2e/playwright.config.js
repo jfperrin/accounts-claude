@@ -23,6 +23,7 @@ const SERVER_ENV = {
   ADMIN_EMAIL: 'e2e-admin@test.local',
   ADMIN_PASSWORD: 'e2eAdminPass123',
   MFA_BYPASS_DEV: '',                    // override : on veut tester le vrai flow 2FA en E2E
+  MOCK_ANTHROPIC: '1',                   // bypass API Anthropic (renvoie une réponse mock fixe)
   PORT: '3001',
   CLIENT_URL: 'http://localhost:5173',
   SERVER_URL: 'http://localhost:3001',

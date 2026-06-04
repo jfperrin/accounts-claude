@@ -66,6 +66,7 @@ module.exports = function createApp(db, _mongoUri, options = {}) {
   app.use('/api/categories', requireAuth, require('./routes/categories'));
   app.use('/api/category-hints', requireAuth, require('./routes/categoryHints'));
   app.use('/api/admin', requireAuth, requireAdmin, require('./routes/admin'));
+  app.use('/api/budget-analyses', requireAuth, require('./routes/budgetAnalyses'));
 
   const publicDir = path.join(__dirname, 'public');
   if (fs.existsSync(publicDir)) {

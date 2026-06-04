@@ -135,6 +135,19 @@ function initSchema(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_refresh_user ON refresh_tokens(user_id);
     CREATE INDEX IF NOT EXISTS idx_refresh_expires ON refresh_tokens(expires_at);
+
+    CREATE TABLE IF NOT EXISTS budget_analyses (
+      id          TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      year        INTEGER NOT NULL,
+      month       INTEGER NOT NULL,
+      ops_digest  TEXT NOT NULL,
+      response    TEXT NOT NULL,
+      model       TEXT NOT NULL,
+      created_at  TEXT DEFAULT (datetime('now')),
+      updated_at  TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, year, month)
+    );
   `);
 
   // Migration: drop username column if it exists (schema change from username to email)
@@ -1121,8 +1134,42 @@ module.exports = function createSQLiteRepos() {
     },
   };
 
+  const budgetAnalyses = {
+    findOne({ userId, year, month }) {
+      const row = db.prepare(
+        'SELECT * FROM budget_analyses WHERE user_id = ? AND year = ? AND month = ?',
+      ).get(uid(userId), year, month);
+      if (!row) return null;
+      return {
+        _id: row.id,
+        userId: row.user_id,
+        year: row.year,
+        month: row.month,
+        opsDigest: row.ops_digest,
+        response: JSON.parse(row.response),
+        model: row.model,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    },
+
+    upsert({ userId, year, month, opsDigest, response, model }) {
+      const id = randomUUID();
+      db.prepare(
+        `INSERT INTO budget_analyses (id, user_id, year, month, ops_digest, response, model)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, year, month) DO UPDATE SET
+           ops_digest = excluded.ops_digest,
+           response   = excluded.response,
+           model      = excluded.model,
+           updated_at = datetime('now')`,
+      ).run(id, uid(userId), year, month, opsDigest, JSON.stringify(response), model);
+    },
+  };
+
   return {
     users, banks, operations, recurringOps, resetTokens,
     categories, categoryHints, dismissedRecurringSuggestions, mfaCodes, refreshTokens,
+    budgetAnalyses,
   };
 };
