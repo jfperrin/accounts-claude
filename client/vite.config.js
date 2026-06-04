@@ -5,6 +5,25 @@ import eslint from 'vite-plugin-eslint2';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
 
+// recharts importe les helpers via les chemins profonds CJS d'es-toolkit
+// (`es-toolkit/compat/<name>`). esbuild génère un shim avec une collision
+// `var require_isUnsafeProperty = require_isUnsafeProperty()` à l'intérieur
+// d'un IIFE — la `var` hoistée masque la fonction externe → "is not a function".
+// Solution : aliaser chaque chemin profond vers la version `.mjs` correspondante.
+const esToolkitCompatMjsAlias = {
+  'es-toolkit/compat/get':           'es-toolkit/dist/compat/object/get.mjs',
+  'es-toolkit/compat/omit':          'es-toolkit/dist/compat/object/omit.mjs',
+  'es-toolkit/compat/isPlainObject': 'es-toolkit/dist/compat/predicate/isPlainObject.mjs',
+  'es-toolkit/compat/last':          'es-toolkit/dist/compat/array/last.mjs',
+  'es-toolkit/compat/sortBy':        'es-toolkit/dist/compat/array/sortBy.mjs',
+  'es-toolkit/compat/uniqBy':        'es-toolkit/dist/compat/array/uniqBy.mjs',
+  'es-toolkit/compat/throttle':      'es-toolkit/dist/compat/function/throttle.mjs',
+  'es-toolkit/compat/maxBy':         'es-toolkit/dist/compat/math/maxBy.mjs',
+  'es-toolkit/compat/minBy':         'es-toolkit/dist/compat/math/minBy.mjs',
+  'es-toolkit/compat/range':         'es-toolkit/dist/compat/math/range.mjs',
+  'es-toolkit/compat/sumBy':         'es-toolkit/dist/compat/math/sumBy.mjs',
+};
+
 export default defineConfig({
   plugins: [
     react(),
@@ -54,7 +73,10 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: { '@': resolve(__dirname, './src') },
+    alias: {
+      '@': resolve(__dirname, './src'),
+      ...esToolkitCompatMjsAlias,
+    },
   },
   server: {
     proxy: {
@@ -68,14 +90,6 @@ export default defineConfig({
       usePolling: true,
       interval: 100,
     },
-  },
-  // Pré-bundle recharts et es-toolkit/compat dès le démarrage. Sans ça, Vite
-  // wrap les fichiers CJS de es-toolkit/compat à la volée avec des noms de
-  // variables qui collisionnent avec ceux générés par esbuild (cf. bug
-  // « require_isUnsafeProperty is not a function » dans get.js). En forçant
-  // l'include, esbuild transpile l'ensemble en ESM cohérent une seule fois.
-  optimizeDeps: {
-    include: ['recharts', 'es-toolkit', 'es-toolkit/compat'],
   },
   test: {
     environment: 'happy-dom',
