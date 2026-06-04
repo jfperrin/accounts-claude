@@ -59,27 +59,25 @@ function esCompatVitePlugin() {
   };
 }
 
-// Plugin esbuild — appliqué pendant la dependency optimization (Vite plugins
-// ne sont PAS exécutés à cette phase). C'est là que recharts est pré-bundlé,
-// donc c'est ICI qu'on doit shim es-toolkit/compat.
-function esCompatEsbuildPlugin() {
+// Plugin Rollup/rolldown — appliqué pendant la dependency optimization.
+// Vite 8 utilise rolldown (pas esbuild) pour pré-bundler les deps, et les
+// plugins Vite déclarés au top-level ne sont pas exécutés à cette phase.
+// On passe la même logique via `optimizeDeps.rolldownOptions.plugins`.
+function esCompatRolldownPlugin() {
+  const VIRTUAL = '\0es-toolkit-compat:';
   return {
-    name: 'es-toolkit-compat-default-export',
-    setup(build) {
-      const NS = 'es-toolkit-compat-shim';
-      build.onResolve({ filter: /^es-toolkit\/compat\// }, (args) => {
-        const name = args.path.slice(ES_COMPAT_PREFIX.length);
-        if (!ES_COMPAT_MAP[name]) return null;
-        return { path: name, namespace: NS };
-      });
-      build.onLoad({ filter: /.*/, namespace: NS }, (args) => {
-        const [, file] = ES_COMPAT_MAP[args.path];
-        return {
-          contents: `export { ${file} as default, ${file} } from ${JSON.stringify(esCompatAbsPath(args.path))};`,
-          loader: 'js',
-          resolveDir: __dirname,
-        };
-      });
+    name: 'es-toolkit-compat-default-export-rolldown',
+    resolveId(id) {
+      if (!id.startsWith(ES_COMPAT_PREFIX)) return null;
+      const name = id.slice(ES_COMPAT_PREFIX.length);
+      if (!ES_COMPAT_MAP[name]) return null;
+      return VIRTUAL + name;
+    },
+    load(id) {
+      if (!id.startsWith(VIRTUAL)) return null;
+      const name = id.slice(VIRTUAL.length);
+      const [, file] = ES_COMPAT_MAP[name];
+      return `export { ${file} as default, ${file} } from ${JSON.stringify(esCompatAbsPath(name))};`;
     },
   };
 }
@@ -150,8 +148,8 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    esbuildOptions: {
-      plugins: [esCompatEsbuildPlugin()],
+    rolldownOptions: {
+      plugins: [esCompatRolldownPlugin()],
     },
   },
   test: {
