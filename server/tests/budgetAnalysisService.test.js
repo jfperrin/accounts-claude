@@ -81,4 +81,34 @@ describe('getOrCompute', () => {
     await getOrCompute({ db, userId: 'u', year: 2026, month: 6, force: true });
     expect(callAnthropic).toHaveBeenCalledTimes(1);
   });
+
+  it('écrase categoryBreakdown.amount avec le total kind-aligné serveur', async () => {
+    // Catégorie débit mixte : 1350,89 € de dépenses + 70 € remboursement.
+    // Le mock Claude renvoie amount=70 (totalCredit) — le serveur doit le
+    // réécrire à 1350,89 (totalDebit, kind=debit).
+    const mixedCats = [{ _id: 'cMix', label: 'Shopping', kind: 'debit', maxAmount: 0 }];
+    const mixedOps = [
+      { _id: 'd1', date: '2026-06-02T00:00:00.000Z', amount: -800,    categoryId: 'cMix', label: 'a' },
+      { _id: 'd2', date: '2026-06-05T00:00:00.000Z', amount: -550.89, categoryId: 'cMix', label: 'b' },
+      { _id: 'c1', date: '2026-06-10T00:00:00.000Z', amount:  70,     categoryId: 'cMix', label: 'refund' },
+    ];
+    // Override le mock pour ce test : Claude renvoie le credit (70), pas le max.
+    callAnthropic.mockImplementationOnce(async ({ payload }) => {
+      const totals = payload.currentMonth.totalsByCategory;
+      return {
+        summary: 'live',
+        highlights: [], anomalies: [], trends: [], budgetSuggestions: [],
+        categoryBreakdown: totals.map((t) => ({
+          categoryId: t.categoryId,
+          share: 1,
+          amount: t.totalCredit, // Claude pioche dans la mauvaise direction
+        })),
+      };
+    });
+    const db = makeDb({ ops: mixedOps, cats: mixedCats });
+    const out = await getOrCompute({ db, userId: 'u', year: 2026, month: 6, force: false });
+    expect(out.analysis.categoryBreakdown).toHaveLength(1);
+    expect(out.analysis.categoryBreakdown[0].amount).toBe(1350.89);
+    expect(out.analysis.categoryBreakdown[0].share).toBe(1);
+  });
 });

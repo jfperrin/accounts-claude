@@ -62,16 +62,20 @@ function validateResponse(r, allowedCatIds, serverTotals) {
       fail(`categoryBreakdown[${i}].share hors [0,1]`);
     if (!isNum(b.amount)) fail(`categoryBreakdown[${i}].amount`);
 
-    // Garde-fou anti-hallucination : si le serveur connaît les totaux du mois,
-    // l'amount retourné par Claude doit y coïncider (à 1 € près).
+    // Garde-fou anti-hallucination : l'amount retourné par Claude doit matcher
+    // totalDebit OU totalCredit (à 1 € près). Une catégorie mixte (par ex.
+    // dépenses avec remboursements ponctuels) accepte indifféremment l'une des
+    // deux directions — l'écrasement serveur-side dans budgetAnalysisService
+    // remplacera ensuite la valeur par celle alignée sur le kind de la catégorie.
     if (serverTotals) {
       const t = serverTotals.get(String(b.categoryId));
       if (!t) {
         fail(`categoryBreakdown[${i}]: catégorie ${b.categoryId} sans op réelle ce mois`);
       }
-      const expected = Math.max(t.totalDebit, t.totalCredit);
-      if (Math.abs(b.amount - expected) > AMOUNT_TOLERANCE_EUR) {
-        fail(`categoryBreakdown[${i}]: amount=${b.amount} ≠ serveur=${expected} (>${AMOUNT_TOLERANCE_EUR}€)`);
+      const matchDebit  = t.totalDebit  > 0 && Math.abs(b.amount - t.totalDebit)  <= AMOUNT_TOLERANCE_EUR;
+      const matchCredit = t.totalCredit > 0 && Math.abs(b.amount - t.totalCredit) <= AMOUNT_TOLERANCE_EUR;
+      if (!matchDebit && !matchCredit) {
+        fail(`categoryBreakdown[${i}] (${b.categoryId}): amount=${b.amount} ≠ debit=${t.totalDebit} ni credit=${t.totalCredit} (>${AMOUNT_TOLERANCE_EUR}€)`);
       }
     }
   });

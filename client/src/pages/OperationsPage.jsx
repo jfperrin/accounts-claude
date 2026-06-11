@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload, Search, X, ArrowLeftRight } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Tag, Upload, Search, ArrowLeftRight } from 'lucide-react';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import {
@@ -46,16 +46,19 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import CategorySelectItems from '@/components/CategorySelectItems';
 import EmptyState from '@/components/EmptyState';
 import TableSkeleton from '@/components/TableSkeleton';
+import {
+  FilterBar, FilterRow, FilterSearchInput,
+  FilterUncategorizedToggle, FilterCategorySelect, FilterBankSelect, FilterReset,
+} from '@/components/FilterBar';
 import { Building2, ListOrdered } from 'lucide-react';
 import { formatEur, amountClass } from '@/lib/utils';
 import { parseOperationSearch, matchesOperationAmount } from '@/lib/searchOperations';
+import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { getCookiePref, setCookiePref } from '@/lib/cookieUtils';
 
 const COOKIE_NAME = 'dash_date_range';
@@ -99,18 +102,13 @@ export default function OperationsPage() {
     return { startDate: customStart, endDate: customEnd };
   }, [rangeMode, customStart, customEnd, monthOffset]);
 
-  const [searchInput, setSearchInput] = useState('');
-  const [q, setQ] = useState('');
-  useEffect(() => {
-    const id = setTimeout(() => setQ(searchInput.trim()), 250);
-    return () => clearTimeout(id);
-  }, [searchInput]);
+  const { input: searchInput, setInput: setSearchInput, q, clear: clearSearch } = useDebouncedSearch('', 250);
   const [filterCategory, setFilterCategory] = useState('all'); // 'all' | 'none' | <id>
   const [filterPointed, setFilterPointed] = useState('all');   // 'all' | 'true' | 'false'
   const [filterBank, setFilterBank] = useState('all');         // 'all' | <id>
   const filtersActive = q || filterCategory !== 'all' || filterPointed !== 'all' || filterBank !== 'all';
   const clearFilters = () => {
-    setSearchInput(''); setQ('');
+    clearSearch();
     setFilterCategory('all'); setFilterPointed('all'); setFilterBank('all');
   };
 
@@ -547,27 +545,12 @@ export default function OperationsPage() {
             )}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => setOnlyUncategorized((s) => !s)}
-          aria-pressed={onlyUncategorized}
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-            onlyUncategorized
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border bg-card text-muted-foreground hover:bg-muted'
-          }`}
+        <FilterUncategorizedToggle
+          value={onlyUncategorized}
+          onChange={setOnlyUncategorized}
+          count={uncategorizedCount}
           title="Afficher uniquement les opérations sans catégorie"
-        >
-          <Tag className="h-4 w-4" />
-          <span className="hidden sm:inline">Sans catégorie</span>
-          {uncategorizedCount > 0 && (
-            <span className={`ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums ${
-              onlyUncategorized ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-foreground'
-            }`}>
-              {uncategorizedCount}
-            </span>
-          )}
-        </button>
+        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="sm:hidden" aria-label="Importer">
@@ -642,37 +625,14 @@ export default function OperationsPage() {
       )}
 
       {banks.length > 0 && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Rechercher : libellé et/ou montant (ex. free 1,99)…"
-              className="pl-9 pr-9"
-              aria-label="Rechercher dans les opérations"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput('')}
-                aria-label="Effacer la recherche"
-                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-40" aria-label="Filtrer par catégorie"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes catégories</SelectItem>
-                <SelectItem value="none">Sans catégorie</SelectItem>
-                <CategorySelectItems categories={categories} />
-              </SelectContent>
-            </Select>
+        <FilterBar>
+          <FilterSearchInput
+            value={searchInput}
+            onChange={setSearchInput}
+            ariaLabel="Rechercher dans les opérations"
+          />
+          <FilterRow>
+            <FilterCategorySelect value={filterCategory} onChange={setFilterCategory} categories={categories} />
             <Select value={filterPointed} onValueChange={setFilterPointed}>
               <SelectTrigger className="w-35" aria-label="Filtrer par pointage"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -681,24 +641,10 @@ export default function OperationsPage() {
                 <SelectItem value="false">Non pointées</SelectItem>
               </SelectContent>
             </Select>
-            {banks.length > 1 && (
-              <Select value={filterBank} onValueChange={setFilterBank}>
-                <SelectTrigger className="w-40" aria-label="Filtrer par banque"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes banques</SelectItem>
-                  {banks.map((b) => (
-                    <SelectItem key={b._id} value={String(b._id)}>{b.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {filtersActive && (
-              <Button type="button" variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
-                Réinitialiser
-              </Button>
-            )}
-          </div>
-        </div>
+            <FilterBankSelect value={filterBank} onChange={setFilterBank} banks={banks} />
+            <FilterReset active={filtersActive} onClick={clearFilters} />
+          </FilterRow>
+        </FilterBar>
       )}
 
       {operationsLoading && visibleOperations.length === 0 ? (

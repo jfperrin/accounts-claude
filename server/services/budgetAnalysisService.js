@@ -55,10 +55,33 @@ async function getOrCompute({ db, userId, year, month, force = false }) {
   const response = await callAnthropic({ payload, allowedCatIds });
   const serverTotals = computeTotalsByCategory(currentMonthOps);
   validateResponse(response, allowedCatIds, serverTotals);
+  overrideCategoryBreakdown(response, categories, serverTotals);
 
   const model = process.env.ANTHROPIC_MODEL || ANTHROPIC_MODEL_DEFAULT;
   await db.budgetAnalyses.upsert({ userId, year, month, opsDigest, response, model });
   return { analysis: response, cachedAt: new Date().toISOString(), opsDigest, stale: false, model };
+}
+
+// Réécrit categoryBreakdown[].amount avec la valeur serveur alignée sur le kind
+// de la catégorie (totalDebit pour debit, totalCredit pour credit), puis
+// recalcule share. Évite que le donut affiche un remboursement isolé (70 €)
+// à la place de l'expenditure brute (1350 €) sur catégorie mixte.
+function overrideCategoryBreakdown(response, categories, serverTotals) {
+  if (!Array.isArray(response?.categoryBreakdown)) return;
+  const catById = new Map(categories.map((c) => [String(c._id), c]));
+  const corrected = response.categoryBreakdown.map((b) => {
+    const t = serverTotals.get(String(b.categoryId));
+    if (!t) return b;
+    const cat = catById.get(String(b.categoryId));
+    const kind = cat?.kind === 'credit' ? 'credit' : 'debit';
+    const amount = kind === 'credit' ? t.totalCredit : t.totalDebit;
+    return { ...b, amount: Math.round(amount * 100) / 100 };
+  });
+  const total = corrected.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+  response.categoryBreakdown = corrected.map((b) => ({
+    ...b,
+    share: total > 0 ? Math.round((b.amount / total) * 10000) / 10000 : 0,
+  }));
 }
 
 async function checkStale({ db, userId, year, month }) {

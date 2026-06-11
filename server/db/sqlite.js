@@ -783,6 +783,9 @@ module.exports = function createSQLiteRepos() {
     delete: (id, userId) =>
       db.prepare('DELETE FROM operations WHERE id = ? AND user_id = ?').run(id, uid(userId)),
 
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM operations WHERE user_id = ?').run(uid(userId)),
+
     findById: (id, userId) =>
       mapOp(db.prepare(`${OPS_WITH_BANK} WHERE o.id = ? AND o.user_id = ?`).get(id, uid(userId))),
 
@@ -938,6 +941,11 @@ module.exports = function createSQLiteRepos() {
 
     delete: (id, userId) =>
       db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(id, uid(userId)),
+
+    // Purge pour la suppression de compte. Les FK font le ménage : hints en
+    // CASCADE, parent_id/category_id des ops restantes en SET NULL.
+    deleteByUser: (userId) =>
+      db.prepare('DELETE FROM categories WHERE user_id = ?').run(uid(userId)),
   };
 
   // ─────────────────────────────────────────────
@@ -1040,6 +1048,10 @@ module.exports = function createSQLiteRepos() {
       db.prepare('DELETE FROM dismissed_recurring_suggestions WHERE user_id = ? AND key = ?')
         .run(uid(userId), key);
     },
+
+    deleteByUser(userId) {
+      db.prepare('DELETE FROM dismissed_recurring_suggestions WHERE user_id = ?').run(uid(userId));
+    },
   };
 
   const mfaCodes = {
@@ -1072,6 +1084,10 @@ module.exports = function createSQLiteRepos() {
 
     deleteExpired() {
       db.prepare(`DELETE FROM mfa_email_codes WHERE expires_at < datetime('now', '-1 day')`).run();
+    },
+
+    deleteByUser(userId) {
+      db.prepare('DELETE FROM mfa_email_codes WHERE user_id = ?').run(uid(userId));
     },
   };
 
@@ -1132,6 +1148,10 @@ module.exports = function createSQLiteRepos() {
     deleteExpired() {
       db.prepare(`DELETE FROM refresh_tokens WHERE expires_at < datetime('now', '-1 day') OR revoked_at < datetime('now', '-30 days')`).run();
     },
+
+    deleteByUser(userId) {
+      db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(uid(userId));
+    },
   };
 
   const budgetAnalyses = {
@@ -1164,6 +1184,10 @@ module.exports = function createSQLiteRepos() {
            model      = excluded.model,
            updated_at = datetime('now')`,
       ).run(id, uid(userId), year, month, opsDigest, JSON.stringify(response), model);
+    },
+
+    deleteByUser(userId) {
+      db.prepare('DELETE FROM budget_analyses WHERE user_id = ?').run(uid(userId));
     },
   };
 

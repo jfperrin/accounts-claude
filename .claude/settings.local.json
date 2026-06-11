@@ -177,7 +177,31 @@
       "Bash(xargs basename -a)",
       "Bash(dir \"C:\\\\Users\\\\jf\\\\OneDrive\\\\Github\\\\accounts-claude\\\\server\")",
       "Skill(claude-api)",
-      "Skill(claude-api:*)"
+      "Skill(claude-api:*)",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -c \"node --version && which yarn && yarn --version\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -lc \"node --version && which yarn && yarn --version\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude && curl -s -o /dev/null -w 'HTTP %{http_code}\\\\n' http://localhost:5173/\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -c \"curl -s -o /dev/null -w 'WSL→localhost:5173 = HTTP %{http_code}\\\\n' http://localhost:5173/; ss -tlnp 2>/dev/null | grep -E ':\\(5173|3001\\)' | head -3\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/e2e && ls node_modules/.bin/playwright 2>&1 | head -2 && node --version\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/e2e && ls node_modules/@playwright/test/cli.js 2>&1 && ls node_modules/.bin/ 2>&1 | grep -i play\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/e2e && ls -la node_modules 2>&1 | head -5 && cat package.json | head -20\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -c \"source ~/.nvm/nvm.sh && cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/e2e && which yarn && yarn install 2>&1 | tail -8\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -c \"source ~/.nvm/nvm.sh && cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/e2e && ls node_modules/.bin/playwright 2>&1 | head -1 && node_modules/.bin/playwright install chromium --with-deps 2>&1 | tail -5\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -c \"rm -rf /mnt/c/Users/jf/OneDrive/Github/accounts-claude/client/node_modules/.vite && echo 'cache vidé'\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && node scripts/verify-june-subscriptions.js 2>&1\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && node scripts/dump-cached-analysis.js 2>&1\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && TARGET_EMAIL=jf@perrin.at node scripts/dump-cached-analysis.js 2>&1\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && TARGET_EMAIL=jf@perrin.at node scripts/verify-june-subscriptions.js 2>&1\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test 2>&1 | tail -12\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test 2>&1 | grep -E 'FAIL|✗|×|fail' | head -20\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test budgetAnalysis 2>&1 | tail -8\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test budgetAnalysis 2>&1 | grep -E '×|FAIL' | head -10\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test budgetAnalysisAnthropic 2>&1 | grep -E 'AssertionError|expected|received|to.*matchObject' | head -15\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test 2>&1 | tail -8\")",
+      "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn lint 2>&1 | tail -3\")",
+      "Bash(./node_modules/.bin/eslint .)"
     ]
   }
 }

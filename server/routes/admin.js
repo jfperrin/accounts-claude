@@ -87,15 +87,20 @@ router.delete('/users/:id', wrap(async (req, res) => {
   }
   const db = req.app.locals.db;
   const targetId = req.params.id;
-  // Cascade : operations → periods → recurringOps → banks → resetTokens → user
-  const periods = await db.periods.findByUser(targetId);
-  for (const p of periods) {
-    await db.operations.deleteByPeriod(p._id, targetId);
-  }
-  await db.periods.deleteByUser(targetId);
+  const target = await db.users.findById(targetId);
+  if (!target) return res.status(404).json({ message: 'Utilisateur introuvable' });
+  // Cascade : enfants avant parents pour respecter les FK SQLite
+  // (operations/recurring référencent banks et categories, hints → categories).
+  await db.operations.deleteByUser(targetId);
   await db.recurringOps.deleteByUser(targetId);
+  await db.categoryHints.deleteAll(targetId);
+  await db.categories.deleteByUser(targetId);
   await db.banks.deleteByUser(targetId);
+  await db.dismissedRecurringSuggestions.deleteByUser(targetId);
+  await db.budgetAnalyses.deleteByUser(targetId);
   await db.resetTokens.deleteByUser(targetId);
+  await db.refreshTokens.deleteByUser(targetId);
+  await db.mfaCodes.deleteByUser(targetId);
   await db.users.deleteUser(targetId);
   res.json({ message: 'Utilisateur supprimé' });
 }));

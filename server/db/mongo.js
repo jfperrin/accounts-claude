@@ -219,6 +219,8 @@ const operations = {
 
   delete: (id, userId) => Operation.findOneAndDelete({ _id: id, userId }),
 
+  deleteByUser: (userId) => Operation.deleteMany({ userId }),
+
   findById: (id, userId) => Operation.findOne({ _id: id, userId }),
 
   findByTransferId: (transferId, userId) =>
@@ -350,6 +352,10 @@ const categories = {
     ]);
     return removed;
   },
+
+  // Purge brute pour la suppression de compte : les ops/hints du user partent
+  // dans la même cascade, pas besoin de déréférencer comme dans delete().
+  deleteByUser: (userId) => Category.deleteMany({ userId }),
 };
 
 // ─── CATEGORY HINTS ──────────────────────────────────────────────────────────
@@ -428,6 +434,8 @@ const dismissedRecurringSuggestions = {
 
   remove: (userId, key) =>
     DismissedRecurringSuggestion.deleteOne({ userId, key }),
+
+  deleteByUser: (userId) => DismissedRecurringSuggestion.deleteMany({ userId }),
 };
 
 // ─── MFA EMAIL CODES ──────────────────────────────────────────────────────────
@@ -449,6 +457,8 @@ const mfaCodes = {
 
   deleteExpired: () =>
     MfaEmailCode.deleteMany({ expiresAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } }),
+
+  deleteByUser: (userId) => MfaEmailCode.deleteMany({ userId }),
 };
 
 // ─── REFRESH TOKENS ───────────────────────────────────────────────────────────
@@ -488,6 +498,8 @@ const refreshTokens = {
         { revokedAt: { $lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
       ],
     }),
+
+  deleteByUser: (userId) => RefreshToken.deleteMany({ userId }),
 };
 
 // ─── BUDGET ANALYSES ──────────────────────────────────────────────────────────
@@ -518,6 +530,8 @@ const budgetAnalyses = {
       { upsert: true },
     );
   },
+
+  deleteByUser: (userId) => BudgetAnalysis.deleteMany({ userId }),
 };
 
 // ─── MIGRATION LEGACY : category (string) → categoryId (ObjectId) ────────────

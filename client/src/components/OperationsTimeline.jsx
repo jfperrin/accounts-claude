@@ -336,7 +336,7 @@ export default function OperationsTimeline({
       {/* ── Desktop : table avec lignes section/day inline ── */}
       <div className="hidden md:block rounded-md border border-border">
       <Table wrapperClassName="relative w-full">
-        <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_var(--border)]">
+        <TableHeader className="sticky top-[var(--filter-bar-h,0px)] z-10 bg-card shadow-[0_1px_0_0_var(--border)]">
           <TableRow>
             {selectable && (
               <TableHead className="w-8 text-center">

@@ -228,6 +228,98 @@ describe('DELETE /api/admin/users/:id/mfa/* — révocation 2FA', () => {
   });
 });
 
+describe('DELETE /api/admin/users/:id — suppression en cascade', () => {
+  let adminAgent;
+  beforeEach(async () => {
+    await createAdminUser(app, ADMIN.email, ADMIN.password);
+    adminAgent = request.agent(app);
+    await adminAgent.post('/api/auth/login').send(ADMIN);
+  });
+
+  // Peuple toutes les collections rattachées à un user via les repos.
+  async function seedUserData(db, userId) {
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    const bank = await db.banks.create({ label: 'Banque', userId });
+    const category = await db.categories.create({ label: 'Courses', kind: 'debit', userId });
+    await db.operations.create({
+      label: 'Op', amount: -10, date: new Date(), pointed: false,
+      bankId: bank._id, categoryId: category._id, userId,
+    });
+    await db.recurringOps.create({
+      label: 'Loyer', amount: -500, dayOfMonth: 5, bankId: bank._id, userId,
+    });
+    await db.categoryHints.upsert(userId, 'Op', category._id);
+    await db.dismissedRecurringSuggestions.add(userId, 'loyer|bank');
+    await db.resetTokens.create(userId, `tok-${userId}`, future);
+    await db.refreshTokens.create({
+      userId, tokenHash: `rt-${userId}`, userAgent: 'vitest', ip: '::1', expiresAt: future,
+    });
+    await db.mfaCodes.create({ userId, codeHash: `mfa-${userId}`, purpose: 'login', expiresAt: future });
+    await db.budgetAnalyses.upsert({
+      userId, year: 2026, month: 5, opsDigest: 'digest', response: { resume: 'ok' }, model: 'test-model',
+    });
+  }
+
+  it('supprime le user et toutes ses données, sans toucher aux autres comptes', async () => {
+    const db = app.locals.db;
+    const bob = await createVerifiedUser(app, BOB.email, BOB.password);
+    const bobId = String(bob._id);
+    await seedUserData(db, bobId);
+
+    const CHARLIE = { email: 'charlie@test.com', password: 'charliepass1' };
+    const charlie = await createVerifiedUser(app, CHARLIE.email, CHARLIE.password);
+    const charlieId = String(charlie._id);
+    await seedUserData(db, charlieId);
+
+    const res = await adminAgent.delete(`/api/admin/users/${bobId}`);
+    expect(res.status).toBe(200);
+
+    // Plus aucune trace de bob
+    expect(await db.users.findById(bobId)).toBeNull();
+    expect(await db.banks.findByUser(bobId)).toHaveLength(0);
+    expect(await db.operations.findAllMinimal(bobId)).toHaveLength(0);
+    expect(await db.recurringOps.findByUser(bobId)).toHaveLength(0);
+    expect(await db.categories.findByUser(bobId)).toHaveLength(0);
+    expect(await db.categoryHints.findByUser(bobId)).toHaveLength(0);
+    expect(await db.dismissedRecurringSuggestions.findKeysByUser(bobId)).toHaveLength(0);
+    expect(await db.resetTokens.findValid(`tok-${bobId}`)).toBeNull();
+    expect(await db.refreshTokens.findActive(bobId)).toHaveLength(0);
+    expect(await db.mfaCodes.findLatestValid({ userId: bobId, purpose: 'login' })).toBeNull();
+    expect(await db.budgetAnalyses.findOne({ userId: bobId, year: 2026, month: 5 })).toBeNull();
+
+    // Les données de charlie sont intactes
+    expect(await db.users.findById(charlieId)).not.toBeNull();
+    expect(await db.banks.findByUser(charlieId)).toHaveLength(1);
+    expect(await db.operations.findAllMinimal(charlieId)).toHaveLength(1);
+    expect(await db.recurringOps.findByUser(charlieId)).toHaveLength(1);
+    expect(await db.categories.findByUser(charlieId)).toHaveLength(1);
+    expect(await db.categoryHints.findByUser(charlieId)).toHaveLength(1);
+    expect(await db.dismissedRecurringSuggestions.findKeysByUser(charlieId)).toHaveLength(1);
+    expect(await db.refreshTokens.findActive(charlieId)).toHaveLength(1);
+    expect(await db.budgetAnalyses.findOne({ userId: charlieId, year: 2026, month: 5 })).not.toBeNull();
+  });
+
+  it('refuse la suppression de son propre compte', async () => {
+    const admin = await app.locals.db.users.findByEmail(ADMIN.email);
+    const res = await adminAgent.delete(`/api/admin/users/${admin._id}`);
+    expect(res.status).toBe(400);
+    expect(await app.locals.db.users.findById(String(admin._id))).not.toBeNull();
+  });
+
+  it('retourne 404 pour un user inexistant', async () => {
+    const res = await adminAgent.delete('/api/admin/users/000000000000000000000000');
+    expect(res.status).toBe(404);
+  });
+
+  it('refuse sans session admin', async () => {
+    const bob = await createVerifiedUser(app, BOB.email, BOB.password);
+    const bobAgent = request.agent(app);
+    await bobAgent.post('/api/auth/login').send(BOB);
+    const res = await bobAgent.delete(`/api/admin/users/${bob._id}`);
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('GET /api/admin/users — états 2FA présents', () => {
   it('inclut totpEnabled et emailMfaEnabled pour chaque utilisateur', async () => {
     await createAdminUser(app, ADMIN.email, ADMIN.password);

@@ -54,7 +54,25 @@ describe('validateResponse', () => {
 
     it('rejette un amount qui diverge du serveur (>1€)', () => {
       const bad = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1, amount: 382 }] };
-      expect(() => validateResponse(bad, allowed, serverTotals)).toThrow(/serveur=200/);
+      expect(() => validateResponse(bad, allowed, serverTotals)).toThrow(/debit=200/);
+    });
+
+    it('accepte une catégorie mixte si amount matche totalCredit (cas refund)', () => {
+      const totals = new Map([
+        ['c1', { totalDebit: 1350.89, totalCredit: 70, opsCount: 10 }],
+      ]);
+      const okCredit = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1, amount: 70 }] };
+      const okDebit  = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1, amount: 1350.89 }] };
+      expect(() => validateResponse(okCredit, allowed, totals)).not.toThrow();
+      expect(() => validateResponse(okDebit,  allowed, totals)).not.toThrow();
+    });
+
+    it('rejette une catégorie mixte si amount ne matche ni debit ni credit', () => {
+      const totals = new Map([
+        ['c1', { totalDebit: 1350.89, totalCredit: 70, opsCount: 10 }],
+      ]);
+      const bad = { ...valid, categoryBreakdown: [{ categoryId: 'c1', share: 1, amount: 500 }] };
+      expect(() => validateResponse(bad, allowed, totals)).toThrow(/debit=1350\.89/);
     });
 
     it('rejette une catégorie sans op réelle ce mois', () => {
