@@ -201,7 +201,10 @@
       "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test budgetAnalysisAnthropic 2>&1 | grep -E 'AssertionError|expected|received|to.*matchObject' | head -15\")",
       "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn test 2>&1 | tail -8\")",
       "Bash(wsl -d Ubuntu-20.04 -- bash -ic \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/server && yarn lint 2>&1 | tail -3\")",
-      "Bash(./node_modules/.bin/eslint .)"
+      "Bash(./node_modules/.bin/eslint .)",
+      "Bash(wsl -e bash -lc \"cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/client && yarn test --run 2>&1 | tail -30\")",
+      "Bash(wsl -e bash -lc 'export NVM_DIR=$HOME/.nvm; [ -s $NVM_DIR/nvm.sh ] && . $NVM_DIR/nvm.sh; which node || ls $HOME/.nvm/versions/node 2>/dev/null || echo NO_NVM')",
+      "Bash(wsl -e bash -lc 'export NVM_DIR=$HOME/.nvm; . $NVM_DIR/nvm.sh; cd /mnt/c/Users/jf/OneDrive/Github/accounts-claude/client && node node_modules/eslint/bin/eslint.js src && echo LINT_OK && node node_modules/vitest/vitest.mjs run 2>&1 | tail -25')"
     ]
   }
 }
